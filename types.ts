@@ -13,6 +13,14 @@ export interface CustomFieldValue {
   value: any;
 }
 
+export interface TechnicalSpec {
+  id: string;
+  name: string;
+  value: string;
+  unit?: string;
+  affectsPrice?: boolean;
+}
+
 export interface HistoryEntry {
   id: string;
   timestamp: string;
@@ -54,6 +62,7 @@ export interface Product {
   shelfLife: string;
   storageConditions: string;
   customFields: CustomFieldValue[];
+  technicalSpecs?: TechnicalSpec[]; // Multiple technical specifications
   dateAdded: string;
   lastUpdated: string;
   createdBy: string;

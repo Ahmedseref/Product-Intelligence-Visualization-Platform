@@ -1,7 +1,7 @@
-
-import React, { useState } from 'react';
-import { Product, User, CustomField, TreeNode } from '../types';
+import React, { useState, useMemo } from 'react';
+import { Product, User, CustomField, TreeNode, TechnicalSpec } from '../types';
 import { CURRENCIES, UNITS, ICONS } from '../constants';
+import { Plus, Trash2, X } from 'lucide-react';
 
 interface ProductFormProps {
   onSubmit: (p: Product) => void;
@@ -16,13 +16,22 @@ const ProductForm: React.FC<ProductFormProps> = ({ onSubmit, onCancel, currentUs
   const [showNewFieldModal, setShowNewFieldModal] = useState(false);
   const [newFieldDef, setNewFieldDef] = useState<Partial<CustomField>>({ label: '', type: 'text' });
   
+  const [selectedSector, setSelectedSector] = useState<string>('');
+  const [selectedCategory, setSelectedCategory] = useState<string>('');
+  const [selectedSubcategory, setSelectedSubcategory] = useState<string>('');
+  
+  const [technicalSpecs, setTechnicalSpecs] = useState<TechnicalSpec[]>([]);
+  const [newSpecName, setNewSpecName] = useState('');
+  const [newSpecValue, setNewSpecValue] = useState('');
+  const [newSpecUnit, setNewSpecUnit] = useState('');
+  
   const [formData, setFormData] = useState<Partial<Product>>({
     id: `PRD-${Math.floor(1000 + Math.random() * 9000)}`,
     name: '',
     supplier: '',
-    nodeId: treeNodes[0]?.id || '',
-    category: 'Raw Materials', // Kept for logic compat
-    sector: 'Industrial', // Kept for logic compat
+    nodeId: '',
+    category: '',
+    sector: '',
     manufacturer: '',
     manufacturingLocation: '',
     description: '',
@@ -37,11 +46,64 @@ const ProductForm: React.FC<ProductFormProps> = ({ onSubmit, onCancel, currentUs
     shelfLife: '',
     storageConditions: '',
     customFields: [],
+    technicalSpecs: [],
     dateAdded: new Date().toISOString(),
     lastUpdated: new Date().toISOString(),
     createdBy: currentUser.name,
     history: []
   });
+
+  const sectors = useMemo(() => 
+    treeNodes.filter(n => n.type === 'sector' && !n.parentId), 
+    [treeNodes]
+  );
+  
+  const categories = useMemo(() => 
+    treeNodes.filter(n => n.parentId === selectedSector && (n.type === 'category' || n.type === 'subcategory')), 
+    [treeNodes, selectedSector]
+  );
+  
+  const subcategories = useMemo(() => 
+    treeNodes.filter(n => n.parentId === selectedCategory), 
+    [treeNodes, selectedCategory]
+  );
+
+  const handleSectorChange = (sectorId: string) => {
+    setSelectedSector(sectorId);
+    setSelectedCategory('');
+    setSelectedSubcategory('');
+    setFormData({ ...formData, nodeId: sectorId });
+  };
+
+  const handleCategoryChange = (categoryId: string) => {
+    setSelectedCategory(categoryId);
+    setSelectedSubcategory('');
+    setFormData({ ...formData, nodeId: categoryId });
+  };
+
+  const handleSubcategoryChange = (subcategoryId: string) => {
+    setSelectedSubcategory(subcategoryId);
+    setFormData({ ...formData, nodeId: subcategoryId });
+  };
+
+  const addTechnicalSpec = () => {
+    if (!newSpecName.trim() || !newSpecValue.trim()) return;
+    const newSpec: TechnicalSpec = {
+      id: `spec-${Date.now()}`,
+      name: newSpecName.trim(),
+      value: newSpecValue.trim(),
+      unit: newSpecUnit.trim() || undefined,
+      affectsPrice: false
+    };
+    setTechnicalSpecs([...technicalSpecs, newSpec]);
+    setNewSpecName('');
+    setNewSpecValue('');
+    setNewSpecUnit('');
+  };
+
+  const removeTechnicalSpec = (id: string) => {
+    setTechnicalSpecs(technicalSpecs.filter(s => s.id !== id));
+  };
 
   const handleCustomFieldChange = (fieldId: string, value: any) => {
     const existing = formData.customFields || [];
@@ -72,22 +134,22 @@ const ProductForm: React.FC<ProductFormProps> = ({ onSubmit, onCancel, currentUs
     e.preventDefault();
     if (!formData.name || !formData.supplier || !formData.nodeId) return alert("Missing required fields");
     
-    // Sync flat fields from tree for compatibility
     const node = treeNodes.find(n => n.id === formData.nodeId);
     let sector = 'Unknown';
     let current = node;
     while(current) {
-        if(current.type === 'sector') {
-            sector = current.name;
-            break;
-        }
-        current = treeNodes.find(n => n.id === current?.parentId);
+      if(current.type === 'sector') {
+        sector = current.name;
+        break;
+      }
+      current = treeNodes.find(n => n.id === current?.parentId);
     }
 
     const submission = {
-        ...formData,
-        sector,
-        category: node?.name || 'Uncategorized'
+      ...formData,
+      sector,
+      category: node?.name || 'Uncategorized',
+      technicalSpecs
     };
 
     onSubmit(submission as Product);
@@ -108,230 +170,355 @@ const ProductForm: React.FC<ProductFormProps> = ({ onSubmit, onCancel, currentUs
       <form onSubmit={handleSubmit} className="space-y-8 pb-20">
         <div className="flex items-center justify-between">
           <div>
-             <h2 className="text-2xl font-bold text-slate-800 tracking-tight">Register New Product</h2>
-             <p className="text-sm text-slate-400">Assign to the taxonomy tree and define technical specs.</p>
+            <h2 className="text-2xl font-bold text-slate-800 tracking-tight">Register New Product</h2>
+            <p className="text-sm text-slate-400">Assign to the taxonomy tree and define technical specs.</p>
           </div>
           <div className="flex gap-3">
-             <button type="button" onClick={onCancel} className="px-6 py-2 border border-slate-200 text-slate-500 rounded-xl font-bold hover:bg-slate-50 transition-all">Cancel</button>
-             <button type="submit" className="px-8 py-2 bg-blue-600 text-white rounded-xl font-bold shadow-lg shadow-blue-200 hover:bg-blue-700 transition-all">Save Product Card</button>
+            <button type="button" onClick={onCancel} className="px-6 py-2 border border-slate-200 text-slate-500 rounded-xl font-bold hover:bg-slate-50 transition-all">Cancel</button>
+            <button type="submit" className="px-8 py-2 bg-blue-600 text-white rounded-xl font-bold shadow-lg shadow-blue-200 hover:bg-blue-700 transition-all">Save Product Card</button>
           </div>
         </div>
 
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-          {/* Main Info */}
           <div className="lg:col-span-2 space-y-6">
             <div className="bg-white p-8 rounded-2xl border border-slate-200 shadow-sm space-y-6">
-               <h3 className="text-lg font-bold text-slate-800 flex items-center gap-2">
+              <h3 className="text-lg font-bold text-slate-800 flex items-center gap-2">
                 <span className="w-1.5 h-6 bg-blue-500 rounded-full"></span> Taxonomy & Identity
-               </h3>
+              </h3>
                
-               <div className="grid grid-cols-2 gap-6">
-                  <div className="space-y-1 col-span-2 sm:col-span-1">
-                    <label className="text-xs font-bold text-slate-500 uppercase tracking-wider">Product Name*</label>
-                    <input 
-                      type="text" required
-                      className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-sm focus:ring-2 focus:ring-blue-500 outline-none transition-all"
-                      placeholder="e.g. Ultra-Resistant Polymer"
-                      value={formData.name}
-                      onChange={e => setFormData({...formData, name: e.target.value})}
-                    />
-                  </div>
-                  <div className="space-y-1 col-span-2 sm:col-span-1">
-                    <label className="text-xs font-bold text-slate-500 uppercase tracking-wider">Supplier Name*</label>
-                    <input 
-                      type="text" required
-                      className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-sm focus:ring-2 focus:ring-blue-500 outline-none transition-all"
-                      placeholder="Supplier legal name"
-                      value={formData.supplier}
-                      onChange={e => setFormData({...formData, supplier: e.target.value})}
-                    />
-                  </div>
-                  <div className="space-y-1 col-span-2">
-                    <label className="text-xs font-bold text-slate-500 uppercase tracking-wider">Taxonomy Placement (Tree Node)*</label>
+              <div className="grid grid-cols-2 gap-6">
+                <div className="space-y-1 col-span-2 sm:col-span-1">
+                  <label className="text-xs font-bold text-slate-500 uppercase tracking-wider">Product Name*</label>
+                  <input 
+                    type="text" required
+                    className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-sm focus:ring-2 focus:ring-blue-500 outline-none transition-all"
+                    placeholder="e.g. Ultra-Resistant Polymer"
+                    value={formData.name}
+                    onChange={e => setFormData({...formData, name: e.target.value})}
+                  />
+                </div>
+                <div className="space-y-1 col-span-2 sm:col-span-1">
+                  <label className="text-xs font-bold text-slate-500 uppercase tracking-wider">Supplier Name*</label>
+                  <input 
+                    type="text" required
+                    className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-sm focus:ring-2 focus:ring-blue-500 outline-none transition-all"
+                    placeholder="Supplier legal name"
+                    value={formData.supplier}
+                    onChange={e => setFormData({...formData, supplier: e.target.value})}
+                  />
+                </div>
+              </div>
+
+              <div className="space-y-4">
+                <label className="text-xs font-bold text-slate-500 uppercase tracking-wider">Taxonomy Placement*</label>
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                  <div className="space-y-1">
+                    <label className="text-[10px] font-medium text-slate-400">Sector</label>
                     <select 
                       className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-sm outline-none focus:ring-2 focus:ring-blue-500"
-                      value={formData.nodeId}
-                      onChange={e => setFormData({...formData, nodeId: e.target.value})}
+                      value={selectedSector}
+                      onChange={e => handleSectorChange(e.target.value)}
                       required
                     >
-                      <option value="">Select a category...</option>
-                      {treeNodes.map(node => (
-                        <option key={node.id} value={node.id}>
-                          {node.type.toUpperCase()}: {getFullNodePathString(node.id)}
-                        </option>
+                      <option value="">Select Sector...</option>
+                      {sectors.map(node => (
+                        <option key={node.id} value={node.id}>{node.name}</option>
                       ))}
                     </select>
-                    <p className="text-[10px] text-slate-400 mt-1 italic">Assigning to a leaf node provides best visualization accuracy.</p>
                   </div>
-               </div>
+                  
+                  <div className="space-y-1">
+                    <label className="text-[10px] font-medium text-slate-400">Category</label>
+                    <select 
+                      className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-sm outline-none focus:ring-2 focus:ring-blue-500"
+                      value={selectedCategory}
+                      onChange={e => handleCategoryChange(e.target.value)}
+                      disabled={!selectedSector}
+                    >
+                      <option value="">Select Category...</option>
+                      {categories.map(node => (
+                        <option key={node.id} value={node.id}>{node.name}</option>
+                      ))}
+                    </select>
+                  </div>
+                  
+                  <div className="space-y-1">
+                    <label className="text-[10px] font-medium text-slate-400">Sub-Category</label>
+                    <select 
+                      className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-sm outline-none focus:ring-2 focus:ring-blue-500"
+                      value={selectedSubcategory}
+                      onChange={e => handleSubcategoryChange(e.target.value)}
+                      disabled={!selectedCategory || subcategories.length === 0}
+                    >
+                      <option value="">Select Sub-Category...</option>
+                      {subcategories.map(node => (
+                        <option key={node.id} value={node.id}>{node.name}</option>
+                      ))}
+                    </select>
+                  </div>
+                </div>
+                {formData.nodeId && (
+                  <p className="text-xs text-blue-600 bg-blue-50 px-3 py-2 rounded-lg">
+                    Selected: {getFullNodePathString(formData.nodeId)}
+                  </p>
+                )}
+              </div>
 
-               <div className="space-y-1">
-                  <label className="text-xs font-bold text-slate-500 uppercase tracking-wider">Rich Product Description</label>
-                  <textarea 
-                    rows={4}
-                    className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-sm focus:ring-2 focus:ring-blue-500 outline-none transition-all resize-none"
-                    placeholder="Provide technical specs, usage context, and selling points..."
-                    value={formData.description}
-                    onChange={e => setFormData({...formData, description: e.target.value})}
-                  />
-               </div>
+              <div className="space-y-1">
+                <label className="text-xs font-bold text-slate-500 uppercase tracking-wider">Rich Product Description</label>
+                <textarea 
+                  rows={4}
+                  className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-sm focus:ring-2 focus:ring-blue-500 outline-none transition-all resize-none"
+                  placeholder="Provide technical specs, usage context, and selling points..."
+                  value={formData.description}
+                  onChange={e => setFormData({...formData, description: e.target.value})}
+                />
+              </div>
             </div>
 
-            {/* Custom Attributes Section */}
             <div className="bg-white p-8 rounded-2xl border border-slate-200 shadow-sm space-y-6">
-               <div className="flex items-center justify-between">
-                 <h3 className="text-lg font-bold text-slate-800 flex items-center gap-2">
-                  <span className="w-1.5 h-6 bg-purple-500 rounded-full"></span> Technical Attributes
-                 </h3>
-                 <button 
+              <div className="flex items-center justify-between">
+                <h3 className="text-lg font-bold text-slate-800 flex items-center gap-2">
+                  <span className="w-1.5 h-6 bg-emerald-500 rounded-full"></span> Technical Specifications
+                </h3>
+              </div>
+              <p className="text-sm text-slate-500">Add multiple specifications like thickness, density, color, size, etc. Each specification can affect pricing.</p>
+
+              {technicalSpecs.length > 0 && (
+                <div className="space-y-2">
+                  {technicalSpecs.map(spec => (
+                    <div key={spec.id} className="flex items-center gap-3 p-3 bg-slate-50 rounded-xl border border-slate-200">
+                      <div className="flex-1 grid grid-cols-3 gap-4 text-sm">
+                        <div>
+                          <span className="text-[10px] text-slate-400 uppercase">Attribute</span>
+                          <p className="font-semibold text-slate-800">{spec.name}</p>
+                        </div>
+                        <div>
+                          <span className="text-[10px] text-slate-400 uppercase">Value</span>
+                          <p className="font-semibold text-slate-800">{spec.value}</p>
+                        </div>
+                        <div>
+                          <span className="text-[10px] text-slate-400 uppercase">Unit</span>
+                          <p className="font-semibold text-slate-800">{spec.unit || '-'}</p>
+                        </div>
+                      </div>
+                      <button 
+                        type="button"
+                        onClick={() => removeTechnicalSpec(spec.id)}
+                        className="p-2 text-red-500 hover:bg-red-50 rounded-lg transition-colors"
+                      >
+                        <Trash2 size={16} />
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              <div className="flex items-end gap-3 p-4 bg-emerald-50 rounded-xl border border-emerald-200">
+                <div className="flex-1 space-y-1">
+                  <label className="text-[10px] font-bold text-slate-500 uppercase">Attribute Name</label>
+                  <input 
+                    type="text"
+                    className="w-full bg-white border border-slate-200 rounded-lg px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-emerald-500"
+                    placeholder="e.g. Thickness, Color, Density"
+                    value={newSpecName}
+                    onChange={e => setNewSpecName(e.target.value)}
+                  />
+                </div>
+                <div className="flex-1 space-y-1">
+                  <label className="text-[10px] font-bold text-slate-500 uppercase">Value</label>
+                  <input 
+                    type="text"
+                    className="w-full bg-white border border-slate-200 rounded-lg px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-emerald-500"
+                    placeholder="e.g. 50, Red, 120"
+                    value={newSpecValue}
+                    onChange={e => setNewSpecValue(e.target.value)}
+                  />
+                </div>
+                <div className="w-24 space-y-1">
+                  <label className="text-[10px] font-bold text-slate-500 uppercase">Unit</label>
+                  <input 
+                    type="text"
+                    className="w-full bg-white border border-slate-200 rounded-lg px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-emerald-500"
+                    placeholder="mm, kg"
+                    value={newSpecUnit}
+                    onChange={e => setNewSpecUnit(e.target.value)}
+                  />
+                </div>
+                <button 
+                  type="button"
+                  onClick={addTechnicalSpec}
+                  className="px-4 py-2 bg-emerald-600 text-white rounded-lg font-bold hover:bg-emerald-700 transition-colors flex items-center gap-2"
+                >
+                  <Plus size={16} /> Add
+                </button>
+              </div>
+            </div>
+
+            <div className="bg-white p-8 rounded-2xl border border-slate-200 shadow-sm space-y-6">
+              <div className="flex items-center justify-between">
+                <h3 className="text-lg font-bold text-slate-800 flex items-center gap-2">
+                  <span className="w-1.5 h-6 bg-purple-500 rounded-full"></span> Custom Attributes
+                </h3>
+                <button 
                   type="button" 
                   onClick={() => setShowNewFieldModal(true)}
                   className="text-xs font-bold bg-purple-50 text-purple-600 px-3 py-1 rounded-full hover:bg-purple-100 transition-all flex items-center gap-1"
-                 >
-                   {ICONS.Add} New Field
-                 </button>
-               </div>
+                >
+                  {ICONS.Add} New Field
+                </button>
+              </div>
 
-               {customFields.length === 0 ? (
-                 <div className="text-center py-6 bg-slate-50 border border-dashed border-slate-200 rounded-xl">
-                   <p className="text-sm text-slate-400">No custom technical fields defined.</p>
-                 </div>
-               ) : (
-                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
-                   {customFields.map((field) => (
-                     <div key={field.id} className="space-y-1">
-                       <label className="text-xs font-bold text-slate-500 uppercase tracking-wider">{field.label}</label>
-                       <input 
-                         type={field.type === 'number' || field.type === 'currency' ? 'number' : field.type === 'date' ? 'date' : 'text'}
-                         className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-sm focus:ring-2 focus:ring-purple-500 outline-none transition-all"
-                         placeholder={`Enter ${field.label.toLowerCase()}...`}
-                         value={formData.customFields?.find(f => f.fieldId === field.id)?.value || ''}
-                         onChange={e => handleCustomFieldChange(field.id, e.target.value)}
-                       />
-                     </div>
-                   ))}
-                 </div>
-               )}
+              {customFields.length === 0 ? (
+                <div className="text-center py-6 bg-slate-50 border border-dashed border-slate-200 rounded-xl">
+                  <p className="text-sm text-slate-400">No custom attributes defined.</p>
+                </div>
+              ) : (
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
+                  {customFields.map((field) => (
+                    <div key={field.id} className="space-y-1">
+                      <label className="text-xs font-bold text-slate-500 uppercase tracking-wider">{field.label}</label>
+                      <input 
+                        type={field.type === 'number' || field.type === 'currency' ? 'number' : field.type === 'date' ? 'date' : 'text'}
+                        className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-sm focus:ring-2 focus:ring-purple-500 outline-none transition-all"
+                        placeholder={`Enter ${field.label.toLowerCase()}...`}
+                        value={formData.customFields?.find(f => f.fieldId === field.id)?.value || ''}
+                        onChange={e => handleCustomFieldChange(field.id, e.target.value)}
+                      />
+                    </div>
+                  ))}
+                </div>
+              )}
             </div>
 
-            {/* Commercials */}
             <div className="bg-white p-8 rounded-2xl border border-slate-200 shadow-sm space-y-6">
-               <h3 className="text-lg font-bold text-slate-800 flex items-center gap-2">
-                <span className="w-1.5 h-6 bg-emerald-500 rounded-full"></span> Commercial & Logistics
-               </h3>
+              <h3 className="text-lg font-bold text-slate-800 flex items-center gap-2">
+                <span className="w-1.5 h-6 bg-amber-500 rounded-full"></span> Pricing & Logistics
+              </h3>
 
-               <div className="grid grid-cols-2 sm:grid-cols-4 gap-6">
-                  <div className="space-y-1">
-                    <label className="text-xs font-bold text-slate-500 uppercase tracking-wider">Unit Price</label>
-                    <input 
-                      type="number" step="0.01"
-                      className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-sm outline-none"
-                      value={formData.price}
-                      onChange={e => setFormData({...formData, price: parseFloat(e.target.value) || 0})}
-                    />
-                  </div>
-                  <div className="space-y-1">
-                    <label className="text-xs font-bold text-slate-500 uppercase tracking-wider">Currency</label>
-                    <select 
-                      className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-sm outline-none"
-                      value={formData.currency}
-                      onChange={e => setFormData({...formData, currency: e.target.value})}
-                    >
-                      {CURRENCIES.map(c => <option key={c} value={c}>{c}</option>)}
-                    </select>
-                  </div>
-                  <div className="space-y-1">
-                    <label className="text-xs font-bold text-slate-500 uppercase tracking-wider">Unit</label>
-                    <select 
-                      className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-sm outline-none"
-                      value={formData.unit}
-                      onChange={e => setFormData({...formData, unit: e.target.value})}
-                    >
-                      {UNITS.map(u => <option key={u} value={u}>{u}</option>)}
-                    </select>
-                  </div>
-                  <div className="space-y-1">
-                    <label className="text-xs font-bold text-slate-500 uppercase tracking-wider">MOQ</label>
-                    <input 
-                      type="number"
-                      className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-sm outline-none"
-                      value={formData.moq}
-                      onChange={e => setFormData({...formData, moq: parseInt(e.target.value) || 1})}
-                    />
-                  </div>
-               </div>
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-6">
+                <div className="space-y-1">
+                  <label className="text-xs font-bold text-slate-500 uppercase tracking-wider">Base Price</label>
+                  <input 
+                    type="number" step="0.01"
+                    className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-sm outline-none"
+                    value={formData.price}
+                    onChange={e => setFormData({...formData, price: parseFloat(e.target.value) || 0})}
+                  />
+                </div>
+                <div className="space-y-1">
+                  <label className="text-xs font-bold text-slate-500 uppercase tracking-wider">Currency</label>
+                  <select 
+                    className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-sm outline-none"
+                    value={formData.currency}
+                    onChange={e => setFormData({...formData, currency: e.target.value})}
+                  >
+                    {CURRENCIES.map(c => <option key={c} value={c}>{c}</option>)}
+                  </select>
+                </div>
+                <div className="space-y-1">
+                  <label className="text-xs font-bold text-slate-500 uppercase tracking-wider">Unit</label>
+                  <select 
+                    className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-sm outline-none"
+                    value={formData.unit}
+                    onChange={e => setFormData({...formData, unit: e.target.value})}
+                  >
+                    {UNITS.map(u => <option key={u} value={u}>{u}</option>)}
+                  </select>
+                </div>
+                <div className="space-y-1">
+                  <label className="text-xs font-bold text-slate-500 uppercase tracking-wider">MOQ</label>
+                  <input 
+                    type="number"
+                    className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-sm outline-none"
+                    value={formData.moq}
+                    onChange={e => setFormData({...formData, moq: parseInt(e.target.value) || 1})}
+                  />
+                </div>
+              </div>
             </div>
           </div>
 
-          {/* Right Sidebar */}
           <div className="space-y-6">
-             <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm space-y-6">
-                <h3 className="text-sm font-bold text-slate-800 uppercase tracking-widest">Image Asset</h3>
-                <div className="aspect-video w-full rounded-xl overflow-hidden border border-slate-200 bg-slate-50 flex items-center justify-center relative group">
-                  {formData.imageUrl ? (
-                    <img src={formData.imageUrl} alt="Preview" className="w-full h-full object-cover" />
-                  ) : (
-                    <div className="text-slate-300">No Asset</div>
-                  )}
-                  <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
-                    <button type="button" className="p-2 bg-white rounded-full text-blue-600 shadow-lg">
-                      {ICONS.Edit}
-                    </button>
-                  </div>
+            <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm space-y-6">
+              <h3 className="text-sm font-bold text-slate-800 uppercase tracking-widest">Image Asset</h3>
+              <div className="aspect-video w-full rounded-xl overflow-hidden border border-slate-200 bg-slate-50 flex items-center justify-center relative group">
+                {formData.imageUrl ? (
+                  <img src={formData.imageUrl} alt="Preview" className="w-full h-full object-cover" />
+                ) : (
+                  <div className="text-slate-300">No Asset</div>
+                )}
+                <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
+                  <button type="button" className="p-2 bg-white rounded-full text-blue-600 shadow-lg">
+                    {ICONS.Edit}
+                  </button>
                 </div>
-                <button type="button" className="w-full py-2 bg-slate-100 text-slate-600 rounded-xl text-sm font-bold hover:bg-slate-200 transition-all">Upload New Image</button>
-             </div>
+              </div>
+              <button type="button" className="w-full py-2 bg-slate-100 text-slate-600 rounded-xl text-sm font-bold hover:bg-slate-200 transition-all">Upload New Image</button>
+            </div>
 
-             <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm space-y-4">
-                <h3 className="text-sm font-bold text-slate-800 uppercase tracking-widest">Manufacturing</h3>
-                <div className="space-y-4">
-                  <div className="space-y-1">
-                    <label className="text-xs font-bold text-slate-500 uppercase tracking-wider">Fabricator / Manufacturer</label>
-                    <input 
-                      type="text"
-                      className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-2 text-sm outline-none"
-                      value={formData.manufacturer}
-                      onChange={e => setFormData({...formData, manufacturer: e.target.value})}
-                    />
-                  </div>
-                  <div className="space-y-1">
-                    <label className="text-xs font-bold text-slate-500 uppercase tracking-wider">Origin</label>
-                    <input 
-                      type="text"
-                      className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-2 text-sm outline-none"
-                      placeholder="e.g. Tokyo, Japan"
-                      value={formData.manufacturingLocation}
-                      onChange={e => setFormData({...formData, manufacturingLocation: e.target.value})}
-                    />
-                  </div>
+            <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm space-y-4">
+              <h3 className="text-sm font-bold text-slate-800 uppercase tracking-widest">Manufacturing</h3>
+              <div className="space-y-4">
+                <div className="space-y-1">
+                  <label className="text-xs font-bold text-slate-500 uppercase tracking-wider">Manufacturer</label>
+                  <input 
+                    type="text"
+                    className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-2 text-sm outline-none"
+                    value={formData.manufacturer}
+                    onChange={e => setFormData({...formData, manufacturer: e.target.value})}
+                  />
                 </div>
-             </div>
+                <div className="space-y-1">
+                  <label className="text-xs font-bold text-slate-500 uppercase tracking-wider">Location</label>
+                  <input 
+                    type="text"
+                    className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-2 text-sm outline-none"
+                    value={formData.manufacturingLocation}
+                    onChange={e => setFormData({...formData, manufacturingLocation: e.target.value})}
+                  />
+                </div>
+                <div className="space-y-1">
+                  <label className="text-xs font-bold text-slate-500 uppercase tracking-wider">Lead Time (days)</label>
+                  <input 
+                    type="number"
+                    className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-2 text-sm outline-none"
+                    value={formData.leadTime}
+                    onChange={e => setFormData({...formData, leadTime: parseInt(e.target.value) || 0})}
+                  />
+                </div>
+              </div>
+            </div>
           </div>
         </div>
       </form>
 
-      {/* New Field Modal */}
       {showNewFieldModal && (
-        <div className="fixed inset-0 z-[200] flex items-center justify-center bg-slate-900/40 backdrop-blur-sm p-4">
-          <div className="bg-white w-full max-w-sm rounded-2xl shadow-2xl p-6 border border-slate-100">
-            <h3 className="text-lg font-bold text-slate-900 mb-4">Define New Technical Field</h3>
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-xl shadow-xl p-6 w-96">
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-lg font-bold text-slate-800">Add Custom Field</h3>
+              <button onClick={() => setShowNewFieldModal(false)} className="p-1 hover:bg-slate-100 rounded">
+                <X size={20} />
+              </button>
+            </div>
             <div className="space-y-4">
-              <div className="space-y-1">
-                <label className="text-xs font-bold text-slate-500 uppercase">Field Label</label>
-                <input 
+              <div>
+                <label className="block text-sm font-medium text-slate-700 mb-1">Field Name</label>
+                <input
                   type="text"
-                  className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-2 text-sm outline-none"
-                  placeholder="e.g. Molecular Weight"
-                  value={newFieldDef.label}
-                  onChange={e => setNewFieldDef({...newFieldDef, label: e.target.value})}
+                  value={newFieldDef.label || ''}
+                  onChange={(e) => setNewFieldDef({...newFieldDef, label: e.target.value})}
+                  className="w-full px-3 py-2 border border-slate-300 rounded-lg"
+                  placeholder="e.g. Certification Number"
                 />
               </div>
-              <div className="space-y-1">
-                <label className="text-xs font-bold text-slate-500 uppercase">Type</label>
-                <select 
-                  className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-2 text-sm outline-none"
+              <div>
+                <label className="block text-sm font-medium text-slate-700 mb-1">Field Type</label>
+                <select
                   value={newFieldDef.type}
-                  onChange={e => setNewFieldDef({...newFieldDef, type: e.target.value as any})}
+                  onChange={(e) => setNewFieldDef({...newFieldDef, type: e.target.value as any})}
+                  className="w-full px-3 py-2 border border-slate-300 rounded-lg"
                 >
                   <option value="text">Text</option>
                   <option value="number">Number</option>
@@ -339,19 +526,21 @@ const ProductForm: React.FC<ProductFormProps> = ({ onSubmit, onCancel, currentUs
                   <option value="currency">Currency</option>
                 </select>
               </div>
-              <div className="flex gap-3 pt-4">
-                 <button 
+              <div className="flex gap-3 pt-2">
+                <button
+                  type="button"
                   onClick={() => setShowNewFieldModal(false)}
-                  className="flex-1 py-2 bg-slate-50 text-slate-500 rounded-xl font-bold hover:bg-slate-100"
-                 >
-                   Cancel
-                 </button>
-                 <button 
+                  className="flex-1 px-4 py-2 border border-slate-300 text-slate-700 rounded-lg hover:bg-slate-50"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
                   onClick={addNewFieldDefinition}
-                  className="flex-1 py-2 bg-purple-600 text-white rounded-xl font-bold hover:bg-purple-700"
-                 >
-                   Confirm
-                 </button>
+                  className="flex-1 px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700"
+                >
+                  Add Field
+                </button>
               </div>
             </div>
           </div>
