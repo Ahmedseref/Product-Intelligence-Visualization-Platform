@@ -1,5 +1,4 @@
-
-import React, { useState, useMemo, useEffect } from 'react';
+import React, { useState, useMemo, useEffect, useCallback } from 'react';
 import { Product, ViewMode, User, CustomField, TreeNode } from './types';
 import { INITIAL_PRODUCTS, INITIAL_TREE_NODES } from './mockData';
 import { ICONS } from './constants';
@@ -9,6 +8,7 @@ import ProductList from './components/ProductList';
 import Visualize from './components/Visualize';
 import ProductForm from './components/ProductForm';
 import ProductTree from './components/ProductTree';
+import { api } from './client/api';
 
 const App: React.FC = () => {
   const [viewMode, setViewMode] = useState<ViewMode>('dashboard');
@@ -18,79 +18,263 @@ const App: React.FC = () => {
   const [currentUser] = useState<User>({ id: 'U-01', name: 'Admin User', role: 'Admin' });
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null);
+  const [isLoading, setIsLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [isDbConnected, setIsDbConnected] = useState(false);
 
-  // Persist (simulated)
-  useEffect(() => {
-    const saved = localStorage.getItem('pip_products');
-    const savedFields = localStorage.getItem('pip_custom_fields');
-    const savedTree = localStorage.getItem('pip_tree');
-    if (saved) {
-      try {
-        setProducts(JSON.parse(saved));
-      } catch (e) {
-        console.error("Failed to load products", e);
+  const syncWithDatabase = useCallback(async () => {
+    const retryFetch = async <T,>(fn: () => Promise<T>, attempts: number, delay: number): Promise<T> => {
+      for (let i = 0; i < attempts; i++) {
+        try {
+          return await fn();
+        } catch (err) {
+          if (i === attempts - 1) throw err;
+          await new Promise(resolve => setTimeout(resolve, delay));
+        }
       }
-    }
-    if (savedFields) {
-      try {
-        setCustomFieldConfigs(JSON.parse(savedFields));
-      } catch (e) {
-        console.error("Failed to load custom fields", e);
-      }
-    }
-    if (savedTree) {
-      try {
-        setTreeNodes(JSON.parse(savedTree));
-      } catch (e) {
-        console.error("Failed to load taxonomy tree", e);
-      }
+      throw new Error('Retry failed');
+    };
+
+    try {
+      await retryFetch(() => api.seedDatabase(), 10, 1000);
+      
+      const [nodesData, productsData, fieldsData] = await Promise.all([
+        api.getTreeNodes(),
+        api.getProducts(),
+        api.getCustomFields(),
+      ]);
+
+      setTreeNodes(nodesData.map(n => ({
+        id: n.nodeId,
+        name: n.name,
+        type: n.type as any,
+        parentId: n.parentId,
+        description: n.description || undefined,
+        metadata: n.metadata as any,
+      })));
+
+      setProducts(productsData.map(p => ({
+        id: p.productId,
+        name: p.name,
+        supplier: p.supplier || '',
+        supplierId: p.supplierId || undefined,
+        nodeId: p.nodeId,
+        manufacturer: p.manufacturer || '',
+        manufacturingLocation: p.manufacturingLocation || '',
+        description: p.description || '',
+        imageUrl: p.imageUrl || '',
+        price: p.price || 0,
+        currency: p.currency || 'USD',
+        unit: p.unit || '',
+        moq: p.moq || 1,
+        leadTime: p.leadTime || 0,
+        packagingType: p.packagingType || '',
+        hsCode: p.hsCode || undefined,
+        certifications: (p.certifications as string[]) || [],
+        shelfLife: p.shelfLife || '',
+        storageConditions: p.storageConditions || '',
+        customFields: (p.customFields as any[]) || [],
+        category: p.category || '',
+        sector: p.sector || '',
+        createdBy: p.createdBy || '',
+        dateAdded: p.dateAdded?.toString() || new Date().toISOString(),
+        lastUpdated: p.lastUpdated?.toString() || new Date().toISOString(),
+        history: (p.history as any[]) || [],
+      })));
+
+      setCustomFieldConfigs(fieldsData.map(f => ({
+        id: f.fieldId,
+        label: f.label,
+        type: f.type as any,
+        options: f.options as string[] | undefined,
+      })));
+
+      setIsDbConnected(true);
+      setError(null);
+    } catch (err) {
+      console.log('Database sync failed, using local data');
+      setIsDbConnected(false);
     }
   }, []);
 
   useEffect(() => {
-    localStorage.setItem('pip_products', JSON.stringify(products));
-  }, [products]);
+    const timer = setTimeout(() => {
+      syncWithDatabase();
+    }, 2000);
+    return () => clearTimeout(timer);
+  }, [syncWithDatabase]);
 
-  useEffect(() => {
-    localStorage.setItem('pip_custom_fields', JSON.stringify(customFieldConfigs));
-  }, [customFieldConfigs]);
-
-  useEffect(() => {
-    localStorage.setItem('pip_tree', JSON.stringify(treeNodes));
-  }, [treeNodes]);
-
-  const addProduct = (newProduct: Product) => {
-    setProducts(prev => [newProduct, ...prev]);
-    setViewMode('inventory');
-  };
-
-  const updateProduct = (updatedProduct: Product) => {
-    setProducts(prev => prev.map(p => p.id === updatedProduct.id ? updatedProduct : p));
-  };
-
-  const deleteProduct = (id: string) => {
-    if (window.confirm('Are you sure you want to delete this product?')) {
-      setProducts(prev => prev.filter(p => p.id !== id));
+  const addProduct = async (newProduct: Product) => {
+    try {
+      await api.createProduct({
+        productId: newProduct.id,
+        name: newProduct.name,
+        supplier: newProduct.supplier,
+        supplierId: newProduct.supplierId,
+        nodeId: newProduct.nodeId,
+        manufacturer: newProduct.manufacturer,
+        manufacturingLocation: newProduct.manufacturingLocation,
+        description: newProduct.description,
+        imageUrl: newProduct.imageUrl,
+        price: newProduct.price,
+        currency: newProduct.currency,
+        unit: newProduct.unit,
+        moq: newProduct.moq,
+        leadTime: newProduct.leadTime,
+        packagingType: newProduct.packagingType,
+        hsCode: newProduct.hsCode,
+        certifications: newProduct.certifications,
+        shelfLife: newProduct.shelfLife,
+        storageConditions: newProduct.storageConditions,
+        customFields: newProduct.customFields,
+        category: newProduct.category,
+        sector: newProduct.sector,
+        createdBy: newProduct.createdBy,
+        history: newProduct.history,
+      });
+      setProducts(prev => [newProduct, ...prev]);
+      setViewMode('inventory');
+    } catch (err) {
+      console.error('Failed to add product:', err);
+      setProducts(prev => [newProduct, ...prev]);
+      setViewMode('inventory');
     }
   };
 
-  const addCustomFieldDefinition = (field: CustomField) => {
-    setCustomFieldConfigs(prev => [...prev, field]);
+  const updateProduct = async (updatedProduct: Product) => {
+    try {
+      await api.updateProduct(updatedProduct.id, {
+        name: updatedProduct.name,
+        supplier: updatedProduct.supplier,
+        nodeId: updatedProduct.nodeId,
+        manufacturer: updatedProduct.manufacturer,
+        manufacturingLocation: updatedProduct.manufacturingLocation,
+        description: updatedProduct.description,
+        imageUrl: updatedProduct.imageUrl,
+        price: updatedProduct.price,
+        currency: updatedProduct.currency,
+        unit: updatedProduct.unit,
+        moq: updatedProduct.moq,
+        leadTime: updatedProduct.leadTime,
+        packagingType: updatedProduct.packagingType,
+        hsCode: updatedProduct.hsCode,
+        certifications: updatedProduct.certifications,
+        shelfLife: updatedProduct.shelfLife,
+        storageConditions: updatedProduct.storageConditions,
+        customFields: updatedProduct.customFields,
+        category: updatedProduct.category,
+        sector: updatedProduct.sector,
+        history: updatedProduct.history,
+      });
+      setProducts(prev => prev.map(p => p.id === updatedProduct.id ? updatedProduct : p));
+    } catch (err) {
+      console.error('Failed to update product:', err);
+      setProducts(prev => prev.map(p => p.id === updatedProduct.id ? updatedProduct : p));
+    }
   };
 
-  const addTreeNode = (parentId: string | null) => {
-    const name = window.prompt("Enter node name:");
-    if (!name) return;
+  const deleteProduct = async (id: string) => {
+    if (window.confirm('Are you sure you want to delete this product?')) {
+      try {
+        await api.deleteProduct(id);
+        setProducts(prev => prev.filter(p => p.id !== id));
+      } catch (err) {
+        console.error('Failed to delete product:', err);
+        setProducts(prev => prev.filter(p => p.id !== id));
+      }
+    }
+  };
+
+  const addCustomFieldDefinition = async (field: CustomField) => {
+    try {
+      await api.createCustomField({
+        fieldId: field.id,
+        label: field.label,
+        type: field.type,
+        options: field.options,
+        isGlobal: true,
+      });
+      setCustomFieldConfigs(prev => [...prev, field]);
+    } catch (err) {
+      console.error('Failed to add custom field:', err);
+      setCustomFieldConfigs(prev => [...prev, field]);
+    }
+  };
+
+  const addTreeNode = async (parentId: string | null, nodeData?: Partial<TreeNode>) => {
+    const newNodeId = `node-${Date.now()}`;
     const newNode: TreeNode = {
-      id: `node-${Date.now()}`,
-      name,
-      type: 'category', // Defaulting to category for simplicity in quick-add
+      id: newNodeId,
+      name: nodeData?.name || 'New Category',
+      type: nodeData?.type || 'category',
       parentId,
+      description: nodeData?.description,
+      metadata: nodeData?.metadata,
     };
-    setTreeNodes(prev => [...prev, newNode]);
+
+    try {
+      await api.createTreeNode({
+        nodeId: newNodeId,
+        name: newNode.name,
+        type: newNode.type,
+        parentId,
+        description: newNode.description,
+        metadata: newNode.metadata,
+      });
+      setTreeNodes(prev => [...prev, newNode]);
+    } catch (err) {
+      console.error('Failed to add tree node:', err);
+      setTreeNodes(prev => [...prev, newNode]);
+    }
   };
 
-  // Helper to get all descendant IDs of a node
+  const editTreeNode = async (node: TreeNode) => {
+    try {
+      await api.updateTreeNode(node.id, {
+        name: node.name,
+        type: node.type,
+        parentId: node.parentId,
+        description: node.description,
+        metadata: node.metadata,
+      });
+      setTreeNodes(prev => prev.map(n => n.id === node.id ? node : n));
+    } catch (err) {
+      console.error('Failed to update tree node:', err);
+      setTreeNodes(prev => prev.map(n => n.id === node.id ? node : n));
+    }
+  };
+
+  const deleteTreeNode = async (nodeId: string) => {
+    const getDescendantIds = (id: string): string[] => {
+      const children = treeNodes.filter(n => n.parentId === id);
+      return [id, ...children.flatMap(c => getDescendantIds(c.id))];
+    };
+    const toDelete = getDescendantIds(nodeId);
+    
+    try {
+      for (const id of toDelete) {
+        await api.deleteTreeNode(id);
+      }
+      setTreeNodes(prev => prev.filter(n => !toDelete.includes(n.id)));
+      if (selectedNodeId && toDelete.includes(selectedNodeId)) {
+        setSelectedNodeId(null);
+      }
+    } catch (err) {
+      console.error('Failed to delete tree node:', err);
+      setTreeNodes(prev => prev.filter(n => !toDelete.includes(n.id)));
+    }
+  };
+
+  const moveTreeNode = async (nodeId: string, newParentId: string | null) => {
+    try {
+      await api.updateTreeNode(nodeId, { parentId: newParentId });
+      setTreeNodes(prev => prev.map(n => n.id === nodeId ? { ...n, parentId: newParentId } : n));
+    } catch (err) {
+      console.error('Failed to move tree node:', err);
+      setTreeNodes(prev => prev.map(n => n.id === nodeId ? { ...n, parentId: newParentId } : n));
+    }
+  };
+
   const getDescendantIds = (nodeId: string): string[] => {
     const children = treeNodes.filter(n => n.parentId === nodeId);
     let ids = children.map(c => c.id);
@@ -103,13 +287,11 @@ const App: React.FC = () => {
   const filteredProducts = useMemo(() => {
     let result = products;
 
-    // Tree Filter
     if (selectedNodeId) {
       const targetIds = [selectedNodeId, ...getDescendantIds(selectedNodeId)];
       result = result.filter(p => targetIds.includes(p.nodeId));
     }
 
-    // Search Filter
     if (searchQuery) {
       const lower = searchQuery.toLowerCase();
       result = result.filter(p => 
@@ -145,14 +327,19 @@ const App: React.FC = () => {
 
   return (
     <div className="flex h-screen bg-slate-50 overflow-hidden">
-      {/* Sidebar */}
+      {error && (
+        <div className="fixed top-4 right-4 bg-amber-100 border border-amber-300 text-amber-800 px-4 py-2 rounded-lg text-sm z-50">
+          {error}
+          <button onClick={() => setError(null)} className="ml-2 font-bold">×</button>
+        </div>
+      )}
+
       <Sidebar 
         currentView={viewMode} 
         setView={setViewMode} 
         user={currentUser} 
       />
 
-      {/* Main Content */}
       <div className="flex-1 flex flex-col min-w-0">
         <header className="h-16 bg-white border-b border-slate-200 flex items-center justify-between px-6 flex-shrink-0 z-10">
           <div className="flex items-center gap-4 flex-1 min-w-0">
@@ -160,7 +347,6 @@ const App: React.FC = () => {
               {viewMode.replace('-', ' ')}
             </h1>
             
-            {/* Breadcrumbs for Tree Navigation */}
             {selectedNodePath && (
               <div className="hidden md:flex items-center gap-1 ml-4 py-1 px-3 bg-slate-50 rounded-full border border-slate-100 max-w-sm overflow-hidden">
                 <span className="text-[10px] text-slate-400 font-bold uppercase tracking-widest">Path:</span>
@@ -212,9 +398,8 @@ const App: React.FC = () => {
         </header>
 
         <div className="flex-1 flex overflow-hidden">
-          {/* Tree Explorer Panel - Only visible in Inventory and Dashboard for filtering */}
           {(viewMode === 'inventory' || viewMode === 'dashboard') && (
-            <aside className="w-64 border-r border-slate-200 bg-white hidden xl:block flex-shrink-0">
+            <aside className="w-72 border-r border-slate-200 bg-white hidden xl:block flex-shrink-0">
               <div className="p-4 h-full">
                 <ProductTree 
                   nodes={treeNodes} 
@@ -222,6 +407,9 @@ const App: React.FC = () => {
                   onSelectNode={setSelectedNodeId} 
                   productsCount={productCounts}
                   onAddNode={addTreeNode}
+                  onEditNode={editTreeNode}
+                  onDeleteNode={deleteTreeNode}
+                  onMoveNode={moveTreeNode}
                 />
               </div>
             </aside>

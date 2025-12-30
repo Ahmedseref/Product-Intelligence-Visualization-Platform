@@ -1,18 +1,32 @@
 {
-  "name": "product-intelligence-&-visualization-platform",
+  "name": "product-intelligence-visualization-platform",
   "private": true,
   "version": "0.0.0",
   "type": "module",
   "scripts": {
-    "dev": "vite",
+    "dev": "tsx server/index.ts & vite",
     "build": "vite build",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "db:push": "drizzle-kit push",
+    "server": "tsx server/index.ts"
   },
   "dependencies": {
-    "react-dom": "^19.2.3",
+    "@types/cors": "^2.8.19",
+    "@types/express": "^5.0.6",
+    "@types/pg": "^8.16.0",
+    "concurrently": "^9.2.1",
+    "cors": "^2.8.5",
+    "drizzle-kit": "^0.31.8",
+    "drizzle-orm": "^0.45.1",
+    "esbuild": "^0.27.2",
+    "express": "^5.2.1",
     "lucide-react": "^0.562.0",
+    "pg": "^8.16.3",
     "react": "^19.2.3",
-    "recharts": "^3.6.0"
+    "react-dom": "^19.2.3",
+    "recharts": "^3.6.0",
+    "tsx": "^4.21.0",
+    "wait-on": "^9.0.3"
   },
   "devDependencies": {
     "@types/node": "^22.14.0",
