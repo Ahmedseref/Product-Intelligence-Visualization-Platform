@@ -76,6 +76,11 @@ npm run db:push    # Push schema changes to database
 - `POST /api/seed` - Seed database with initial data
 
 ## Recent Changes
+- 2025-12-30: Added inline editing to Product Inventory (double-click cells to edit)
+- 2025-12-30: Added Technical Specifications section to ProductForm with multiple specs support
+- 2025-12-30: Implemented cascading Sector/Category/Sub-Category dropdowns in ProductForm
+- 2025-12-30: Fixed TaxonomyBuilder node creation and editing functions
+- 2025-12-30: Added technicalSpecs field to database schema and full persistence
 - 2025-12-30: Implemented PostgreSQL database integration with Drizzle ORM
 - 2025-12-30: Added Express.js backend with full CRUD API
 - 2025-12-30: Enhanced ProductTree with unlimited nesting and drag-drop
