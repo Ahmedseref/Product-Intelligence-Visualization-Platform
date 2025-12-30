@@ -75,6 +75,7 @@ const App: React.FC = () => {
         shelfLife: p.shelfLife || '',
         storageConditions: p.storageConditions || '',
         customFields: (p.customFields as any[]) || [],
+        technicalSpecs: (p.technicalSpecs as any[]) || [],
         category: p.category || '',
         sector: p.sector || '',
         createdBy: p.createdBy || '',
