@@ -202,23 +202,30 @@ const App: React.FC = () => {
     }
   };
 
-  const addTreeNode = async (parentId: string | null, nodeData?: Partial<TreeNode>) => {
-    const newNodeId = `node-${Date.now()}`;
-    const newNode: TreeNode = {
-      id: newNodeId,
-      name: nodeData?.name || 'New Category',
-      type: nodeData?.type || 'category',
-      parentId,
-      description: nodeData?.description,
-      metadata: nodeData?.metadata,
-    };
+  const addTreeNode = async (nodeOrParentId: TreeNode | string | null, nodeData?: Partial<TreeNode>) => {
+    let newNode: TreeNode;
+    
+    if (typeof nodeOrParentId === 'object' && nodeOrParentId !== null && 'id' in nodeOrParentId) {
+      newNode = nodeOrParentId as TreeNode;
+    } else {
+      const parentId = nodeOrParentId as string | null;
+      const newNodeId = `node-${Date.now()}`;
+      newNode = {
+        id: newNodeId,
+        name: nodeData?.name || 'New Category',
+        type: nodeData?.type || 'category',
+        parentId,
+        description: nodeData?.description,
+        metadata: nodeData?.metadata,
+      };
+    }
 
     try {
       await api.createTreeNode({
-        nodeId: newNodeId,
+        nodeId: newNode.id,
         name: newNode.name,
         type: newNode.type,
-        parentId,
+        parentId: newNode.parentId,
         description: newNode.description,
         metadata: newNode.metadata,
       });
@@ -229,19 +236,30 @@ const App: React.FC = () => {
     }
   };
 
-  const editTreeNode = async (node: TreeNode) => {
+  const editTreeNode = async (nodeOrId: TreeNode | string, updates?: Partial<TreeNode>) => {
+    let nodeId: string;
+    let nodeUpdates: Partial<TreeNode>;
+    
+    if (typeof nodeOrId === 'string') {
+      nodeId = nodeOrId;
+      nodeUpdates = updates || {};
+    } else {
+      nodeId = nodeOrId.id;
+      nodeUpdates = nodeOrId;
+    }
+
     try {
-      await api.updateTreeNode(node.id, {
-        name: node.name,
-        type: node.type,
-        parentId: node.parentId,
-        description: node.description,
-        metadata: node.metadata,
+      await api.updateTreeNode(nodeId, {
+        name: nodeUpdates.name,
+        type: nodeUpdates.type,
+        parentId: nodeUpdates.parentId,
+        description: nodeUpdates.description,
+        metadata: nodeUpdates.metadata,
       });
-      setTreeNodes(prev => prev.map(n => n.id === node.id ? node : n));
+      setTreeNodes(prev => prev.map(n => n.id === nodeId ? { ...n, ...nodeUpdates } : n));
     } catch (err) {
       console.error('Failed to update tree node:', err);
-      setTreeNodes(prev => prev.map(n => n.id === node.id ? node : n));
+      setTreeNodes(prev => prev.map(n => n.id === nodeId ? { ...n, ...nodeUpdates } : n));
     }
   };
 
