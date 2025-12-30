@@ -10,15 +10,21 @@ interface ProductFormProps {
   customFields: CustomField[];
   treeNodes: TreeNode[];
   onAddFieldDefinition: (field: CustomField) => void;
+  onAddTreeNode: (node: TreeNode) => void;
 }
 
-const ProductForm: React.FC<ProductFormProps> = ({ onSubmit, onCancel, currentUser, customFields, treeNodes, onAddFieldDefinition }) => {
+const ProductForm: React.FC<ProductFormProps> = ({ onSubmit, onCancel, currentUser, customFields, treeNodes, onAddFieldDefinition, onAddTreeNode }) => {
   const [showNewFieldModal, setShowNewFieldModal] = useState(false);
   const [newFieldDef, setNewFieldDef] = useState<Partial<CustomField>>({ label: '', type: 'text' });
   
   const [selectedSector, setSelectedSector] = useState<string>('');
   const [selectedCategory, setSelectedCategory] = useState<string>('');
   const [selectedSubcategory, setSelectedSubcategory] = useState<string>('');
+  
+  const [showAddSector, setShowAddSector] = useState(false);
+  const [showAddCategory, setShowAddCategory] = useState(false);
+  const [showAddSubcategory, setShowAddSubcategory] = useState(false);
+  const [newNodeName, setNewNodeName] = useState('');
   
   const [technicalSpecs, setTechnicalSpecs] = useState<TechnicalSpec[]>([]);
   const [newSpecName, setNewSpecName] = useState('');
@@ -69,6 +75,10 @@ const ProductForm: React.FC<ProductFormProps> = ({ onSubmit, onCancel, currentUs
   );
 
   const handleSectorChange = (sectorId: string) => {
+    if (sectorId === '__add_new__') {
+      setShowAddSector(true);
+      return;
+    }
     setSelectedSector(sectorId);
     setSelectedCategory('');
     setSelectedSubcategory('');
@@ -76,14 +86,67 @@ const ProductForm: React.FC<ProductFormProps> = ({ onSubmit, onCancel, currentUs
   };
 
   const handleCategoryChange = (categoryId: string) => {
+    if (categoryId === '__add_new__') {
+      setShowAddCategory(true);
+      return;
+    }
     setSelectedCategory(categoryId);
     setSelectedSubcategory('');
     setFormData({ ...formData, nodeId: categoryId });
   };
 
   const handleSubcategoryChange = (subcategoryId: string) => {
+    if (subcategoryId === '__add_new__') {
+      setShowAddSubcategory(true);
+      return;
+    }
     setSelectedSubcategory(subcategoryId);
     setFormData({ ...formData, nodeId: subcategoryId });
+  };
+
+  const handleAddNewSector = () => {
+    if (!newNodeName.trim()) return;
+    const newNode: TreeNode = {
+      id: `node-${Date.now()}`,
+      name: newNodeName.trim(),
+      type: 'sector',
+      parentId: null,
+    };
+    onAddTreeNode(newNode);
+    setSelectedSector(newNode.id);
+    setFormData({ ...formData, nodeId: newNode.id });
+    setNewNodeName('');
+    setShowAddSector(false);
+  };
+
+  const handleAddNewCategory = () => {
+    if (!newNodeName.trim() || !selectedSector) return;
+    const newNode: TreeNode = {
+      id: `node-${Date.now()}`,
+      name: newNodeName.trim(),
+      type: 'category',
+      parentId: selectedSector,
+    };
+    onAddTreeNode(newNode);
+    setSelectedCategory(newNode.id);
+    setFormData({ ...formData, nodeId: newNode.id });
+    setNewNodeName('');
+    setShowAddCategory(false);
+  };
+
+  const handleAddNewSubcategory = () => {
+    if (!newNodeName.trim() || !selectedCategory) return;
+    const newNode: TreeNode = {
+      id: `node-${Date.now()}`,
+      name: newNodeName.trim(),
+      type: 'subcategory',
+      parentId: selectedCategory,
+    };
+    onAddTreeNode(newNode);
+    setSelectedSubcategory(newNode.id);
+    setFormData({ ...formData, nodeId: newNode.id });
+    setNewNodeName('');
+    setShowAddSubcategory(false);
   };
 
   const addTechnicalSpec = () => {
@@ -165,6 +228,69 @@ const ProductForm: React.FC<ProductFormProps> = ({ onSubmit, onCancel, currentUs
     return path.join(' > ');
   };
 
+  const AddNodeModal = ({ 
+    show, 
+    onClose, 
+    onAdd, 
+    title, 
+    placeholder 
+  }: { 
+    show: boolean; 
+    onClose: () => void; 
+    onAdd: () => void; 
+    title: string; 
+    placeholder: string;
+  }) => {
+    if (!show) return null;
+    return (
+      <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+        <div className="bg-white rounded-xl shadow-xl p-6 w-96">
+          <div className="flex items-center justify-between mb-4">
+            <h3 className="text-lg font-bold text-slate-800">{title}</h3>
+            <button onClick={onClose} className="p-1 hover:bg-slate-100 rounded">
+              <X size={20} />
+            </button>
+          </div>
+          <div className="space-y-4">
+            <div>
+              <label className="block text-sm font-medium text-slate-700 mb-1">Name</label>
+              <input
+                type="text"
+                value={newNodeName}
+                onChange={(e) => setNewNodeName(e.target.value)}
+                className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none"
+                placeholder={placeholder}
+                autoFocus
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') {
+                    e.preventDefault();
+                    onAdd();
+                  }
+                }}
+              />
+            </div>
+            <div className="flex gap-3 pt-2">
+              <button
+                type="button"
+                onClick={onClose}
+                className="flex-1 px-4 py-2 border border-slate-300 text-slate-700 rounded-lg hover:bg-slate-50"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={onAdd}
+                className="flex-1 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
+              >
+                Add
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  };
+
   return (
     <div className="max-w-5xl mx-auto">
       <form onSubmit={handleSubmit} className="space-y-8 pb-20">
@@ -224,6 +350,7 @@ const ProductForm: React.FC<ProductFormProps> = ({ onSubmit, onCancel, currentUs
                       {sectors.map(node => (
                         <option key={node.id} value={node.id}>{node.name}</option>
                       ))}
+                      <option value="__add_new__" className="text-blue-600 font-semibold">+ Add New Sector</option>
                     </select>
                   </div>
                   
@@ -239,6 +366,9 @@ const ProductForm: React.FC<ProductFormProps> = ({ onSubmit, onCancel, currentUs
                       {categories.map(node => (
                         <option key={node.id} value={node.id}>{node.name}</option>
                       ))}
+                      {selectedSector && (
+                        <option value="__add_new__" className="text-blue-600 font-semibold">+ Add New Category</option>
+                      )}
                     </select>
                   </div>
                   
@@ -248,12 +378,15 @@ const ProductForm: React.FC<ProductFormProps> = ({ onSubmit, onCancel, currentUs
                       className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-sm outline-none focus:ring-2 focus:ring-blue-500"
                       value={selectedSubcategory}
                       onChange={e => handleSubcategoryChange(e.target.value)}
-                      disabled={!selectedCategory || subcategories.length === 0}
+                      disabled={!selectedCategory}
                     >
                       <option value="">Select Sub-Category...</option>
                       {subcategories.map(node => (
                         <option key={node.id} value={node.id}>{node.name}</option>
                       ))}
+                      {selectedCategory && (
+                        <option value="__add_new__" className="text-blue-600 font-semibold">+ Add New Sub-Category</option>
+                      )}
                     </select>
                   </div>
                 </div>
@@ -492,6 +625,30 @@ const ProductForm: React.FC<ProductFormProps> = ({ onSubmit, onCancel, currentUs
           </div>
         </div>
       </form>
+
+      <AddNodeModal
+        show={showAddSector}
+        onClose={() => { setShowAddSector(false); setNewNodeName(''); }}
+        onAdd={handleAddNewSector}
+        title="Add New Sector"
+        placeholder="e.g. Construction Materials"
+      />
+
+      <AddNodeModal
+        show={showAddCategory}
+        onClose={() => { setShowAddCategory(false); setNewNodeName(''); }}
+        onAdd={handleAddNewCategory}
+        title="Add New Category"
+        placeholder="e.g. Insulation Products"
+      />
+
+      <AddNodeModal
+        show={showAddSubcategory}
+        onClose={() => { setShowAddSubcategory(false); setNewNodeName(''); }}
+        onAdd={handleAddNewSubcategory}
+        title="Add New Sub-Category"
+        placeholder="e.g. Thermal Panels"
+      />
 
       {showNewFieldModal && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">

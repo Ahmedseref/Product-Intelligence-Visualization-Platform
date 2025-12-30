@@ -76,6 +76,7 @@ npm run db:push    # Push schema changes to database
 - `POST /api/seed` - Seed database with initial data
 
 ## Recent Changes
+- 2025-12-30: Added ability to create new Sectors/Categories/Sub-Categories directly from Add Product form
 - 2025-12-30: Added inline editing to Product Inventory (double-click cells to edit)
 - 2025-12-30: Added Technical Specifications section to ProductForm with multiple specs support
 - 2025-12-30: Implemented cascading Sector/Category/Sub-Category dropdowns in ProductForm

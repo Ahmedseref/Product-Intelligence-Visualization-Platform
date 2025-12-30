@@ -461,6 +461,7 @@ const App: React.FC = () => {
                 customFields={customFieldConfigs}
                 treeNodes={treeNodes}
                 onAddFieldDefinition={addCustomFieldDefinition}
+                onAddTreeNode={addTreeNode}
               />
             )}
             {viewMode === 'taxonomy-manager' && (
