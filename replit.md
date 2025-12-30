@@ -76,6 +76,11 @@ npm run db:push    # Push schema changes to database
 - `POST /api/seed` - Seed database with initial data
 
 ## Recent Changes
+- 2025-12-30: Fixed inline editing in Product Inventory (resolved blur/click event conflicts)
+- 2025-12-30: Added product selection checkboxes for bulk actions
+- 2025-12-30: Added Export functionality (CSV/JSON for all or selected products)
+- 2025-12-30: Added working Filter panel (by sector, price range, lead time)
+- 2025-12-30: Added Create PI (Product Intelligence) feature from selected products
 - 2025-12-30: Added ability to create new Sectors/Categories/Sub-Categories directly from Add Product form
 - 2025-12-30: Added inline editing to Product Inventory (double-click cells to edit)
 - 2025-12-30: Added Technical Specifications section to ProductForm with multiple specs support
