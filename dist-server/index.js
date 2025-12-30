@@ -36213,6 +36213,7 @@ var __filename = fileURLToPath(import.meta.url);
 var __dirname = path.dirname(__filename);
 var app = (0, import_express.default)();
 var PORT = parseInt(process.env.PORT || "3001", 10);
+var isProduction = process.env.NODE_ENV === "production";
 app.use((0, import_cors.default)({
   origin: true,
   credentials: true,
@@ -36221,15 +36222,15 @@ app.use((0, import_cors.default)({
 }));
 app.use(import_express.default.json());
 registerRoutes(app);
-if (process.env.NODE_ENV === "production") {
-  const distPath = path.join(__dirname, "..", "dist");
-  app.use(import_express.default.static(distPath));
-  app.get("*", (req, res) => {
-    if (!req.path.startsWith("/api")) {
-      res.sendFile(path.join(distPath, "index.html"));
-    }
-  });
-}
+var distPath = path.join(__dirname, "..", "dist");
+app.use(import_express.default.static(distPath));
+app.get("*", (req, res, next) => {
+  if (!req.path.startsWith("/api")) {
+    res.sendFile(path.join(distPath, "index.html"));
+  } else {
+    next();
+  }
+});
 app.listen(PORT, "0.0.0.0", () => {
   console.log(`Server running on http://0.0.0.0:${PORT}`);
 });

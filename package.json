@@ -3,12 +3,15 @@
   "private": true,
   "version": "0.0.0",
   "type": "module",
+  "engines": {
+    "node": ">=18.0.0"
+  },
   "scripts": {
     "dev": "tsx server/index.ts & vite",
-    "build": "vite build",
-    "build:prod": "npm run build && npm run build:server",
+    "build": "vite build && esbuild server/index.ts --bundle --platform=node --outfile=dist-server/index.js --format=esm --external:pg-native",
+    "build:prod": "npm run build",
     "build:server": "esbuild server/index.ts --bundle --platform=node --outfile=dist-server/index.js --format=esm --external:pg-native",
-    "start": "NODE_ENV=production node dist-server/index.js",
+    "start": "node dist-server/index.js",
     "preview": "vite preview",
     "db:push": "drizzle-kit push",
     "server": "tsx server/index.ts"
