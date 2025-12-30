@@ -63,6 +63,39 @@ This starts both the Express backend (port 3001) and Vite frontend (port 5000) c
 npm run db:push    # Push schema changes to database
 ```
 
+## Production Deployment (Hostinger)
+
+### Build for Production
+```bash
+npm run build:prod
+```
+This creates:
+- `dist/` - Frontend static files
+- `dist-server/` - Bundled backend server
+
+### Deployment Steps for Hostinger
+
+1. **Upload Files**:
+   - Upload the `dist/` folder contents (frontend)
+   - Upload the `dist-server/index.js` file (backend)
+
+2. **Environment Variables** (set in Hostinger panel):
+   ```
+   NODE_ENV=production
+   PORT=3001
+   DATABASE_URL=postgresql://user:password@host:5432/database
+   ```
+
+3. **Start Command**:
+   ```bash
+   node dist-server/index.js
+   ```
+
+4. **For Node.js Hosting on Hostinger**:
+   - The server serves both API (`/api/*`) and static frontend files
+   - Single port deployment - backend handles everything
+   - CORS is configured to accept requests from any origin
+
 ## API Endpoints
 - `GET /api/tree-nodes` - Get all taxonomy nodes
 - `POST /api/tree-nodes` - Create a new node

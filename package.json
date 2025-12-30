@@ -6,6 +6,9 @@
   "scripts": {
     "dev": "tsx server/index.ts & vite",
     "build": "vite build",
+    "build:prod": "npm run build && npm run build:server",
+    "build:server": "esbuild server/index.ts --bundle --platform=node --outfile=dist-server/index.js --format=esm --external:pg-native",
+    "start": "NODE_ENV=production node dist-server/index.js",
     "preview": "vite preview",
     "db:push": "drizzle-kit push",
     "server": "tsx server/index.ts"
