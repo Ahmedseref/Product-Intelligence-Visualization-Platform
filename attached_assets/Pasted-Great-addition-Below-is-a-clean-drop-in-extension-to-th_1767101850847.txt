@@ -1,0 +1,191 @@
+Great addition 👍
+Below is a **clean, drop-in extension** to the **Replit Agent master prompt** you already have.
+You can **append this as a new section** without rewriting the rest.
+
+---
+
+## 🔹 NEW FEATURE: Product Tree (Hierarchical Categorization System)
+
+### 16. Product Tree & Hierarchical Categorization Engine
+
+Add a **tree-based product categorization system** that allows products to be organized, visualized, and managed hierarchically.
+
+This system must behave like a **dynamic, user-configurable product taxonomy**.
+
+---
+
+### 16.1 Product Tree Concept
+
+* Products are organized in a **multi-level tree structure**
+* Example hierarchy:
+
+```
+Construction (Sector)
+│
+├── Construction Chemicals (Category)
+│   ├── Adhesives
+│   ├── Sealants
+│   └── Waterproofing Materials
+│
+├── Building Materials (Category)
+│   ├── Cement
+│   ├── Bricks
+│   ├── Steel Products
+│
+└── Natural Materials (Category)
+    ├── Stone
+    ├── Wood
+    └── Clay Products
+```
+
+* The depth of the tree must be **unlimited**
+* Users can create:
+
+  * Sectors
+  * Categories
+  * Sub-categories
+  * Product groups
+
+---
+
+### 16.2 Tree Data Model
+
+Each node in the product tree must include:
+
+* Node ID
+* Node Name
+* Node Type
+  (`Sector`, `Category`, `Subcategory`, `Group`)
+* Parent Node ID (nullable)
+* Node Description
+* Custom attributes (user-defined)
+* Created / Updated timestamps
+
+Products (cards) must:
+
+* Be assignable to **any level** of the tree
+* Support **multiple tree assignments** (optional toggle)
+
+---
+
+### 16.3 Tree Visualization (UI/UX)
+
+Provide a **Tree Explorer Panel** with:
+
+* Expand / collapse nodes
+* Drag & drop:
+
+  * Reorder categories
+  * Move products between nodes
+* Visual indicators:
+
+  * Number of products per node
+  * Alerts (e.g. missing data, outdated prices)
+* Search inside the tree
+* Breadcrumb navigation
+
+---
+
+### 16.4 Product Card Integration
+
+Each **product card must be directly linked to the tree**:
+
+* Show its full path:
+
+  ```
+  Construction > Building Materials > Cement
+  ```
+* Clicking a tree node:
+
+  * Filters the product list automatically
+  * Updates charts and dashboards
+* Editing a product:
+
+  * Allows reassignment to another tree node
+* Each card remains **individually controllable**, regardless of tree placement
+
+---
+
+### 16.5 Tree-Based Controls & Actions
+
+Users must be able to perform actions at **any tree level**:
+
+* Bulk actions:
+
+  * Update prices
+  * Add tags
+  * Export data
+* Analytics:
+
+  * Average price per category
+  * Supplier comparison within a node
+  * Historical trends per node
+* Permissions:
+
+  * Restrict editing at certain tree levels
+  * Read-only categories
+
+---
+
+### 16.6 Tree + Charts Integration
+
+Charts must support **tree-aware data selection**:
+
+* Select:
+
+  * Entire sector
+  * Single category
+  * Sub-group
+* Example:
+
+  * X-axis: Time
+  * Y-axis: Average price
+  * Filter: `Construction > Construction Chemicals`
+
+Tree filters must dynamically affect:
+
+* Charts
+* Tables
+* Dashboards
+* Exports
+
+---
+
+### 16.7 Custom Tree Extension
+
+Users must be able to:
+
+* Rename nodes
+* Add custom metadata per node (e.g. market risk, priority)
+* Attach notes or documents to nodes
+* Enable / disable nodes (soft archive)
+
+---
+
+### 16.8 Non-Functional Requirements (Tree System)
+
+* Tree operations must be fast for large datasets
+* Safe re-parenting (no broken references)
+* Full audit history for tree changes
+* Tree changes must NOT break historical product data
+
+---
+
+### 16.9 Future-Ready (Optional Flags)
+
+Design the tree system to later support:
+
+* AI-assisted auto-categorization
+* Import/export of taxonomy templates
+* Industry-standard classification systems (UNSPSC, NAICS)
+
+---
+
+If you want next, I can:
+
+* Merge this into a **single ultra-clean Replit Agent prompt**
+* Design the **database schema for the tree**
+* Create **example user stories** Replit Agent understands very well
+* Reduce this to a **lean MVP version** (tree + cards + charts only)
+
+Just tell me what you want next 🚀
