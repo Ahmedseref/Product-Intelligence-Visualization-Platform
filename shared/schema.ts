@@ -37,6 +37,7 @@ export const products = pgTable("products", {
   shelfLife: varchar("shelf_life", { length: 100 }),
   storageConditions: text("storage_conditions"),
   customFields: jsonb("custom_fields").default([]),
+  technicalSpecs: jsonb("technical_specs").default([]),
   category: varchar("category", { length: 255 }),
   sector: varchar("sector", { length: 255 }),
   createdBy: varchar("created_by", { length: 255 }),

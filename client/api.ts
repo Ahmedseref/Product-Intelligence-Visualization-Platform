@@ -12,6 +12,14 @@ export interface TreeNodeData {
   sortOrder?: number;
 }
 
+export interface TechnicalSpecData {
+  id: string;
+  name: string;
+  value: string;
+  unit?: string;
+  affectsPrice?: boolean;
+}
+
 export interface ProductData {
   id?: number;
   productId: string;
@@ -34,6 +42,7 @@ export interface ProductData {
   shelfLife?: string;
   storageConditions?: string;
   customFields?: any[];
+  technicalSpecs?: TechnicalSpecData[];
   category?: string;
   sector?: string;
   createdBy?: string;
