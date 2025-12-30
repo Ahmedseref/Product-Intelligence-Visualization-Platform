@@ -1,15 +1,16 @@
 
 import React, { useState } from 'react';
-import { Product, HistoryEntry, CustomFieldValue } from '../types';
+import { Product, HistoryEntry, CustomFieldValue, TreeNode } from '../types';
 import { ICONS } from '../constants';
 
 interface ProductDetailsModalProps {
   product: Product;
   onClose: () => void;
   onUpdate: (p: Product) => void;
+  treeNodes: TreeNode[];
 }
 
-const ProductDetailsModal: React.FC<ProductDetailsModalProps> = ({ product, onClose, onUpdate }) => {
+const ProductDetailsModal: React.FC<ProductDetailsModalProps> = ({ product, onClose, onUpdate, treeNodes }) => {
   const [activeTab, setActiveTab] = useState<'details' | 'history' | 'custom'>('details');
   const [isEditingCustom, setIsEditingCustom] = useState(false);
   const [editedCustomFields, setEditedCustomFields] = useState<CustomFieldValue[]>(product.customFields || []);
@@ -23,7 +24,7 @@ const ProductDetailsModal: React.FC<ProductDetailsModalProps> = ({ product, onCl
         {
           id: `HIST-${Date.now()}`,
           timestamp: new Date().toISOString(),
-          userId: 'U-01', // Static for now
+          userId: 'U-01',
           userName: 'Admin User',
           changes: {
             customFields: { old: product.customFields, new: editedCustomFields }
@@ -49,6 +50,16 @@ const ProductDetailsModal: React.FC<ProductDetailsModalProps> = ({ product, onCl
     });
   };
 
+  const getProductPathString = (nodeId: string) => {
+    const path: string[] = [];
+    let current = treeNodes.find(n => n.id === nodeId);
+    while (current) {
+      path.unshift(current.name);
+      current = treeNodes.find(n => n.id === current?.parentId);
+    }
+    return path.join(' > ');
+  };
+
   return (
     <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 sm:p-6 bg-slate-900/60 backdrop-blur-sm">
       <div className="bg-white w-full max-w-4xl max-h-[90vh] rounded-2xl shadow-2xl flex flex-col overflow-hidden animate-in fade-in zoom-in duration-200">
@@ -65,7 +76,11 @@ const ProductDetailsModal: React.FC<ProductDetailsModalProps> = ({ product, onCl
                     {product.id}
                   </span>
                 </div>
-                <p className="text-sm text-slate-500">Supplier: <span className="font-semibold text-slate-700">{product.supplier}</span></p>
+                <div className="flex items-center gap-2">
+                    <p className="text-xs text-slate-500">Supplier: <span className="font-semibold text-slate-700">{product.supplier}</span></p>
+                    <span className="text-slate-300">|</span>
+                    <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">{getProductPathString(product.nodeId)}</p>
+                </div>
              </div>
           </div>
           <button 
@@ -82,19 +97,19 @@ const ProductDetailsModal: React.FC<ProductDetailsModalProps> = ({ product, onCl
             onClick={() => setActiveTab('details')}
             className={`px-4 py-3 text-sm font-semibold transition-all border-b-2 ${activeTab === 'details' ? 'border-blue-600 text-blue-600' : 'border-transparent text-slate-500 hover:text-slate-700'}`}
           >
-            Product Details
+            Core Data
           </button>
           <button 
             onClick={() => setActiveTab('history')}
             className={`px-4 py-3 text-sm font-semibold transition-all border-b-2 ${activeTab === 'history' ? 'border-blue-600 text-blue-600' : 'border-transparent text-slate-500 hover:text-slate-700'}`}
           >
-            Audit History ({product.history.length})
+            Audit Log ({product.history.length})
           </button>
           <button 
              onClick={() => setActiveTab('custom')}
              className={`px-4 py-3 text-sm font-semibold transition-all border-b-2 ${activeTab === 'custom' ? 'border-blue-600 text-blue-600' : 'border-transparent text-slate-500 hover:text-slate-700'}`}
           >
-            Dynamic Fields
+            Technical Specs
           </button>
         </div>
 
@@ -105,23 +120,19 @@ const ProductDetailsModal: React.FC<ProductDetailsModalProps> = ({ product, onCl
               <div className="space-y-6">
                 <section>
                   <h3 className="text-xs font-bold text-slate-400 uppercase tracking-widest mb-4 flex items-center gap-2">
-                    {ICONS.Details} Core Specifications
+                    {ICONS.Details} Classification
                   </h3>
-                  <div className="space-y-3">
-                    <div className="flex justify-between border-b border-slate-50 pb-2">
-                      <span className="text-sm text-slate-500">Sector</span>
-                      <span className="text-sm font-semibold text-slate-800">{product.sector}</span>
-                    </div>
-                    <div className="flex justify-between border-b border-slate-50 pb-2">
-                      <span className="text-sm text-slate-500">Category</span>
-                      <span className="text-sm font-semibold text-slate-800">{product.category}</span>
-                    </div>
+                  <div className="p-4 bg-slate-50 rounded-xl border border-slate-100">
+                    <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1">Hierarchy Placement</p>
+                    <p className="text-sm font-semibold text-slate-800">{getProductPathString(product.nodeId)}</p>
+                  </div>
+                  <div className="mt-4 space-y-3">
                     <div className="flex justify-between border-b border-slate-50 pb-2">
                       <span className="text-sm text-slate-500">Manufacturer</span>
                       <span className="text-sm font-semibold text-slate-800">{product.manufacturer}</span>
                     </div>
                     <div className="flex justify-between border-b border-slate-50 pb-2">
-                      <span className="text-sm text-slate-500">Origin</span>
+                      <span className="text-sm text-slate-500">Production Site</span>
                       <span className="text-sm font-semibold text-slate-800">{product.manufacturingLocation}</span>
                     </div>
                   </div>
@@ -129,7 +140,7 @@ const ProductDetailsModal: React.FC<ProductDetailsModalProps> = ({ product, onCl
 
                 <section>
                    <h3 className="text-xs font-bold text-slate-400 uppercase tracking-widest mb-4 flex items-center gap-2">
-                    {ICONS.Price} Commercials
+                    {ICONS.Price} Commercial Terms
                   </h3>
                   <div className="grid grid-cols-2 gap-4">
                     <div className="p-3 rounded-xl bg-blue-50/50 border border-blue-100">
@@ -137,7 +148,7 @@ const ProductDetailsModal: React.FC<ProductDetailsModalProps> = ({ product, onCl
                       <p className="text-lg font-bold text-blue-900">{product.currency} {product.price}</p>
                     </div>
                     <div className="p-3 rounded-xl bg-slate-50 border border-slate-100">
-                      <p className="text-[10px] font-bold text-slate-400 uppercase">MOQ</p>
+                      <p className="text-[10px] font-bold text-slate-400 uppercase">Min Order</p>
                       <p className="text-lg font-bold text-slate-800">{product.moq} {product.unit}</p>
                     </div>
                   </div>
@@ -147,16 +158,12 @@ const ProductDetailsModal: React.FC<ProductDetailsModalProps> = ({ product, onCl
               <div className="space-y-6">
                 <section>
                    <h3 className="text-xs font-bold text-slate-400 uppercase tracking-widest mb-4 flex items-center gap-2">
-                    {ICONS.Logistics} Logistics & Compliance
+                    {ICONS.Logistics} Fulfillment
                   </h3>
                   <div className="space-y-3">
                     <div className="flex justify-between border-b border-slate-50 pb-2">
-                      <span className="text-sm text-slate-500">Lead Time</span>
-                      <span className="text-sm font-semibold text-slate-800">{product.leadTime} Days</span>
-                    </div>
-                    <div className="flex justify-between border-b border-slate-50 pb-2">
-                      <span className="text-sm text-slate-500">Shelf Life</span>
-                      <span className="text-sm font-semibold text-slate-800">{product.shelfLife}</span>
+                      <span className="text-sm text-slate-500">Average Lead Time</span>
+                      <span className={`text-sm font-bold ${product.leadTime > 60 ? 'text-red-600' : 'text-slate-800'}`}>{product.leadTime} Days</span>
                     </div>
                     <div className="flex justify-between border-b border-slate-50 pb-2">
                       <span className="text-sm text-slate-500">Packaging</span>
@@ -166,20 +173,7 @@ const ProductDetailsModal: React.FC<ProductDetailsModalProps> = ({ product, onCl
                 </section>
 
                 <section>
-                  <h3 className="text-xs font-bold text-slate-400 uppercase tracking-widest mb-4 flex items-center gap-2">
-                    Certifications
-                  </h3>
-                  <div className="flex flex-wrap gap-2">
-                    {product.certifications.map((cert, i) => (
-                      <span key={i} className="px-3 py-1 bg-emerald-50 text-emerald-700 text-xs font-bold rounded-full border border-emerald-100">
-                        {cert}
-                      </span>
-                    ))}
-                  </div>
-                </section>
-
-                <section>
-                   <h3 className="text-xs font-bold text-slate-400 uppercase tracking-widest mb-2">Description</h3>
+                   <h3 className="text-xs font-bold text-slate-400 uppercase tracking-widest mb-2">Technical Description</h3>
                    <p className="text-sm text-slate-600 leading-relaxed italic border-l-4 border-slate-200 pl-4">
                     "{product.description}"
                    </p>
@@ -195,7 +189,7 @@ const ProductDetailsModal: React.FC<ProductDetailsModalProps> = ({ product, onCl
                   <div className="w-12 h-12 bg-slate-200 rounded-full flex items-center justify-center mx-auto text-slate-400 mb-4">
                     {ICONS.History}
                   </div>
-                  <p className="text-slate-500 font-medium">No version history found for this product.</p>
+                  <p className="text-slate-500 font-medium">No previous versions found.</p>
                 </div>
               ) : (
                 <div className="space-y-8 relative before:absolute before:inset-0 before:ml-5 before:w-0.5 before:bg-slate-200">
@@ -214,7 +208,7 @@ const ProductDetailsModal: React.FC<ProductDetailsModalProps> = ({ product, onCl
                             <div key={idx} className="flex items-center gap-3 text-xs">
                               <span className="font-bold text-slate-600 capitalize min-w-[100px]">{field}:</span>
                               <div className="flex items-center gap-2">
-                                <span className="px-2 py-0.5 bg-red-100 text-red-700 rounded line-through decoration-red-400 opacity-60">{JSON.stringify(change.old)}</span>
+                                <span className="px-2 py-0.5 bg-red-100 text-red-700 rounded line-through opacity-60">{JSON.stringify(change.old)}</span>
                                 <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" className="text-slate-400"><line x1="5" y1="12" x2="19" y2="12"></line><polyline points="12 5 19 12 12 19"></polyline></svg>
                                 <span className="px-2 py-0.5 bg-green-100 text-green-700 rounded font-bold">{JSON.stringify(change.new)}</span>
                               </div>
@@ -224,17 +218,6 @@ const ProductDetailsModal: React.FC<ProductDetailsModalProps> = ({ product, onCl
                       </div>
                     </div>
                   ))}
-                  
-                   {/* Created date at bottom */}
-                   <div className="relative pl-12">
-                      <div className="absolute left-0 top-1 w-10 h-10 rounded-full bg-white border-2 border-slate-200 flex items-center justify-center z-10">
-                        <div className="w-3 h-3 bg-slate-300 rounded-full"></div>
-                      </div>
-                      <div className="bg-white p-4">
-                        <p className="text-xs font-bold text-slate-400 uppercase tracking-widest">Product Created</p>
-                        <p className="text-xs text-slate-500 mt-1">{new Date(product.dateAdded).toLocaleString()} by {product.createdBy}</p>
-                      </div>
-                   </div>
                 </div>
               )}
             </div>
@@ -243,8 +226,8 @@ const ProductDetailsModal: React.FC<ProductDetailsModalProps> = ({ product, onCl
           {activeTab === 'custom' && (
              <div className="space-y-6">
                 <div className="flex items-center justify-between">
-                   <h3 className="text-xs font-bold text-slate-400 uppercase tracking-widest mb-4 flex items-center gap-2">
-                      Custom Dynamic Attributes
+                   <h3 className="text-xs font-bold text-slate-400 uppercase tracking-widest flex items-center gap-2">
+                      Dynamic Technical Data
                    </h3>
                    <button 
                     onClick={() => {
@@ -253,18 +236,18 @@ const ProductDetailsModal: React.FC<ProductDetailsModalProps> = ({ product, onCl
                     }}
                     className={`px-3 py-1 text-xs font-bold rounded-full transition-all flex items-center gap-2 ${isEditingCustom ? 'bg-emerald-600 text-white shadow-lg' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'}`}
                    >
-                     {isEditingCustom ? 'Save Changes' : 'Edit Attributes'}
+                     {isEditingCustom ? 'Save Changes' : 'Update Specs'}
                    </button>
                 </div>
 
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                   {(isEditingCustom ? editedCustomFields : product.customFields).length === 0 && !isEditingCustom ? (
                     <div className="col-span-2 text-center py-20 bg-slate-50 rounded-2xl">
-                        <p className="text-slate-400 italic">No custom attributes defined for this record.</p>
+                        <p className="text-slate-400 italic">No technical attributes provided.</p>
                     </div>
                   ) : (
                     (isEditingCustom ? editedCustomFields : product.customFields).map((field, idx) => (
-                      <div key={idx} className="p-4 bg-white border border-slate-200 rounded-xl flex flex-col gap-1">
+                      <div key={idx} className="p-4 bg-white border border-slate-200 rounded-xl flex flex-col gap-1 shadow-sm">
                         <label className="text-[10px] font-bold text-slate-400 uppercase tracking-tighter">{field.fieldId}</label>
                         {isEditingCustom ? (
                           <input 
@@ -279,11 +262,6 @@ const ProductDetailsModal: React.FC<ProductDetailsModalProps> = ({ product, onCl
                       </div>
                     ))
                   )}
-                  {isEditingCustom && (
-                    <div className="col-span-2 p-4 border border-dashed border-slate-200 rounded-xl flex items-center justify-center text-slate-400 text-xs italic">
-                      Definitions are managed in the "Add Product" form.
-                    </div>
-                  )}
                 </div>
              </div>
           )}
@@ -291,10 +269,10 @@ const ProductDetailsModal: React.FC<ProductDetailsModalProps> = ({ product, onCl
 
         {/* Footer */}
         <div className="p-6 border-t border-slate-100 flex items-center justify-between bg-slate-50/30">
-          <p className="text-xs text-slate-400">Last synced: Just now</p>
+          <p className="text-[10px] text-slate-400 font-bold uppercase tracking-widest">Asset Integrity Check: OK</p>
           <div className="flex items-center gap-3">
             <button className="px-6 py-2 bg-slate-900 text-white text-sm font-bold rounded-xl hover:bg-slate-800 shadow-lg shadow-slate-900/10 transition-all flex items-center gap-2">
-              {ICONS.Edit} Edit Full Record
+              {ICONS.Edit} Manage Full Record
             </button>
           </div>
         </div>

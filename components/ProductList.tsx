@@ -1,6 +1,6 @@
 
 import React, { useState } from 'react';
-import { Product, CustomField } from '../types';
+import { Product, CustomField, TreeNode } from '../types';
 import { ICONS } from '../constants';
 import ProductDetailsModal from './ProductDetailsModal';
 
@@ -9,9 +9,10 @@ interface ProductListProps {
   onUpdate: (p: Product) => void;
   onDelete: (id: string) => void;
   customFields: CustomField[];
+  treeNodes: TreeNode[];
 }
 
-const ProductList: React.FC<ProductListProps> = ({ products, onUpdate, onDelete, customFields }) => {
+const ProductList: React.FC<ProductListProps> = ({ products, onUpdate, onDelete, customFields, treeNodes }) => {
   const [selectedProduct, setSelectedProduct] = useState<Product | null>(null);
   const [sortField, setSortField] = useState<keyof Product>('name');
   const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('asc');
@@ -23,6 +24,16 @@ const ProductList: React.FC<ProductListProps> = ({ products, onUpdate, onDelete,
       setSortField(field);
       setSortOrder('asc');
     }
+  };
+
+  const getProductPathString = (nodeId: string) => {
+    const path: string[] = [];
+    let current = treeNodes.find(n => n.id === nodeId);
+    while (current) {
+      path.unshift(current.name);
+      current = treeNodes.find(n => n.id === current?.parentId);
+    }
+    return path.join(' > ');
   };
 
   const sortedProducts = [...products].sort((a, b) => {
@@ -39,7 +50,7 @@ const ProductList: React.FC<ProductListProps> = ({ products, onUpdate, onDelete,
 
   return (
     <div className="space-y-4">
-      <div className="flex items-center justify-between mb-4">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-4">
         <div className="flex items-center gap-2">
           <button className="flex items-center gap-2 px-3 py-1.5 bg-white border border-slate-200 rounded-lg text-sm font-medium text-slate-700 hover:bg-slate-50 transition-all">
             {ICONS.Filter} Filter
@@ -48,7 +59,7 @@ const ProductList: React.FC<ProductListProps> = ({ products, onUpdate, onDelete,
             {ICONS.Download} Export CSV
           </button>
         </div>
-        <p className="text-sm text-slate-500 font-medium">{products.length} Products Found</p>
+        <p className="text-sm text-slate-500 font-medium">{products.length} Products in Current View</p>
       </div>
 
       <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
@@ -62,17 +73,14 @@ const ProductList: React.FC<ProductListProps> = ({ products, onUpdate, onDelete,
                 <th className="px-6 py-4 text-[10px] font-bold text-slate-500 uppercase tracking-widest cursor-pointer" onClick={() => handleSort('name')}>
                   Product {sortField === 'name' && (sortOrder === 'asc' ? '↑' : '↓')}
                 </th>
-                <th className="px-6 py-4 text-[10px] font-bold text-slate-500 uppercase tracking-widest cursor-pointer" onClick={() => handleSort('supplier')}>
-                  Supplier {sortField === 'supplier' && (sortOrder === 'asc' ? '↑' : '↓')}
-                </th>
-                <th className="px-6 py-4 text-[10px] font-bold text-slate-500 uppercase tracking-widest cursor-pointer" onClick={() => handleSort('category')}>
-                  Category
+                <th className="px-6 py-4 text-[10px] font-bold text-slate-500 uppercase tracking-widest">
+                  Hierarchy Path
                 </th>
                 <th className="px-6 py-4 text-[10px] font-bold text-slate-500 uppercase tracking-widest cursor-pointer" onClick={() => handleSort('price')}>
-                  Price
+                  Commercials
                 </th>
                 <th className="px-6 py-4 text-[10px] font-bold text-slate-500 uppercase tracking-widest">
-                  Lead Time
+                  Status
                 </th>
                 <th className="px-6 py-4 text-[10px] font-bold text-slate-500 uppercase tracking-widest text-right">
                   Actions
@@ -90,17 +98,31 @@ const ProductList: React.FC<ProductListProps> = ({ products, onUpdate, onDelete,
                   <td className="px-6 py-4">
                     <div className="flex items-center gap-3">
                       <img src={p.imageUrl} alt={p.name} className="w-10 h-10 rounded-lg object-cover bg-slate-100 border border-slate-200" />
-                      <span className="text-sm font-semibold text-slate-900 group-hover:text-blue-700 transition-colors">{p.name}</span>
+                      <div className="min-w-0">
+                        <span className="text-sm font-semibold text-slate-900 group-hover:text-blue-700 transition-colors block truncate">{p.name}</span>
+                        <span className="text-[10px] text-slate-500 truncate block">{p.supplier}</span>
+                      </div>
                     </div>
                   </td>
-                  <td className="px-6 py-4 text-sm text-slate-600">{p.supplier}</td>
                   <td className="px-6 py-4">
-                    <span className="text-[10px] font-bold px-2 py-0.5 rounded bg-slate-100 text-slate-600 uppercase">{p.category}</span>
+                    <span className="text-[10px] font-medium text-slate-400 block max-w-[200px] truncate" title={getProductPathString(p.nodeId)}>
+                      {getProductPathString(p.nodeId) || 'Uncategorized'}
+                    </span>
                   </td>
-                  <td className="px-6 py-4 text-sm font-bold text-slate-900">
-                    {p.currency} {p.price.toLocaleString()} <span className="text-[10px] text-slate-400 font-normal">/ {p.unit}</span>
+                  <td className="px-6 py-4">
+                    <div className="text-sm font-bold text-slate-900">
+                      {p.currency} {p.price.toLocaleString()}
+                    </div>
+                    <div className="text-[10px] text-slate-400">
+                      Min. {p.moq} {p.unit}
+                    </div>
                   </td>
-                  <td className="px-6 py-4 text-sm text-slate-600">{p.leadTime} days</td>
+                  <td className="px-6 py-4">
+                    <div className="flex items-center gap-2">
+                       <span className={`w-2 h-2 rounded-full ${p.leadTime > 30 ? 'bg-amber-400' : 'bg-emerald-400'}`}></span>
+                       <span className="text-xs text-slate-600">{p.leadTime}d LT</span>
+                    </div>
+                  </td>
                   <td className="px-6 py-4 text-right">
                     <div className="flex items-center justify-end gap-2" onClick={e => e.stopPropagation()}>
                        <button className="p-1.5 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-all">
@@ -116,6 +138,18 @@ const ProductList: React.FC<ProductListProps> = ({ products, onUpdate, onDelete,
                   </td>
                 </tr>
               ))}
+              {sortedProducts.length === 0 && (
+                <tr>
+                  <td colSpan={6} className="px-6 py-20 text-center">
+                    <div className="flex flex-col items-center gap-3 text-slate-400">
+                      <div className="w-12 h-12 bg-slate-50 rounded-full flex items-center justify-center">
+                        {ICONS.Inventory}
+                      </div>
+                      <p className="text-sm font-medium">No products found for this category or search.</p>
+                    </div>
+                  </td>
+                </tr>
+              )}
             </tbody>
           </table>
         </div>
@@ -126,6 +160,7 @@ const ProductList: React.FC<ProductListProps> = ({ products, onUpdate, onDelete,
           product={selectedProduct} 
           onClose={() => setSelectedProduct(null)} 
           onUpdate={onUpdate}
+          treeNodes={treeNodes}
         />
       )}
     </div>

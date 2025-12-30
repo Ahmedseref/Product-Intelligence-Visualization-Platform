@@ -1,17 +1,18 @@
 
 import React, { useState } from 'react';
-import { Product, User, CustomField, CustomFieldValue } from '../types';
-import { CATEGORIES, SECTORS, CURRENCIES, UNITS, ICONS } from '../constants';
+import { Product, User, CustomField, TreeNode } from '../types';
+import { CURRENCIES, UNITS, ICONS } from '../constants';
 
 interface ProductFormProps {
   onSubmit: (p: Product) => void;
   onCancel: () => void;
   currentUser: User;
   customFields: CustomField[];
+  treeNodes: TreeNode[];
   onAddFieldDefinition: (field: CustomField) => void;
 }
 
-const ProductForm: React.FC<ProductFormProps> = ({ onSubmit, onCancel, currentUser, customFields, onAddFieldDefinition }) => {
+const ProductForm: React.FC<ProductFormProps> = ({ onSubmit, onCancel, currentUser, customFields, treeNodes, onAddFieldDefinition }) => {
   const [showNewFieldModal, setShowNewFieldModal] = useState(false);
   const [newFieldDef, setNewFieldDef] = useState<Partial<CustomField>>({ label: '', type: 'text' });
   
@@ -19,9 +20,9 @@ const ProductForm: React.FC<ProductFormProps> = ({ onSubmit, onCancel, currentUs
     id: `PRD-${Math.floor(1000 + Math.random() * 9000)}`,
     name: '',
     supplier: '',
-    category: CATEGORIES[0],
-    sector: SECTORS[0],
-    subSectors: [],
+    nodeId: treeNodes[0]?.id || '',
+    category: 'Raw Materials', // Kept for logic compat
+    sector: 'Industrial', // Kept for logic compat
     manufacturer: '',
     manufacturingLocation: '',
     description: '',
@@ -69,8 +70,37 @@ const ProductForm: React.FC<ProductFormProps> = ({ onSubmit, onCancel, currentUs
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!formData.name || !formData.supplier) return alert("Missing required fields");
-    onSubmit(formData as Product);
+    if (!formData.name || !formData.supplier || !formData.nodeId) return alert("Missing required fields");
+    
+    // Sync flat fields from tree for compatibility
+    const node = treeNodes.find(n => n.id === formData.nodeId);
+    let sector = 'Unknown';
+    let current = node;
+    while(current) {
+        if(current.type === 'sector') {
+            sector = current.name;
+            break;
+        }
+        current = treeNodes.find(n => n.id === current?.parentId);
+    }
+
+    const submission = {
+        ...formData,
+        sector,
+        category: node?.name || 'Uncategorized'
+    };
+
+    onSubmit(submission as Product);
+  };
+
+  const getFullNodePathString = (id: string) => {
+    const path: string[] = [];
+    let current = treeNodes.find(n => n.id === id);
+    while (current) {
+      path.unshift(current.name);
+      current = treeNodes.find(n => n.id === current?.parentId);
+    }
+    return path.join(' > ');
   };
 
   return (
@@ -79,7 +109,7 @@ const ProductForm: React.FC<ProductFormProps> = ({ onSubmit, onCancel, currentUs
         <div className="flex items-center justify-between">
           <div>
              <h2 className="text-2xl font-bold text-slate-800 tracking-tight">Register New Product</h2>
-             <p className="text-sm text-slate-400">Fill in the details to create a new indexed record.</p>
+             <p className="text-sm text-slate-400">Assign to the taxonomy tree and define technical specs.</p>
           </div>
           <div className="flex gap-3">
              <button type="button" onClick={onCancel} className="px-6 py-2 border border-slate-200 text-slate-500 rounded-xl font-bold hover:bg-slate-50 transition-all">Cancel</button>
@@ -92,7 +122,7 @@ const ProductForm: React.FC<ProductFormProps> = ({ onSubmit, onCancel, currentUs
           <div className="lg:col-span-2 space-y-6">
             <div className="bg-white p-8 rounded-2xl border border-slate-200 shadow-sm space-y-6">
                <h3 className="text-lg font-bold text-slate-800 flex items-center gap-2">
-                <span className="w-1.5 h-6 bg-blue-500 rounded-full"></span> Basic Identification
+                <span className="w-1.5 h-6 bg-blue-500 rounded-full"></span> Taxonomy & Identity
                </h3>
                
                <div className="grid grid-cols-2 gap-6">
@@ -116,25 +146,22 @@ const ProductForm: React.FC<ProductFormProps> = ({ onSubmit, onCancel, currentUs
                       onChange={e => setFormData({...formData, supplier: e.target.value})}
                     />
                   </div>
-                  <div className="space-y-1">
-                    <label className="text-xs font-bold text-slate-500 uppercase tracking-wider">Sector</label>
+                  <div className="space-y-1 col-span-2">
+                    <label className="text-xs font-bold text-slate-500 uppercase tracking-wider">Taxonomy Placement (Tree Node)*</label>
                     <select 
-                      className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-sm outline-none"
-                      value={formData.sector}
-                      onChange={e => setFormData({...formData, sector: e.target.value})}
+                      className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-sm outline-none focus:ring-2 focus:ring-blue-500"
+                      value={formData.nodeId}
+                      onChange={e => setFormData({...formData, nodeId: e.target.value})}
+                      required
                     >
-                      {SECTORS.map(s => <option key={s} value={s}>{s}</option>)}
+                      <option value="">Select a category...</option>
+                      {treeNodes.map(node => (
+                        <option key={node.id} value={node.id}>
+                          {node.type.toUpperCase()}: {getFullNodePathString(node.id)}
+                        </option>
+                      ))}
                     </select>
-                  </div>
-                  <div className="space-y-1">
-                    <label className="text-xs font-bold text-slate-500 uppercase tracking-wider">Category</label>
-                    <select 
-                      className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-sm outline-none"
-                      value={formData.category}
-                      onChange={e => setFormData({...formData, category: e.target.value})}
-                    >
-                      {CATEGORIES.map(c => <option key={c} value={c}>{c}</option>)}
-                    </select>
+                    <p className="text-[10px] text-slate-400 mt-1 italic">Assigning to a leaf node provides best visualization accuracy.</p>
                   </div>
                </div>
 
@@ -154,20 +181,20 @@ const ProductForm: React.FC<ProductFormProps> = ({ onSubmit, onCancel, currentUs
             <div className="bg-white p-8 rounded-2xl border border-slate-200 shadow-sm space-y-6">
                <div className="flex items-center justify-between">
                  <h3 className="text-lg font-bold text-slate-800 flex items-center gap-2">
-                  <span className="w-1.5 h-6 bg-purple-500 rounded-full"></span> Custom Attributes
+                  <span className="w-1.5 h-6 bg-purple-500 rounded-full"></span> Technical Attributes
                  </h3>
                  <button 
                   type="button" 
                   onClick={() => setShowNewFieldModal(true)}
                   className="text-xs font-bold bg-purple-50 text-purple-600 px-3 py-1 rounded-full hover:bg-purple-100 transition-all flex items-center gap-1"
                  >
-                   {ICONS.Add} Define New Attribute
+                   {ICONS.Add} New Field
                  </button>
                </div>
 
                {customFields.length === 0 ? (
                  <div className="text-center py-6 bg-slate-50 border border-dashed border-slate-200 rounded-xl">
-                   <p className="text-sm text-slate-400">No custom attributes defined yet.</p>
+                   <p className="text-sm text-slate-400">No custom technical fields defined.</p>
                  </div>
                ) : (
                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
@@ -187,7 +214,7 @@ const ProductForm: React.FC<ProductFormProps> = ({ onSubmit, onCancel, currentUs
                )}
             </div>
 
-            {/* Pricing & Logistics */}
+            {/* Commercials */}
             <div className="bg-white p-8 rounded-2xl border border-slate-200 shadow-sm space-y-6">
                <h3 className="text-lg font-bold text-slate-800 flex items-center gap-2">
                 <span className="w-1.5 h-6 bg-emerald-500 rounded-full"></span> Commercial & Logistics
@@ -233,41 +260,24 @@ const ProductForm: React.FC<ProductFormProps> = ({ onSubmit, onCancel, currentUs
                     />
                   </div>
                </div>
-
-               <div className="grid grid-cols-2 gap-6">
-                  <div className="space-y-1">
-                    <label className="text-xs font-bold text-slate-500 uppercase tracking-wider">Lead Time (Days)</label>
-                    <input 
-                      type="number"
-                      className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-sm outline-none"
-                      value={formData.leadTime}
-                      onChange={e => setFormData({...formData, leadTime: parseInt(e.target.value) || 0})}
-                    />
-                  </div>
-                  <div className="space-y-1">
-                    <label className="text-xs font-bold text-slate-500 uppercase tracking-wider">Packaging Type</label>
-                    <input 
-                      type="text"
-                      className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-sm outline-none"
-                      placeholder="e.g. Vacuum Sealed"
-                      value={formData.packagingType}
-                      onChange={e => setFormData({...formData, packagingType: e.target.value})}
-                    />
-                  </div>
-               </div>
             </div>
           </div>
 
-          {/* Sidebar / Extra */}
+          {/* Right Sidebar */}
           <div className="space-y-6">
              <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm space-y-6">
-                <h3 className="text-sm font-bold text-slate-800 uppercase tracking-widest">Image Preview</h3>
-                <div className="aspect-video w-full rounded-xl overflow-hidden border border-slate-200 bg-slate-50 flex items-center justify-center relative">
+                <h3 className="text-sm font-bold text-slate-800 uppercase tracking-widest">Image Asset</h3>
+                <div className="aspect-video w-full rounded-xl overflow-hidden border border-slate-200 bg-slate-50 flex items-center justify-center relative group">
                   {formData.imageUrl ? (
                     <img src={formData.imageUrl} alt="Preview" className="w-full h-full object-cover" />
                   ) : (
-                    <div className="text-slate-300">No Image Selected</div>
+                    <div className="text-slate-300">No Asset</div>
                   )}
+                  <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
+                    <button type="button" className="p-2 bg-white rounded-full text-blue-600 shadow-lg">
+                      {ICONS.Edit}
+                    </button>
+                  </div>
                 </div>
                 <button type="button" className="w-full py-2 bg-slate-100 text-slate-600 rounded-xl text-sm font-bold hover:bg-slate-200 transition-all">Upload New Image</button>
              </div>
@@ -276,7 +286,7 @@ const ProductForm: React.FC<ProductFormProps> = ({ onSubmit, onCancel, currentUs
                 <h3 className="text-sm font-bold text-slate-800 uppercase tracking-widest">Manufacturing</h3>
                 <div className="space-y-4">
                   <div className="space-y-1">
-                    <label className="text-xs font-bold text-slate-500 uppercase tracking-wider">Company Name</label>
+                    <label className="text-xs font-bold text-slate-500 uppercase tracking-wider">Fabricator / Manufacturer</label>
                     <input 
                       type="text"
                       className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-2 text-sm outline-none"
@@ -285,7 +295,7 @@ const ProductForm: React.FC<ProductFormProps> = ({ onSubmit, onCancel, currentUs
                     />
                   </div>
                   <div className="space-y-1">
-                    <label className="text-xs font-bold text-slate-500 uppercase tracking-wider">Location (City, Country)</label>
+                    <label className="text-xs font-bold text-slate-500 uppercase tracking-wider">Origin</label>
                     <input 
                       type="text"
                       className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-2 text-sm outline-none"
@@ -296,49 +306,28 @@ const ProductForm: React.FC<ProductFormProps> = ({ onSubmit, onCancel, currentUs
                   </div>
                 </div>
              </div>
-
-             <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm space-y-4">
-                <div className="flex items-center justify-between">
-                  <h3 className="text-sm font-bold text-slate-800 uppercase tracking-widest">Compliance</h3>
-                  <button type="button" className="text-blue-600 text-xs font-bold">+ Add Cert</button>
-                </div>
-                <div className="space-y-1">
-                    <label className="text-xs font-bold text-slate-500 uppercase tracking-wider">Shelf Life</label>
-                    <input 
-                      type="text"
-                      className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-2 text-sm outline-none"
-                      value={formData.shelfLife}
-                      onChange={e => setFormData({...formData, shelfLife: e.target.value})}
-                    />
-                </div>
-                <div className="flex flex-wrap gap-2">
-                   {['ISO 9001', 'REACH', 'RoHS'].map(cert => (
-                      <span key={cert} className="px-2 py-1 bg-slate-100 text-slate-500 text-[10px] font-bold rounded border border-slate-200">{cert}</span>
-                   ))}
-                </div>
-             </div>
           </div>
         </div>
       </form>
 
-      {/* New Field Definition Modal */}
+      {/* New Field Modal */}
       {showNewFieldModal && (
         <div className="fixed inset-0 z-[200] flex items-center justify-center bg-slate-900/40 backdrop-blur-sm p-4">
-          <div className="bg-white w-full max-w-sm rounded-2xl shadow-2xl p-6 border border-slate-100 animate-in fade-in zoom-in duration-150">
-            <h3 className="text-lg font-bold text-slate-900 mb-4">Define New Attribute</h3>
+          <div className="bg-white w-full max-w-sm rounded-2xl shadow-2xl p-6 border border-slate-100">
+            <h3 className="text-lg font-bold text-slate-900 mb-4">Define New Technical Field</h3>
             <div className="space-y-4">
               <div className="space-y-1">
                 <label className="text-xs font-bold text-slate-500 uppercase">Field Label</label>
                 <input 
                   type="text"
                   className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-2 text-sm outline-none"
-                  placeholder="e.g. Density"
+                  placeholder="e.g. Molecular Weight"
                   value={newFieldDef.label}
                   onChange={e => setNewFieldDef({...newFieldDef, label: e.target.value})}
                 />
               </div>
               <div className="space-y-1">
-                <label className="text-xs font-bold text-slate-500 uppercase">Field Type</label>
+                <label className="text-xs font-bold text-slate-500 uppercase">Type</label>
                 <select 
                   className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-2 text-sm outline-none"
                   value={newFieldDef.type}
@@ -347,7 +336,6 @@ const ProductForm: React.FC<ProductFormProps> = ({ onSubmit, onCancel, currentUs
                   <option value="text">Text</option>
                   <option value="number">Number</option>
                   <option value="date">Date</option>
-                  <option value="boolean">Boolean</option>
                   <option value="currency">Currency</option>
                 </select>
               </div>
@@ -362,7 +350,7 @@ const ProductForm: React.FC<ProductFormProps> = ({ onSubmit, onCancel, currentUs
                   onClick={addNewFieldDefinition}
                   className="flex-1 py-2 bg-purple-600 text-white rounded-xl font-bold hover:bg-purple-700"
                  >
-                   Add Field
+                   Confirm
                  </button>
               </div>
             </div>

@@ -18,7 +18,10 @@ import {
   Layers,
   Globe,
   Truck,
-  DollarSign
+  DollarSign,
+  GitBranch,
+  ChevronRight,
+  FolderTree
 } from 'lucide-react';
 
 export const ICONS = {
@@ -32,6 +35,7 @@ export const ICONS = {
   Download: <Download size={16} />,
   Search: <Search size={16} />,
   ChevronDown: <ChevronDown size={16} />,
+  ChevronRight: <ChevronRight size={16} />,
   History: <History size={16} />,
   Edit: <Edit size={16} />,
   Trash: <Trash2 size={16} />,
@@ -39,7 +43,9 @@ export const ICONS = {
   Details: <Layers size={18} />,
   Location: <Globe size={18} />,
   Logistics: <Truck size={18} />,
-  Price: <DollarSign size={18} />
+  Price: <DollarSign size={18} />,
+  Hierarchy: <GitBranch size={20} />,
+  Taxonomy: <FolderTree size={20} />
 };
 
 export const SECTORS = ['Retail', 'Industrial', 'Chemical', 'Textile', 'Food & Beverage', 'Electronics'];

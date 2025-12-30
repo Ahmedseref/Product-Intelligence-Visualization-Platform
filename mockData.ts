@@ -1,14 +1,26 @@
 
-import { Product } from './types';
+import { Product, TreeNode } from './types';
+
+export const INITIAL_TREE_NODES: TreeNode[] = [
+  { id: 'node-1', name: 'Chemical', type: 'sector', parentId: null, description: 'Industrial and fine chemicals' },
+  { id: 'node-2', name: 'Industrial Grade', type: 'category', parentId: 'node-1' },
+  { id: 'node-3', name: 'Resins', type: 'subcategory', parentId: 'node-2' },
+  { id: 'node-4', name: 'Textile', type: 'sector', parentId: null },
+  { id: 'node-5', name: 'Sustainable Fabrics', type: 'category', parentId: 'node-4' },
+  { id: 'node-6', name: 'Cotton Based', type: 'subcategory', parentId: 'node-5' },
+  { id: 'node-7', name: 'Electronics', type: 'sector', parentId: null },
+  { id: 'node-8', name: 'Semiconductors', type: 'category', parentId: 'node-7' },
+  { id: 'node-9', name: 'Microprocessors', type: 'subcategory', parentId: 'node-8' },
+];
 
 export const INITIAL_PRODUCTS: Product[] = [
   {
     id: 'PRD-001',
     name: 'Industrial Grade Resin',
     supplier: 'Global Chem Co',
+    nodeId: 'node-3',
     category: 'Raw Materials',
     sector: 'Chemical',
-    subSectors: ['Automotive', 'Construction'],
     manufacturer: 'ChemFab Industries',
     manufacturingLocation: 'Germany, Ludwigshafen',
     description: 'High-performance epoxy resin for industrial bonding applications.',
@@ -43,9 +55,9 @@ export const INITIAL_PRODUCTS: Product[] = [
     id: 'PRD-002',
     name: 'Sustainable Cotton Fabric',
     supplier: 'EcoTextile Ltd',
+    nodeId: 'node-6',
     category: 'Finished Goods',
     sector: 'Textile',
-    subSectors: ['Fashion', 'Home Decor'],
     manufacturer: 'Green Weave',
     manufacturingLocation: 'India, Tirupur',
     description: 'Organic cotton fabric with GOTS certification.',
@@ -69,9 +81,9 @@ export const INITIAL_PRODUCTS: Product[] = [
     id: 'PRD-003',
     name: 'Precision Microchips X1',
     supplier: 'TechSilicon Inc',
+    nodeId: 'node-9',
     category: 'Components',
     sector: 'Electronics',
-    subSectors: ['Computing', 'IoT'],
     manufacturer: 'TSMC',
     manufacturingLocation: 'Taiwan, Hsinchu',
     description: 'High-speed processing unit for edge computing devices.',

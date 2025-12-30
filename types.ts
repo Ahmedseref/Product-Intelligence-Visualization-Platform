@@ -22,14 +22,23 @@ export interface HistoryEntry {
   snapshot: Partial<Product>;
 }
 
+export type TreeNodeType = 'sector' | 'category' | 'subcategory' | 'group';
+
+export interface TreeNode {
+  id: string;
+  name: string;
+  type: TreeNodeType;
+  parentId: string | null;
+  description?: string;
+  metadata?: Record<string, any>;
+}
+
 export interface Product {
   id: string;
   name: string;
   supplier: string;
   supplierId?: string;
-  category: string;
-  sector: string;
-  subSectors: string[];
+  nodeId: string; // Linked to the tree
   manufacturer: string;
   manufacturingLocation: string;
   description: string;
@@ -49,6 +58,9 @@ export interface Product {
   lastUpdated: string;
   createdBy: string;
   history: HistoryEntry[];
+  // Deprecated flat fields kept for compatibility or reference
+  category: string; 
+  sector: string;
 }
 
 export type ChartType = 'bar' | 'line' | 'pie' | 'scatter' | 'area';
@@ -63,7 +75,7 @@ export interface ChartConfig {
   aggregation: AggregationMethod;
 }
 
-export type ViewMode = 'dashboard' | 'inventory' | 'visualize' | 'add-product';
+export type ViewMode = 'dashboard' | 'inventory' | 'visualize' | 'add-product' | 'taxonomy-manager';
 export type UserRole = 'Admin' | 'Editor' | 'Viewer';
 
 export interface User {
