@@ -12,6 +12,7 @@ interface SidebarProps {
 const Sidebar: React.FC<SidebarProps> = ({ currentView, setView, user }) => {
   const menuItems: { id: ViewMode; label: string; icon: React.ReactNode }[] = [
     { id: 'dashboard', label: 'Dashboard', icon: ICONS.Dashboard },
+    { id: 'taxonomy-manager', label: 'Taxonomy Builder', icon: ICONS.Tree },
     { id: 'inventory', label: 'Product Inventory', icon: ICONS.Inventory },
     { id: 'visualize', label: 'Visualization', icon: ICONS.Visualize },
     { id: 'add-product', label: 'Add Product', icon: ICONS.Add },

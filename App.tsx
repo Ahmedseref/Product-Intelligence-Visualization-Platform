@@ -8,6 +8,7 @@ import ProductList from './components/ProductList';
 import Visualize from './components/Visualize';
 import ProductForm from './components/ProductForm';
 import ProductTree from './components/ProductTree';
+import TaxonomyBuilder from './components/TaxonomyBuilder';
 import { api } from './client/api';
 
 const App: React.FC = () => {
@@ -439,6 +440,15 @@ const App: React.FC = () => {
                 customFields={customFieldConfigs}
                 treeNodes={treeNodes}
                 onAddFieldDefinition={addCustomFieldDefinition}
+              />
+            )}
+            {viewMode === 'taxonomy-manager' && (
+              <TaxonomyBuilder
+                treeNodes={treeNodes}
+                products={products}
+                onAddNode={addTreeNode}
+                onUpdateNode={editTreeNode}
+                onDeleteNode={deleteTreeNode}
               />
             )}
           </main>
