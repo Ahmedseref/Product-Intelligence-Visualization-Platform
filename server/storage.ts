@@ -51,8 +51,15 @@ export class DatabaseStorage implements IStorage {
   }
 
   async deleteTreeNode(nodeId: string): Promise<boolean> {
-    const result = await db.delete(treeNodes).where(eq(treeNodes.nodeId, nodeId));
-    return true;
+    const children = await db.select().from(treeNodes).where(eq(treeNodes.parentId, nodeId));
+    for (const child of children) {
+      await this.deleteTreeNode(child.nodeId);
+    }
+    
+    await db.delete(products).where(eq(products.nodeId, nodeId));
+    
+    const result = await db.delete(treeNodes).where(eq(treeNodes.nodeId, nodeId)).returning();
+    return result.length > 0;
   }
 
   async getProducts(): Promise<Product[]> {
@@ -83,8 +90,8 @@ export class DatabaseStorage implements IStorage {
   }
 
   async deleteProduct(productId: string): Promise<boolean> {
-    await db.delete(products).where(eq(products.productId, productId));
-    return true;
+    const result = await db.delete(products).where(eq(products.productId, productId)).returning();
+    return result.length > 0;
   }
 
   async getCustomFieldDefinitions(): Promise<CustomFieldDefinition[]> {
@@ -97,8 +104,8 @@ export class DatabaseStorage implements IStorage {
   }
 
   async deleteCustomFieldDefinition(fieldId: string): Promise<boolean> {
-    await db.delete(customFieldDefinitions).where(eq(customFieldDefinitions.fieldId, fieldId));
-    return true;
+    const result = await db.delete(customFieldDefinitions).where(eq(customFieldDefinitions.fieldId, fieldId)).returning();
+    return result.length > 0;
   }
 }
 
