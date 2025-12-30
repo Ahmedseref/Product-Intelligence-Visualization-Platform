@@ -1,6 +1,6 @@
 
 import React, { useState } from 'react';
-import { Product, HistoryEntry } from '../types';
+import { Product, HistoryEntry, CustomFieldValue } from '../types';
 import { ICONS } from '../constants';
 
 interface ProductDetailsModalProps {
@@ -11,6 +11,43 @@ interface ProductDetailsModalProps {
 
 const ProductDetailsModal: React.FC<ProductDetailsModalProps> = ({ product, onClose, onUpdate }) => {
   const [activeTab, setActiveTab] = useState<'details' | 'history' | 'custom'>('details');
+  const [isEditingCustom, setIsEditingCustom] = useState(false);
+  const [editedCustomFields, setEditedCustomFields] = useState<CustomFieldValue[]>(product.customFields || []);
+
+  const handleSaveCustomFields = () => {
+    const updatedProduct = {
+      ...product,
+      customFields: editedCustomFields,
+      lastUpdated: new Date().toISOString(),
+      history: [
+        {
+          id: `HIST-${Date.now()}`,
+          timestamp: new Date().toISOString(),
+          userId: 'U-01', // Static for now
+          userName: 'Admin User',
+          changes: {
+            customFields: { old: product.customFields, new: editedCustomFields }
+          },
+          snapshot: {}
+        },
+        ...product.history
+      ]
+    };
+    onUpdate(updatedProduct);
+    setIsEditingCustom(false);
+  };
+
+  const handleFieldChange = (fieldId: string, value: any) => {
+    setEditedCustomFields(prev => {
+      const index = prev.findIndex(f => f.fieldId === fieldId);
+      if (index >= 0) {
+        const updated = [...prev];
+        updated[index] = { fieldId, value };
+        return updated;
+      }
+      return [...prev, { fieldId, value }];
+    });
+  };
 
   return (
     <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 sm:p-6 bg-slate-900/60 backdrop-blur-sm">
@@ -173,14 +210,13 @@ const ProductDetailsModal: React.FC<ProductDetailsModalProps> = ({ product, onCl
                           <span className="text-xs text-slate-500">{new Date(entry.timestamp).toLocaleString()}</span>
                         </div>
                         <div className="space-y-2">
-                          {/* Cast Object.entries to correct type to fix property 'old' and 'new' access on unknown type */}
                           {(Object.entries(entry.changes) as [string, { old: any; new: any }][]).map(([field, change], idx) => (
                             <div key={idx} className="flex items-center gap-3 text-xs">
                               <span className="font-bold text-slate-600 capitalize min-w-[100px]">{field}:</span>
                               <div className="flex items-center gap-2">
-                                <span className="px-2 py-0.5 bg-red-100 text-red-700 rounded line-through decoration-red-400 opacity-60">{String(change.old)}</span>
+                                <span className="px-2 py-0.5 bg-red-100 text-red-700 rounded line-through decoration-red-400 opacity-60">{JSON.stringify(change.old)}</span>
                                 <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" className="text-slate-400"><line x1="5" y1="12" x2="19" y2="12"></line><polyline points="12 5 19 12 12 19"></polyline></svg>
-                                <span className="px-2 py-0.5 bg-green-100 text-green-700 rounded font-bold">{String(change.new)}</span>
+                                <span className="px-2 py-0.5 bg-green-100 text-green-700 rounded font-bold">{JSON.stringify(change.new)}</span>
                               </div>
                             </div>
                           ))}
@@ -205,19 +241,50 @@ const ProductDetailsModal: React.FC<ProductDetailsModalProps> = ({ product, onCl
           )}
 
           {activeTab === 'custom' && (
-             <div className="grid grid-cols-2 gap-4">
-                {product.customFields.length === 0 ? (
-                   <div className="col-span-2 text-center py-20 bg-slate-50 rounded-2xl">
-                      <p className="text-slate-400 italic">No custom attributes defined for this record.</p>
-                   </div>
-                ) : (
-                  product.customFields.map((field, idx) => (
-                    <div key={idx} className="p-4 bg-white border border-slate-200 rounded-xl">
-                      <p className="text-[10px] font-bold text-slate-400 uppercase tracking-tighter mb-1">{field.fieldId}</p>
-                      <p className="text-sm font-semibold text-slate-900">{String(field.value)}</p>
+             <div className="space-y-6">
+                <div className="flex items-center justify-between">
+                   <h3 className="text-xs font-bold text-slate-400 uppercase tracking-widest mb-4 flex items-center gap-2">
+                      Custom Dynamic Attributes
+                   </h3>
+                   <button 
+                    onClick={() => {
+                      if (isEditingCustom) handleSaveCustomFields();
+                      else setIsEditingCustom(true);
+                    }}
+                    className={`px-3 py-1 text-xs font-bold rounded-full transition-all flex items-center gap-2 ${isEditingCustom ? 'bg-emerald-600 text-white shadow-lg' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'}`}
+                   >
+                     {isEditingCustom ? 'Save Changes' : 'Edit Attributes'}
+                   </button>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  {(isEditingCustom ? editedCustomFields : product.customFields).length === 0 && !isEditingCustom ? (
+                    <div className="col-span-2 text-center py-20 bg-slate-50 rounded-2xl">
+                        <p className="text-slate-400 italic">No custom attributes defined for this record.</p>
                     </div>
-                  ))
-                )}
+                  ) : (
+                    (isEditingCustom ? editedCustomFields : product.customFields).map((field, idx) => (
+                      <div key={idx} className="p-4 bg-white border border-slate-200 rounded-xl flex flex-col gap-1">
+                        <label className="text-[10px] font-bold text-slate-400 uppercase tracking-tighter">{field.fieldId}</label>
+                        {isEditingCustom ? (
+                          <input 
+                            type="text"
+                            className="w-full bg-slate-50 border border-slate-100 rounded px-2 py-1 text-sm outline-none focus:ring-1 focus:ring-blue-500"
+                            value={String(field.value)}
+                            onChange={(e) => handleFieldChange(field.fieldId, e.target.value)}
+                          />
+                        ) : (
+                          <p className="text-sm font-semibold text-slate-900">{String(field.value)}</p>
+                        )}
+                      </div>
+                    ))
+                  )}
+                  {isEditingCustom && (
+                    <div className="col-span-2 p-4 border border-dashed border-slate-200 rounded-xl flex items-center justify-center text-slate-400 text-xs italic">
+                      Definitions are managed in the "Add Product" form.
+                    </div>
+                  )}
+                </div>
              </div>
           )}
         </div>
@@ -227,7 +294,7 @@ const ProductDetailsModal: React.FC<ProductDetailsModalProps> = ({ product, onCl
           <p className="text-xs text-slate-400">Last synced: Just now</p>
           <div className="flex items-center gap-3">
             <button className="px-6 py-2 bg-slate-900 text-white text-sm font-bold rounded-xl hover:bg-slate-800 shadow-lg shadow-slate-900/10 transition-all flex items-center gap-2">
-              {ICONS.Edit} Edit Product
+              {ICONS.Edit} Edit Full Record
             </button>
           </div>
         </div>

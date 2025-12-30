@@ -1,6 +1,6 @@
 
 import React, { useState } from 'react';
-import { Product, User, CustomField } from '../types';
+import { Product, User, CustomField, CustomFieldValue } from '../types';
 import { CATEGORIES, SECTORS, CURRENCIES, UNITS, ICONS } from '../constants';
 
 interface ProductFormProps {
@@ -8,9 +8,13 @@ interface ProductFormProps {
   onCancel: () => void;
   currentUser: User;
   customFields: CustomField[];
+  onAddFieldDefinition: (field: CustomField) => void;
 }
 
-const ProductForm: React.FC<ProductFormProps> = ({ onSubmit, onCancel, currentUser, customFields }) => {
+const ProductForm: React.FC<ProductFormProps> = ({ onSubmit, onCancel, currentUser, customFields, onAddFieldDefinition }) => {
+  const [showNewFieldModal, setShowNewFieldModal] = useState(false);
+  const [newFieldDef, setNewFieldDef] = useState<Partial<CustomField>>({ label: '', type: 'text' });
+  
   const [formData, setFormData] = useState<Partial<Product>>({
     id: `PRD-${Math.floor(1000 + Math.random() * 9000)}`,
     name: '',
@@ -37,6 +41,31 @@ const ProductForm: React.FC<ProductFormProps> = ({ onSubmit, onCancel, currentUs
     createdBy: currentUser.name,
     history: []
   });
+
+  const handleCustomFieldChange = (fieldId: string, value: any) => {
+    const existing = formData.customFields || [];
+    const index = existing.findIndex(f => f.fieldId === fieldId);
+    
+    if (index >= 0) {
+      const updated = [...existing];
+      updated[index] = { fieldId, value };
+      setFormData({ ...formData, customFields: updated });
+    } else {
+      setFormData({ ...formData, customFields: [...existing, { fieldId, value }] });
+    }
+  };
+
+  const addNewFieldDefinition = () => {
+    if (!newFieldDef.label) return;
+    const id = newFieldDef.label.toLowerCase().replace(/\s+/g, '_');
+    onAddFieldDefinition({
+      id,
+      label: newFieldDef.label,
+      type: newFieldDef.type as any,
+    });
+    setNewFieldDef({ label: '', type: 'text' });
+    setShowNewFieldModal(false);
+  };
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -68,7 +97,7 @@ const ProductForm: React.FC<ProductFormProps> = ({ onSubmit, onCancel, currentUs
                
                <div className="grid grid-cols-2 gap-6">
                   <div className="space-y-1 col-span-2 sm:col-span-1">
-                    <label className="text-xs font-bold text-slate-500 uppercase">Product Name*</label>
+                    <label className="text-xs font-bold text-slate-500 uppercase tracking-wider">Product Name*</label>
                     <input 
                       type="text" required
                       className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-sm focus:ring-2 focus:ring-blue-500 outline-none transition-all"
@@ -78,7 +107,7 @@ const ProductForm: React.FC<ProductFormProps> = ({ onSubmit, onCancel, currentUs
                     />
                   </div>
                   <div className="space-y-1 col-span-2 sm:col-span-1">
-                    <label className="text-xs font-bold text-slate-500 uppercase">Supplier Name*</label>
+                    <label className="text-xs font-bold text-slate-500 uppercase tracking-wider">Supplier Name*</label>
                     <input 
                       type="text" required
                       className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-sm focus:ring-2 focus:ring-blue-500 outline-none transition-all"
@@ -88,7 +117,7 @@ const ProductForm: React.FC<ProductFormProps> = ({ onSubmit, onCancel, currentUs
                     />
                   </div>
                   <div className="space-y-1">
-                    <label className="text-xs font-bold text-slate-500 uppercase">Sector</label>
+                    <label className="text-xs font-bold text-slate-500 uppercase tracking-wider">Sector</label>
                     <select 
                       className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-sm outline-none"
                       value={formData.sector}
@@ -98,7 +127,7 @@ const ProductForm: React.FC<ProductFormProps> = ({ onSubmit, onCancel, currentUs
                     </select>
                   </div>
                   <div className="space-y-1">
-                    <label className="text-xs font-bold text-slate-500 uppercase">Category</label>
+                    <label className="text-xs font-bold text-slate-500 uppercase tracking-wider">Category</label>
                     <select 
                       className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-sm outline-none"
                       value={formData.category}
@@ -110,7 +139,7 @@ const ProductForm: React.FC<ProductFormProps> = ({ onSubmit, onCancel, currentUs
                </div>
 
                <div className="space-y-1">
-                  <label className="text-xs font-bold text-slate-500 uppercase">Rich Product Description</label>
+                  <label className="text-xs font-bold text-slate-500 uppercase tracking-wider">Rich Product Description</label>
                   <textarea 
                     rows={4}
                     className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-sm focus:ring-2 focus:ring-blue-500 outline-none transition-all resize-none"
@@ -121,6 +150,43 @@ const ProductForm: React.FC<ProductFormProps> = ({ onSubmit, onCancel, currentUs
                </div>
             </div>
 
+            {/* Custom Attributes Section */}
+            <div className="bg-white p-8 rounded-2xl border border-slate-200 shadow-sm space-y-6">
+               <div className="flex items-center justify-between">
+                 <h3 className="text-lg font-bold text-slate-800 flex items-center gap-2">
+                  <span className="w-1.5 h-6 bg-purple-500 rounded-full"></span> Custom Attributes
+                 </h3>
+                 <button 
+                  type="button" 
+                  onClick={() => setShowNewFieldModal(true)}
+                  className="text-xs font-bold bg-purple-50 text-purple-600 px-3 py-1 rounded-full hover:bg-purple-100 transition-all flex items-center gap-1"
+                 >
+                   {ICONS.Add} Define New Attribute
+                 </button>
+               </div>
+
+               {customFields.length === 0 ? (
+                 <div className="text-center py-6 bg-slate-50 border border-dashed border-slate-200 rounded-xl">
+                   <p className="text-sm text-slate-400">No custom attributes defined yet.</p>
+                 </div>
+               ) : (
+                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
+                   {customFields.map((field) => (
+                     <div key={field.id} className="space-y-1">
+                       <label className="text-xs font-bold text-slate-500 uppercase tracking-wider">{field.label}</label>
+                       <input 
+                         type={field.type === 'number' || field.type === 'currency' ? 'number' : field.type === 'date' ? 'date' : 'text'}
+                         className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-sm focus:ring-2 focus:ring-purple-500 outline-none transition-all"
+                         placeholder={`Enter ${field.label.toLowerCase()}...`}
+                         value={formData.customFields?.find(f => f.fieldId === field.id)?.value || ''}
+                         onChange={e => handleCustomFieldChange(field.id, e.target.value)}
+                       />
+                     </div>
+                   ))}
+                 </div>
+               )}
+            </div>
+
             {/* Pricing & Logistics */}
             <div className="bg-white p-8 rounded-2xl border border-slate-200 shadow-sm space-y-6">
                <h3 className="text-lg font-bold text-slate-800 flex items-center gap-2">
@@ -129,7 +195,7 @@ const ProductForm: React.FC<ProductFormProps> = ({ onSubmit, onCancel, currentUs
 
                <div className="grid grid-cols-2 sm:grid-cols-4 gap-6">
                   <div className="space-y-1">
-                    <label className="text-xs font-bold text-slate-500 uppercase">Unit Price</label>
+                    <label className="text-xs font-bold text-slate-500 uppercase tracking-wider">Unit Price</label>
                     <input 
                       type="number" step="0.01"
                       className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-sm outline-none"
@@ -138,7 +204,7 @@ const ProductForm: React.FC<ProductFormProps> = ({ onSubmit, onCancel, currentUs
                     />
                   </div>
                   <div className="space-y-1">
-                    <label className="text-xs font-bold text-slate-500 uppercase">Currency</label>
+                    <label className="text-xs font-bold text-slate-500 uppercase tracking-wider">Currency</label>
                     <select 
                       className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-sm outline-none"
                       value={formData.currency}
@@ -148,7 +214,7 @@ const ProductForm: React.FC<ProductFormProps> = ({ onSubmit, onCancel, currentUs
                     </select>
                   </div>
                   <div className="space-y-1">
-                    <label className="text-xs font-bold text-slate-500 uppercase">Unit</label>
+                    <label className="text-xs font-bold text-slate-500 uppercase tracking-wider">Unit</label>
                     <select 
                       className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-sm outline-none"
                       value={formData.unit}
@@ -158,7 +224,7 @@ const ProductForm: React.FC<ProductFormProps> = ({ onSubmit, onCancel, currentUs
                     </select>
                   </div>
                   <div className="space-y-1">
-                    <label className="text-xs font-bold text-slate-500 uppercase">MOQ</label>
+                    <label className="text-xs font-bold text-slate-500 uppercase tracking-wider">MOQ</label>
                     <input 
                       type="number"
                       className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-sm outline-none"
@@ -170,7 +236,7 @@ const ProductForm: React.FC<ProductFormProps> = ({ onSubmit, onCancel, currentUs
 
                <div className="grid grid-cols-2 gap-6">
                   <div className="space-y-1">
-                    <label className="text-xs font-bold text-slate-500 uppercase">Lead Time (Days)</label>
+                    <label className="text-xs font-bold text-slate-500 uppercase tracking-wider">Lead Time (Days)</label>
                     <input 
                       type="number"
                       className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-sm outline-none"
@@ -179,7 +245,7 @@ const ProductForm: React.FC<ProductFormProps> = ({ onSubmit, onCancel, currentUs
                     />
                   </div>
                   <div className="space-y-1">
-                    <label className="text-xs font-bold text-slate-500 uppercase">Packaging Type</label>
+                    <label className="text-xs font-bold text-slate-500 uppercase tracking-wider">Packaging Type</label>
                     <input 
                       type="text"
                       className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-sm outline-none"
@@ -196,7 +262,7 @@ const ProductForm: React.FC<ProductFormProps> = ({ onSubmit, onCancel, currentUs
           <div className="space-y-6">
              <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm space-y-6">
                 <h3 className="text-sm font-bold text-slate-800 uppercase tracking-widest">Image Preview</h3>
-                <div className="aspect-video w-full rounded-xl overflow-hidden border border-slate-200 bg-slate-50 flex items-center justify-center">
+                <div className="aspect-video w-full rounded-xl overflow-hidden border border-slate-200 bg-slate-50 flex items-center justify-center relative">
                   {formData.imageUrl ? (
                     <img src={formData.imageUrl} alt="Preview" className="w-full h-full object-cover" />
                   ) : (
@@ -210,7 +276,7 @@ const ProductForm: React.FC<ProductFormProps> = ({ onSubmit, onCancel, currentUs
                 <h3 className="text-sm font-bold text-slate-800 uppercase tracking-widest">Manufacturing</h3>
                 <div className="space-y-4">
                   <div className="space-y-1">
-                    <label className="text-xs font-bold text-slate-500 uppercase">Company Name</label>
+                    <label className="text-xs font-bold text-slate-500 uppercase tracking-wider">Company Name</label>
                     <input 
                       type="text"
                       className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-2 text-sm outline-none"
@@ -219,7 +285,7 @@ const ProductForm: React.FC<ProductFormProps> = ({ onSubmit, onCancel, currentUs
                     />
                   </div>
                   <div className="space-y-1">
-                    <label className="text-xs font-bold text-slate-500 uppercase">Location (City, Country)</label>
+                    <label className="text-xs font-bold text-slate-500 uppercase tracking-wider">Location (City, Country)</label>
                     <input 
                       type="text"
                       className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-2 text-sm outline-none"
@@ -234,10 +300,10 @@ const ProductForm: React.FC<ProductFormProps> = ({ onSubmit, onCancel, currentUs
              <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm space-y-4">
                 <div className="flex items-center justify-between">
                   <h3 className="text-sm font-bold text-slate-800 uppercase tracking-widest">Compliance</h3>
-                  <button type="button" className="text-blue-600 text-xs font-bold">+ Add</button>
+                  <button type="button" className="text-blue-600 text-xs font-bold">+ Add Cert</button>
                 </div>
                 <div className="space-y-1">
-                    <label className="text-xs font-bold text-slate-500 uppercase">Shelf Life</label>
+                    <label className="text-xs font-bold text-slate-500 uppercase tracking-wider">Shelf Life</label>
                     <input 
                       type="text"
                       className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-2 text-sm outline-none"
@@ -254,6 +320,55 @@ const ProductForm: React.FC<ProductFormProps> = ({ onSubmit, onCancel, currentUs
           </div>
         </div>
       </form>
+
+      {/* New Field Definition Modal */}
+      {showNewFieldModal && (
+        <div className="fixed inset-0 z-[200] flex items-center justify-center bg-slate-900/40 backdrop-blur-sm p-4">
+          <div className="bg-white w-full max-w-sm rounded-2xl shadow-2xl p-6 border border-slate-100 animate-in fade-in zoom-in duration-150">
+            <h3 className="text-lg font-bold text-slate-900 mb-4">Define New Attribute</h3>
+            <div className="space-y-4">
+              <div className="space-y-1">
+                <label className="text-xs font-bold text-slate-500 uppercase">Field Label</label>
+                <input 
+                  type="text"
+                  className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-2 text-sm outline-none"
+                  placeholder="e.g. Density"
+                  value={newFieldDef.label}
+                  onChange={e => setNewFieldDef({...newFieldDef, label: e.target.value})}
+                />
+              </div>
+              <div className="space-y-1">
+                <label className="text-xs font-bold text-slate-500 uppercase">Field Type</label>
+                <select 
+                  className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-2 text-sm outline-none"
+                  value={newFieldDef.type}
+                  onChange={e => setNewFieldDef({...newFieldDef, type: e.target.value as any})}
+                >
+                  <option value="text">Text</option>
+                  <option value="number">Number</option>
+                  <option value="date">Date</option>
+                  <option value="boolean">Boolean</option>
+                  <option value="currency">Currency</option>
+                </select>
+              </div>
+              <div className="flex gap-3 pt-4">
+                 <button 
+                  onClick={() => setShowNewFieldModal(false)}
+                  className="flex-1 py-2 bg-slate-50 text-slate-500 rounded-xl font-bold hover:bg-slate-100"
+                 >
+                   Cancel
+                 </button>
+                 <button 
+                  onClick={addNewFieldDefinition}
+                  className="flex-1 py-2 bg-purple-600 text-white rounded-xl font-bold hover:bg-purple-700"
+                 >
+                   Add Field
+                 </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

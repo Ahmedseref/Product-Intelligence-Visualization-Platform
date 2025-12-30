@@ -19,6 +19,7 @@ const App: React.FC = () => {
   // Persist (simulated)
   useEffect(() => {
     const saved = localStorage.getItem('pip_products');
+    const savedFields = localStorage.getItem('pip_custom_fields');
     if (saved) {
       try {
         setProducts(JSON.parse(saved));
@@ -26,11 +27,22 @@ const App: React.FC = () => {
         console.error("Failed to load products", e);
       }
     }
+    if (savedFields) {
+      try {
+        setCustomFieldConfigs(JSON.parse(savedFields));
+      } catch (e) {
+        console.error("Failed to load custom fields", e);
+      }
+    }
   }, []);
 
   useEffect(() => {
     localStorage.setItem('pip_products', JSON.stringify(products));
   }, [products]);
+
+  useEffect(() => {
+    localStorage.setItem('pip_custom_fields', JSON.stringify(customFieldConfigs));
+  }, [customFieldConfigs]);
 
   const addProduct = (newProduct: Product) => {
     setProducts(prev => [newProduct, ...prev]);
@@ -45,6 +57,10 @@ const App: React.FC = () => {
     if (window.confirm('Are you sure you want to delete this product?')) {
       setProducts(prev => prev.filter(p => p.id !== id));
     }
+  };
+
+  const addCustomFieldDefinition = (field: CustomField) => {
+    setCustomFieldConfigs(prev => [...prev, field]);
   };
 
   const filteredProducts = useMemo(() => {
@@ -125,6 +141,7 @@ const App: React.FC = () => {
               onCancel={() => setViewMode('inventory')}
               currentUser={currentUser}
               customFields={customFieldConfigs}
+              onAddFieldDefinition={addCustomFieldDefinition}
             />
           )}
         </main>
