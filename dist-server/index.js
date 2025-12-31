@@ -36670,7 +36670,7 @@ app.use(import_express.default.json());
 registerRoutes(app);
 var distPath = import_path.default.join(__dirname, "dist");
 app.use(import_express.default.static(distPath));
-app.get("*", (req, res, next) => {
+app.use((req, res, next) => {
   if (!req.path.startsWith("/api")) {
     res.sendFile(import_path.default.join(distPath, "index.html"));
   } else {
