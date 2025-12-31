@@ -36658,7 +36658,7 @@ function registerRoutes(app2) {
 // server/index.ts
 var __dirname = import_path.default.resolve();
 var app = (0, import_express.default)();
-var PORT = parseInt(process.env.PORT || "3001", 10);
+var PORT = parseInt(process.env.PORT || "3000", 10);
 var isProduction = process.env.NODE_ENV === "production";
 app.use((0, import_cors.default)({
   origin: true,
@@ -36668,7 +36668,7 @@ app.use((0, import_cors.default)({
 }));
 app.use(import_express.default.json());
 registerRoutes(app);
-var distPath = import_path.default.join(__dirname, "..", "dist");
+var distPath = import_path.default.join(__dirname, "dist");
 app.use(import_express.default.static(distPath));
 app.get("*", (req, res, next) => {
   if (!req.path.startsWith("/api")) {

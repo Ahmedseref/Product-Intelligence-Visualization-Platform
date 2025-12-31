@@ -7,7 +7,7 @@ import { registerRoutes } from "./routes";
 const __dirname = path.resolve();
 
 const app = express();
-const PORT = parseInt(process.env.PORT || "3001", 10);
+const PORT = parseInt(process.env.PORT || "3000", 10);
 const isProduction = process.env.NODE_ENV === "production";
 
 app.use(cors({
@@ -20,7 +20,7 @@ app.use(express.json());
 
 registerRoutes(app);
 
-const distPath = path.join(__dirname, "..", "dist");
+const distPath = path.join(__dirname, "dist");
 app.use(express.static(distPath));
 app.get("*", (req, res, next) => {
   if (!req.path.startsWith("/api")) {
