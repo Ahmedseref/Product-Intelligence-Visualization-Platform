@@ -99,7 +99,7 @@ var require_package = __commonJS({
 // node_modules/dotenv/lib/main.js
 var require_main = __commonJS({
   "node_modules/dotenv/lib/main.js"(exports2, module2) {
-    var fs = require("fs");
+    var fs2 = require("fs");
     var path2 = require("path");
     var os = require("os");
     var crypto2 = require("crypto");
@@ -241,7 +241,7 @@ var require_main = __commonJS({
       if (options && options.path && options.path.length > 0) {
         if (Array.isArray(options.path)) {
           for (const filepath of options.path) {
-            if (fs.existsSync(filepath)) {
+            if (fs2.existsSync(filepath)) {
               possibleVaultPath = filepath.endsWith(".vault") ? filepath : `${filepath}.vault`;
             }
           }
@@ -251,7 +251,7 @@ var require_main = __commonJS({
       } else {
         possibleVaultPath = path2.resolve(process.cwd(), ".env.vault");
       }
-      if (fs.existsSync(possibleVaultPath)) {
+      if (fs2.existsSync(possibleVaultPath)) {
         return possibleVaultPath;
       }
       return null;
@@ -304,7 +304,7 @@ var require_main = __commonJS({
       const parsedAll = {};
       for (const path3 of optionPaths) {
         try {
-          const parsed = DotenvModule.parse(fs.readFileSync(path3, { encoding }));
+          const parsed = DotenvModule.parse(fs2.readFileSync(path3, { encoding }));
           DotenvModule.populate(parsedAll, parsed, options);
         } catch (e) {
           if (debug) {
@@ -19202,7 +19202,7 @@ var require_view = __commonJS({
     "use strict";
     var debug = require_src()("express:view");
     var path2 = require("node:path");
-    var fs = require("node:fs");
+    var fs2 = require("node:fs");
     var dirname = path2.dirname;
     var basename = path2.basename;
     var extname = path2.extname;
@@ -19282,7 +19282,7 @@ var require_view = __commonJS({
     function tryStat(path3) {
       debug('stat "%s"', path3);
       try {
-        return fs.statSync(path3);
+        return fs2.statSync(path3);
       } catch (e) {
         return void 0;
       }
@@ -22908,7 +22908,7 @@ var require_send = __commonJS({
     var escapeHtml = require_escape_html();
     var etag = require_etag();
     var fresh = require_fresh();
-    var fs = require("fs");
+    var fs2 = require("fs");
     var mime = require_mime_types();
     var ms = require_ms();
     var onFinished = require_on_finished();
@@ -23190,7 +23190,7 @@ var require_send = __commonJS({
       var i = 0;
       var self = this;
       debug('stat "%s"', path3);
-      fs.stat(path3, function onstat(err, stat) {
+      fs2.stat(path3, function onstat(err, stat) {
         var pathEndsWithSep = path3[path3.length - 1] === sep;
         if (err && err.code === "ENOENT" && !extname(path3) && !pathEndsWithSep) {
           return next(err);
@@ -23207,7 +23207,7 @@ var require_send = __commonJS({
         }
         var p = path3 + "." + self._extensions[i++];
         debug('stat "%s"', p);
-        fs.stat(p, function(err2, stat) {
+        fs2.stat(p, function(err2, stat) {
           if (err2) return next(err2);
           if (stat.isDirectory()) return next();
           self.emit("file", p, stat);
@@ -23225,7 +23225,7 @@ var require_send = __commonJS({
         }
         var p = join(path3, self._index[i]);
         debug('stat "%s"', p);
-        fs.stat(p, function(err2, stat) {
+        fs2.stat(p, function(err2, stat) {
           if (err2) return next(err2);
           if (stat.isDirectory()) return next();
           self.emit("file", p, stat);
@@ -23237,7 +23237,7 @@ var require_send = __commonJS({
     SendStream.prototype.stream = function stream(path3, options) {
       var self = this;
       var res = this.res;
-      var stream2 = fs.createReadStream(path3, options);
+      var stream2 = fs2.createReadStream(path3, options);
       this.emit("stream", stream2);
       stream2.pipe(res);
       function cleanup() {
@@ -25979,15 +25979,15 @@ var require_pg_connection_string = __commonJS({
       if (config.sslcert || config.sslkey || config.sslrootcert || config.sslmode) {
         config.ssl = {};
       }
-      const fs = config.sslcert || config.sslkey || config.sslrootcert ? require("fs") : null;
+      const fs2 = config.sslcert || config.sslkey || config.sslrootcert ? require("fs") : null;
       if (config.sslcert) {
-        config.ssl.cert = fs.readFileSync(config.sslcert).toString();
+        config.ssl.cert = fs2.readFileSync(config.sslcert).toString();
       }
       if (config.sslkey) {
-        config.ssl.key = fs.readFileSync(config.sslkey).toString();
+        config.ssl.key = fs2.readFileSync(config.sslkey).toString();
       }
       if (config.sslrootcert) {
-        config.ssl.ca = fs.readFileSync(config.sslrootcert).toString();
+        config.ssl.ca = fs2.readFileSync(config.sslrootcert).toString();
       }
       if (options.useLibpqCompat && config.uselibpqcompat) {
         throw new Error("Both useLibpqCompat and uselibpqcompat are set. Please use only one of them.");
@@ -27893,15 +27893,15 @@ var require_lib4 = __commonJS({
   "node_modules/pgpass/lib/index.js"(exports2, module2) {
     "use strict";
     var path2 = require("path");
-    var fs = require("fs");
+    var fs2 = require("fs");
     var helper = require_helper();
     module2.exports = function(connInfo, cb) {
       var file = helper.getFileName();
-      fs.stat(file, function(err, stat) {
+      fs2.stat(file, function(err, stat) {
         if (err || !helper.usePgPass(stat, file)) {
           return cb(void 0);
         }
-        var st = fs.createReadStream(file);
+        var st = fs2.createReadStream(file);
         helper.getPassword(connInfo, st, cb);
       });
     };
@@ -29292,6 +29292,7 @@ var require_lib5 = __commonJS({
 var import_express = __toESM(require_express2(), 1);
 var import_cors = __toESM(require_lib3(), 1);
 var import_path = __toESM(require("path"), 1);
+var import_fs = __toESM(require("fs"), 1);
 
 // shared/schema.ts
 var schema_exports = {};
@@ -36656,10 +36657,12 @@ function registerRoutes(app2) {
 }
 
 // server/index.ts
-var __dirname = import_path.default.resolve();
+var rootDir = process.cwd();
+console.log("Starting server...");
+console.log("Root directory:", rootDir);
+console.log("NODE_ENV:", process.env.NODE_ENV);
 var app = (0, import_express.default)();
 var PORT = parseInt(process.env.PORT || "3000", 10);
-var isProduction = process.env.NODE_ENV === "production";
 app.use((0, import_cors.default)({
   origin: true,
   credentials: true,
@@ -36667,16 +36670,33 @@ app.use((0, import_cors.default)({
   allowedHeaders: ["Content-Type", "Authorization", "X-Requested-With"]
 }));
 app.use(import_express.default.json());
-registerRoutes(app);
-var distPath = import_path.default.join(__dirname, "dist");
-app.use(import_express.default.static(distPath));
-app.use((req, res, next) => {
-  if (!req.path.startsWith("/api")) {
-    res.sendFile(import_path.default.join(distPath, "index.html"));
-  } else {
-    next();
-  }
+app.get("/health", (req, res) => {
+  res.json({ status: "ok", timestamp: (/* @__PURE__ */ new Date()).toISOString() });
 });
+registerRoutes(app);
+var distPath = import_path.default.join(rootDir, "dist");
+console.log("Static files path:", distPath);
+console.log("Static path exists:", import_fs.default.existsSync(distPath));
+if (import_fs.default.existsSync(distPath)) {
+  app.use(import_express.default.static(distPath));
+  app.use((req, res, next) => {
+    if (!req.path.startsWith("/api")) {
+      const indexPath = import_path.default.join(distPath, "index.html");
+      if (import_fs.default.existsSync(indexPath)) {
+        res.sendFile(indexPath);
+      } else {
+        res.status(404).send("index.html not found");
+      }
+    } else {
+      next();
+    }
+  });
+} else {
+  console.log("Warning: dist folder not found at", distPath);
+  app.use((req, res) => {
+    res.status(503).send("Application not built. Run npm run build first.");
+  });
+}
 app.listen(PORT, "0.0.0.0", () => {
   console.log(`Server running on http://0.0.0.0:${PORT}`);
 });
