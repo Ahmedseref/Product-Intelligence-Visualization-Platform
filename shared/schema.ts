@@ -1,6 +1,58 @@
 import { pgTable, text, serial, integer, timestamp, jsonb, boolean, real, varchar } from "drizzle-orm/pg-core";
 import { relations } from "drizzle-orm";
 
+export const suppliers = pgTable("suppliers", {
+  id: serial("id").primaryKey(),
+  supplierId: varchar("supplier_id", { length: 100 }).notNull().unique(),
+  name: varchar("name", { length: 255 }).notNull(),
+  country: varchar("country", { length: 100 }),
+  contactName: varchar("contact_name", { length: 255 }),
+  contactEmail: varchar("contact_email", { length: 255 }),
+  contactPhone: varchar("contact_phone", { length: 100 }),
+  address: text("address"),
+  website: varchar("website", { length: 255 }),
+  notes: text("notes"),
+  isActive: boolean("is_active").default(true),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
+export const masterProducts = pgTable("master_products", {
+  id: serial("id").primaryKey(),
+  masterProductId: varchar("master_product_id", { length: 100 }).notNull().unique(),
+  name: varchar("name", { length: 255 }).notNull(),
+  nodeId: varchar("node_id", { length: 100 }).notNull(),
+  description: text("description"),
+  imageUrl: text("image_url"),
+  isActive: boolean("is_active").default(true),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
+export const supplierProducts = pgTable("supplier_products", {
+  id: serial("id").primaryKey(),
+  supplierProductId: varchar("supplier_product_id", { length: 100 }).notNull().unique(),
+  masterProductId: varchar("master_product_id", { length: 100 }).notNull(),
+  supplierId: varchar("supplier_id", { length: 100 }).notNull(),
+  formFactor: varchar("form_factor", { length: 100 }),
+  sku: varchar("sku", { length: 100 }),
+  price: real("price").default(0),
+  currency: varchar("currency", { length: 10 }).default("USD"),
+  unit: varchar("unit", { length: 50 }),
+  moq: integer("moq").default(1),
+  leadTime: integer("lead_time").default(0),
+  packagingType: varchar("packaging_type", { length: 100 }),
+  hsCode: varchar("hs_code", { length: 50 }),
+  certifications: jsonb("certifications").default([]),
+  technicalSpecs: jsonb("technical_specs").default([]),
+  images: jsonb("images").default([]),
+  isActive: boolean("is_active").default(true),
+  createdBy: varchar("created_by", { length: 255 }),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+  history: jsonb("history").default([]),
+});
+
 export const treeNodes = pgTable("tree_nodes", {
   id: serial("id").primaryKey(),
   nodeId: varchar("node_id", { length: 100 }).notNull().unique(),
@@ -57,8 +109,32 @@ export const customFieldDefinitions = pgTable("custom_field_definitions", {
   createdAt: timestamp("created_at").defaultNow(),
 });
 
+export const suppliersRelations = relations(suppliers, ({ many }) => ({
+  supplierProducts: many(supplierProducts),
+}));
+
+export const masterProductsRelations = relations(masterProducts, ({ many, one }) => ({
+  supplierProducts: many(supplierProducts),
+  treeNode: one(treeNodes, {
+    fields: [masterProducts.nodeId],
+    references: [treeNodes.nodeId],
+  }),
+}));
+
+export const supplierProductsRelations = relations(supplierProducts, ({ one }) => ({
+  masterProduct: one(masterProducts, {
+    fields: [supplierProducts.masterProductId],
+    references: [masterProducts.masterProductId],
+  }),
+  supplier: one(suppliers, {
+    fields: [supplierProducts.supplierId],
+    references: [suppliers.supplierId],
+  }),
+}));
+
 export const treeNodesRelations = relations(treeNodes, ({ many }) => ({
   products: many(products),
+  masterProducts: many(masterProducts),
   customFields: many(customFieldDefinitions),
 }));
 
@@ -69,6 +145,12 @@ export const productsRelations = relations(products, ({ one }) => ({
   }),
 }));
 
+export type Supplier = typeof suppliers.$inferSelect;
+export type InsertSupplier = typeof suppliers.$inferInsert;
+export type MasterProduct = typeof masterProducts.$inferSelect;
+export type InsertMasterProduct = typeof masterProducts.$inferInsert;
+export type SupplierProduct = typeof supplierProducts.$inferSelect;
+export type InsertSupplierProduct = typeof supplierProducts.$inferInsert;
 export type TreeNode = typeof treeNodes.$inferSelect;
 export type InsertTreeNode = typeof treeNodes.$inferInsert;
 export type Product = typeof products.$inferSelect;

@@ -1,5 +1,5 @@
 import React, { useState, useMemo, useEffect, useCallback } from 'react';
-import { Product, ViewMode, User, CustomField, TreeNode } from './types';
+import { Product, ViewMode, User, CustomField, TreeNode, Supplier, MasterProduct } from './types';
 import { INITIAL_PRODUCTS, INITIAL_TREE_NODES } from './mockData';
 import { ICONS } from './constants';
 import Sidebar from './components/Sidebar';
@@ -9,12 +9,16 @@ import Visualize from './components/Visualize';
 import ProductForm from './components/ProductForm';
 import ProductTree from './components/ProductTree';
 import TaxonomyBuilder from './components/TaxonomyBuilder';
+import SupplierManager from './components/SupplierManager';
+import MasterProductCatalog from './components/MasterProductCatalog';
 import { api } from './client/api';
 
 const App: React.FC = () => {
   const [viewMode, setViewMode] = useState<ViewMode>('dashboard');
   const [products, setProducts] = useState<Product[]>(INITIAL_PRODUCTS);
   const [treeNodes, setTreeNodes] = useState<TreeNode[]>(INITIAL_TREE_NODES);
+  const [suppliers, setSuppliers] = useState<Supplier[]>([]);
+  const [masterProducts, setMasterProducts] = useState<MasterProduct[]>([]);
   const [customFieldConfigs, setCustomFieldConfigs] = useState<CustomField[]>([]);
   const [currentUser] = useState<User>({ id: 'U-01', name: 'Admin User', role: 'Admin' });
   const [searchQuery, setSearchQuery] = useState('');
@@ -39,10 +43,12 @@ const App: React.FC = () => {
     try {
       await retryFetch(() => api.seedDatabase(), 10, 1000);
       
-      const [nodesData, productsData, fieldsData] = await Promise.all([
+      const [nodesData, productsData, fieldsData, suppliersData, masterProductsData] = await Promise.all([
         api.getTreeNodes(),
         api.getProducts(),
         api.getCustomFields(),
+        api.getSuppliers(),
+        api.getMasterProducts(),
       ]);
 
       setTreeNodes(nodesData.map(n => ({
@@ -89,6 +95,32 @@ const App: React.FC = () => {
         label: f.label,
         type: f.type as any,
         options: f.options as string[] | undefined,
+      })));
+
+      setSuppliers(suppliersData.map(s => ({
+        id: s.supplierId,
+        name: s.name,
+        country: s.country || undefined,
+        contactName: s.contactName || undefined,
+        contactEmail: s.contactEmail || undefined,
+        contactPhone: s.contactPhone || undefined,
+        address: s.address || undefined,
+        website: s.website || undefined,
+        notes: s.notes || undefined,
+        isActive: s.isActive ?? true,
+        createdAt: s.createdAt || new Date().toISOString(),
+        updatedAt: s.updatedAt || new Date().toISOString(),
+      })));
+
+      setMasterProducts(masterProductsData.map(mp => ({
+        id: mp.masterProductId,
+        name: mp.name,
+        nodeId: mp.nodeId,
+        description: mp.description || undefined,
+        imageUrl: mp.imageUrl || undefined,
+        isActive: mp.isActive ?? true,
+        createdAt: mp.createdAt || new Date().toISOString(),
+        updatedAt: mp.updatedAt || new Date().toISOString(),
       })));
 
       setIsDbConnected(true);
@@ -202,6 +234,110 @@ const App: React.FC = () => {
     } catch (err) {
       console.error('Failed to add custom field:', err);
       setCustomFieldConfigs(prev => [...prev, field]);
+    }
+  };
+
+  const addSupplier = async (supplier: Omit<Supplier, 'id' | 'createdAt' | 'updatedAt'> & { id: string }) => {
+    const newSupplier: Supplier = {
+      ...supplier,
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+    };
+    try {
+      await api.createSupplier({
+        supplierId: newSupplier.id,
+        name: newSupplier.name,
+        country: newSupplier.country,
+        contactName: newSupplier.contactName,
+        contactEmail: newSupplier.contactEmail,
+        contactPhone: newSupplier.contactPhone,
+        address: newSupplier.address,
+        website: newSupplier.website,
+        notes: newSupplier.notes,
+        isActive: newSupplier.isActive,
+      });
+      setSuppliers(prev => [...prev, newSupplier]);
+    } catch (err) {
+      console.error('Failed to add supplier:', err);
+      setSuppliers(prev => [...prev, newSupplier]);
+    }
+  };
+
+  const updateSupplier = async (id: string, updates: Partial<Supplier>) => {
+    try {
+      await api.updateSupplier(id, {
+        name: updates.name,
+        country: updates.country,
+        contactName: updates.contactName,
+        contactEmail: updates.contactEmail,
+        contactPhone: updates.contactPhone,
+        address: updates.address,
+        website: updates.website,
+        notes: updates.notes,
+        isActive: updates.isActive,
+      });
+      setSuppliers(prev => prev.map(s => s.id === id ? { ...s, ...updates, updatedAt: new Date().toISOString() } : s));
+    } catch (err) {
+      console.error('Failed to update supplier:', err);
+      setSuppliers(prev => prev.map(s => s.id === id ? { ...s, ...updates, updatedAt: new Date().toISOString() } : s));
+    }
+  };
+
+  const deleteSupplier = async (id: string) => {
+    try {
+      await api.deleteSupplier(id);
+      setSuppliers(prev => prev.filter(s => s.id !== id));
+    } catch (err) {
+      console.error('Failed to delete supplier:', err);
+      setSuppliers(prev => prev.filter(s => s.id !== id));
+    }
+  };
+
+  const addMasterProduct = async (mp: Omit<MasterProduct, 'id' | 'createdAt' | 'updatedAt'> & { id: string }) => {
+    const newMp: MasterProduct = {
+      ...mp,
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+    };
+    try {
+      await api.createMasterProduct({
+        masterProductId: newMp.id,
+        name: newMp.name,
+        nodeId: newMp.nodeId,
+        description: newMp.description,
+        imageUrl: newMp.imageUrl,
+        isActive: newMp.isActive,
+      });
+      setMasterProducts(prev => [...prev, newMp]);
+    } catch (err) {
+      console.error('Failed to add master product:', err);
+      setMasterProducts(prev => [...prev, newMp]);
+    }
+  };
+
+  const updateMasterProduct = async (id: string, updates: Partial<MasterProduct>) => {
+    try {
+      await api.updateMasterProduct(id, {
+        name: updates.name,
+        nodeId: updates.nodeId,
+        description: updates.description,
+        imageUrl: updates.imageUrl,
+        isActive: updates.isActive,
+      });
+      setMasterProducts(prev => prev.map(mp => mp.id === id ? { ...mp, ...updates, updatedAt: new Date().toISOString() } : mp));
+    } catch (err) {
+      console.error('Failed to update master product:', err);
+      setMasterProducts(prev => prev.map(mp => mp.id === id ? { ...mp, ...updates, updatedAt: new Date().toISOString() } : mp));
+    }
+  };
+
+  const deleteMasterProduct = async (id: string) => {
+    try {
+      await api.deleteMasterProduct(id);
+      setMasterProducts(prev => prev.filter(mp => mp.id !== id));
+    } catch (err) {
+      console.error('Failed to delete master product:', err);
+      setMasterProducts(prev => prev.filter(mp => mp.id !== id));
     }
   };
 
@@ -471,6 +607,23 @@ const App: React.FC = () => {
                 onAddNode={addTreeNode}
                 onUpdateNode={editTreeNode}
                 onDeleteNode={deleteTreeNode}
+              />
+            )}
+            {viewMode === 'suppliers' && (
+              <SupplierManager
+                suppliers={suppliers}
+                onAddSupplier={addSupplier}
+                onUpdateSupplier={updateSupplier}
+                onDeleteSupplier={deleteSupplier}
+              />
+            )}
+            {viewMode === 'master-products' && (
+              <MasterProductCatalog
+                masterProducts={masterProducts}
+                treeNodes={treeNodes}
+                onAddMasterProduct={addMasterProduct}
+                onUpdateMasterProduct={updateMasterProduct}
+                onDeleteMasterProduct={deleteMasterProduct}
               />
             )}
           </main>

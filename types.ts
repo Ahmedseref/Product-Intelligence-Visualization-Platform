@@ -5,7 +5,7 @@ export interface CustomField {
   id: string;
   label: string;
   type: FieldType;
-  options?: string[]; // for dropdowns
+  options?: string[];
 }
 
 export interface CustomFieldValue {
@@ -28,6 +28,58 @@ export interface HistoryEntry {
   userName: string;
   changes: Record<string, { old: any; new: any }>;
   snapshot: Partial<Product>;
+}
+
+export interface Supplier {
+  id: string;
+  name: string;
+  country?: string;
+  contactName?: string;
+  contactEmail?: string;
+  contactPhone?: string;
+  address?: string;
+  website?: string;
+  notes?: string;
+  isActive: boolean;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface MasterProduct {
+  id: string;
+  name: string;
+  nodeId: string;
+  description?: string;
+  imageUrl?: string;
+  isActive: boolean;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface SupplierProduct {
+  id: string;
+  masterProductId: string;
+  supplierId: string;
+  formFactor?: string;
+  sku?: string;
+  price: number;
+  currency: string;
+  unit?: string;
+  moq: number;
+  leadTime: number;
+  packagingType?: string;
+  hsCode?: string;
+  certifications: string[];
+  technicalSpecs: TechnicalSpec[];
+  images: string[];
+  isActive: boolean;
+  createdBy?: string;
+  createdAt: string;
+  updatedAt: string;
+  history: HistoryEntry[];
+  masterProductName?: string;
+  supplierName?: string;
+  categoryName?: string;
 }
 
 export type TreeNodeType = 'sector' | 'category' | 'subcategory' | 'group';
@@ -84,7 +136,7 @@ export interface ChartConfig {
   aggregation: AggregationMethod;
 }
 
-export type ViewMode = 'dashboard' | 'inventory' | 'visualize' | 'add-product' | 'taxonomy-manager';
+export type ViewMode = 'dashboard' | 'inventory' | 'visualize' | 'add-product' | 'taxonomy-manager' | 'suppliers' | 'master-products';
 export type UserRole = 'Admin' | 'Editor' | 'Viewer';
 
 export interface User {

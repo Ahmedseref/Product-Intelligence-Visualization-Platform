@@ -61,6 +61,58 @@ export interface CustomFieldData {
   isGlobal?: boolean;
 }
 
+export interface SupplierData {
+  id?: number;
+  supplierId: string;
+  name: string;
+  country?: string;
+  contactName?: string;
+  contactEmail?: string;
+  contactPhone?: string;
+  address?: string;
+  website?: string;
+  notes?: string;
+  isActive?: boolean;
+  createdAt?: string;
+  updatedAt?: string;
+}
+
+export interface MasterProductData {
+  id?: number;
+  masterProductId: string;
+  name: string;
+  nodeId: string;
+  description?: string;
+  imageUrl?: string;
+  isActive?: boolean;
+  createdAt?: string;
+  updatedAt?: string;
+}
+
+export interface SupplierProductData {
+  id?: number;
+  supplierProductId: string;
+  masterProductId: string;
+  supplierId: string;
+  formFactor?: string;
+  sku?: string;
+  price?: number;
+  currency?: string;
+  unit?: string;
+  moq?: number;
+  leadTime?: number;
+  packagingType?: string;
+  hsCode?: string;
+  certifications?: string[];
+  technicalSpecs?: TechnicalSpecData[];
+  images?: string[];
+  isActive?: boolean;
+  createdBy?: string;
+  createdAt?: string;
+  updatedAt?: string;
+  history?: any[];
+}
+
 export const api = {
   async getTreeNodes(): Promise<TreeNodeData[]> {
     const res = await fetch(`${API_BASE}/tree-nodes`);
@@ -155,5 +207,116 @@ export const api = {
     const res = await fetch(`${API_BASE}/seed`, { method: 'POST' });
     if (!res.ok) throw new Error('Failed to seed database');
     return res.json();
+  },
+
+  async getSuppliers(): Promise<SupplierData[]> {
+    const res = await fetch(`${API_BASE}/suppliers`);
+    if (!res.ok) throw new Error('Failed to fetch suppliers');
+    return res.json();
+  },
+
+  async createSupplier(supplier: Omit<SupplierData, 'id'>): Promise<SupplierData> {
+    const res = await fetch(`${API_BASE}/suppliers`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(supplier),
+    });
+    if (!res.ok) throw new Error('Failed to create supplier');
+    return res.json();
+  },
+
+  async updateSupplier(supplierId: string, updates: Partial<SupplierData>): Promise<SupplierData> {
+    const res = await fetch(`${API_BASE}/suppliers/${supplierId}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(updates),
+    });
+    if (!res.ok) throw new Error('Failed to update supplier');
+    return res.json();
+  },
+
+  async deleteSupplier(supplierId: string): Promise<void> {
+    const res = await fetch(`${API_BASE}/suppliers/${supplierId}`, {
+      method: 'DELETE',
+    });
+    if (!res.ok) throw new Error('Failed to delete supplier');
+  },
+
+  async getMasterProducts(): Promise<MasterProductData[]> {
+    const res = await fetch(`${API_BASE}/master-products`);
+    if (!res.ok) throw new Error('Failed to fetch master products');
+    return res.json();
+  },
+
+  async createMasterProduct(mp: Omit<MasterProductData, 'id'>): Promise<MasterProductData> {
+    const res = await fetch(`${API_BASE}/master-products`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(mp),
+    });
+    if (!res.ok) throw new Error('Failed to create master product');
+    return res.json();
+  },
+
+  async updateMasterProduct(masterProductId: string, updates: Partial<MasterProductData>): Promise<MasterProductData> {
+    const res = await fetch(`${API_BASE}/master-products/${masterProductId}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(updates),
+    });
+    if (!res.ok) throw new Error('Failed to update master product');
+    return res.json();
+  },
+
+  async deleteMasterProduct(masterProductId: string): Promise<void> {
+    const res = await fetch(`${API_BASE}/master-products/${masterProductId}`, {
+      method: 'DELETE',
+    });
+    if (!res.ok) throw new Error('Failed to delete master product');
+  },
+
+  async getSupplierProducts(): Promise<SupplierProductData[]> {
+    const res = await fetch(`${API_BASE}/supplier-products`);
+    if (!res.ok) throw new Error('Failed to fetch supplier products');
+    return res.json();
+  },
+
+  async getSupplierProductsByMaster(masterProductId: string): Promise<SupplierProductData[]> {
+    const res = await fetch(`${API_BASE}/supplier-products/by-master/${masterProductId}`);
+    if (!res.ok) throw new Error('Failed to fetch supplier products');
+    return res.json();
+  },
+
+  async getSupplierProductsBySupplier(supplierId: string): Promise<SupplierProductData[]> {
+    const res = await fetch(`${API_BASE}/supplier-products/by-supplier/${supplierId}`);
+    if (!res.ok) throw new Error('Failed to fetch supplier products');
+    return res.json();
+  },
+
+  async createSupplierProduct(sp: Omit<SupplierProductData, 'id'>): Promise<SupplierProductData> {
+    const res = await fetch(`${API_BASE}/supplier-products`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(sp),
+    });
+    if (!res.ok) throw new Error('Failed to create supplier product');
+    return res.json();
+  },
+
+  async updateSupplierProduct(supplierProductId: string, updates: Partial<SupplierProductData>): Promise<SupplierProductData> {
+    const res = await fetch(`${API_BASE}/supplier-products/${supplierProductId}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(updates),
+    });
+    if (!res.ok) throw new Error('Failed to update supplier product');
+    return res.json();
+  },
+
+  async deleteSupplierProduct(supplierProductId: string): Promise<void> {
+    const res = await fetch(`${API_BASE}/supplier-products/${supplierProductId}`, {
+      method: 'DELETE',
+    });
+    if (!res.ok) throw new Error('Failed to delete supplier product');
   },
 };

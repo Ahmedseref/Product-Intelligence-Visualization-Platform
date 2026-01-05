@@ -46,7 +46,8 @@ export const ICONS = {
   Price: <DollarSign size={18} />,
   Hierarchy: <GitBranch size={20} />,
   Taxonomy: <FolderTree size={20} />,
-  Tree: <FolderTree size={20} />
+  Tree: <FolderTree size={20} />,
+  Package: <Package size={20} />
 };
 
 export const SECTORS = ['Retail', 'Industrial', 'Chemical', 'Textile', 'Food & Beverage', 'Electronics'];

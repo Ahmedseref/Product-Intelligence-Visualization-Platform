@@ -19,12 +19,18 @@ A fully functional product intelligence platform with an expandable product taxo
 
 ### Database Schema
 - **tree_nodes**: Hierarchical product taxonomy with unlimited nesting depth
-- **products**: Product data linked to taxonomy nodes
+- **products**: Product data linked to taxonomy nodes (legacy, kept for compatibility)
 - **custom_fields**: User-defined field configurations
+- **suppliers**: Supplier entities with contact information (S-0001 format IDs)
+- **master_products**: Base product concepts linked to taxonomy (P-0001 format IDs)
+- **supplier_products**: Supplier-specific variants with pricing/lead time (SP-001 format IDs)
 
 ## Key Features
+- **3-Tier Product Architecture**: Suppliers > Master Products > Supplier Products
 - Expandable product taxonomy tree with unlimited levels
-- Full CRUD operations for categories and products
+- Full CRUD operations for categories, suppliers, and products
+- Supplier Management with contact details and status tracking
+- Master Product Catalog with taxonomy linking
 - Drag-and-drop reordering of tree nodes
 - Real-time database synchronization
 - Dashboard with analytics and visualizations
@@ -39,7 +45,9 @@ A fully functional product intelligence platform with an expandable product taxo
 │   ├── Dashboard.tsx        # Dashboard with analytics
 │   ├── ProductList.tsx      # Product inventory view
 │   ├── ProductForm.tsx      # Add/edit product form
-│   └── Visualize.tsx        # Data visualization view
+│   ├── Visualize.tsx        # Data visualization view
+│   ├── SupplierManager.tsx  # Supplier management UI
+│   └── MasterProductCatalog.tsx  # Master product catalog UI
 ├── server/
 │   ├── index.ts             # Express server entry point
 │   ├── routes.ts            # API route definitions
@@ -107,8 +115,28 @@ DATABASE_URL=postgresql://user:password@host:5432/database
 - `DELETE /api/products/:id` - Delete a product
 - `GET /api/custom-fields` - Get custom field configurations
 - `POST /api/seed` - Seed database with initial data
+- `GET /api/suppliers` - Get all suppliers
+- `POST /api/suppliers` - Create a new supplier
+- `PATCH /api/suppliers/:supplierId` - Update a supplier
+- `DELETE /api/suppliers/:supplierId` - Delete a supplier
+- `GET /api/master-products` - Get all master products
+- `POST /api/master-products` - Create a new master product
+- `PATCH /api/master-products/:masterProductId` - Update a master product
+- `DELETE /api/master-products/:masterProductId` - Delete a master product
+- `GET /api/supplier-products` - Get all supplier products
+- `GET /api/supplier-products/by-master/:masterProductId` - Get supplier products by master product
+- `GET /api/supplier-products/by-supplier/:supplierId` - Get supplier products by supplier
+- `POST /api/supplier-products` - Create a new supplier product
+- `PATCH /api/supplier-products/:supplierProductId` - Update a supplier product
+- `DELETE /api/supplier-products/:supplierProductId` - Delete a supplier product
 
 ## Recent Changes
+- 2026-01-05: Added 3-tier product architecture (Suppliers > Master Products > Supplier Products)
+- 2026-01-05: Created SupplierManager component with full CRUD operations, search, and contact management
+- 2026-01-05: Created MasterProductCatalog component with taxonomy linking and card-based UI
+- 2026-01-05: Added suppliers, master_products, and supplier_products database tables with Drizzle ORM
+- 2026-01-05: Updated backend with complete API routes for new entities
+- 2026-01-05: Added seed data for initial suppliers and master products
 - 2025-12-30: Fixed inline editing in Product Inventory (resolved blur/click event conflicts)
 - 2025-12-30: Added product selection checkboxes for bulk actions
 - 2025-12-30: Added Export functionality (CSV/JSON for all or selected products)

@@ -256,10 +256,278 @@ export function registerRoutes(app: Express): void {
         await storage.createProduct(product);
       }
 
+      const existingSuppliers = await storage.getSuppliers();
+      if (existingSuppliers.length === 0) {
+        const initialSuppliers = [
+          {
+            supplierId: 'S-0001',
+            name: 'Global Chem Co',
+            country: 'Germany',
+            contactName: 'Hans Mueller',
+            contactEmail: 'hans@globalchem.de',
+            contactPhone: '+49 621 555 0100',
+            address: 'Ludwigshafen Industrial Park, 67063 Ludwigshafen',
+            website: 'https://globalchem.de',
+            notes: 'Premium chemical supplier, ISO 9001 certified',
+            isActive: true,
+          },
+          {
+            supplierId: 'S-0002',
+            name: 'EcoTextile Ltd',
+            country: 'India',
+            contactName: 'Priya Sharma',
+            contactEmail: 'priya@ecotextile.in',
+            contactPhone: '+91 422 555 0200',
+            address: 'Tirupur Textile Hub, Tamil Nadu 641604',
+            website: 'https://ecotextile.in',
+            notes: 'Sustainable fabric manufacturer, GOTS certified',
+            isActive: true,
+          },
+          {
+            supplierId: 'S-0003',
+            name: 'TechSilicon Inc',
+            country: 'Taiwan',
+            contactName: 'Wei Chen',
+            contactEmail: 'wei.chen@techsilicon.tw',
+            contactPhone: '+886 3 555 0300',
+            address: 'Hsinchu Science Park, Taiwan 30078',
+            website: 'https://techsilicon.tw',
+            notes: 'Advanced semiconductor components supplier',
+            isActive: true,
+          },
+        ];
+
+        for (const supplier of initialSuppliers) {
+          await storage.createSupplier(supplier);
+        }
+      }
+
+      const existingMasterProducts = await storage.getMasterProducts();
+      if (existingMasterProducts.length === 0) {
+        const initialMasterProducts = [
+          {
+            masterProductId: 'P-0001',
+            name: 'Industrial Epoxy Resin',
+            nodeId: 'node-3',
+            description: 'High-performance epoxy resin for industrial bonding and coating applications',
+            imageUrl: 'https://picsum.photos/seed/resin/400/300',
+            isActive: true,
+          },
+          {
+            masterProductId: 'P-0002',
+            name: 'Organic Cotton Fabric',
+            nodeId: 'node-6',
+            description: 'Sustainable organic cotton fabric for apparel and home textiles',
+            imageUrl: 'https://picsum.photos/seed/cotton/400/300',
+            isActive: true,
+          },
+          {
+            masterProductId: 'P-0003',
+            name: 'Precision Microprocessor',
+            nodeId: 'node-9',
+            description: 'High-speed processing units for edge computing and IoT devices',
+            imageUrl: 'https://picsum.photos/seed/chip/400/300',
+            isActive: true,
+          },
+        ];
+
+        for (const mp of initialMasterProducts) {
+          await storage.createMasterProduct(mp);
+        }
+      }
+
       res.json({ message: "Database seeded successfully" });
     } catch (error) {
       console.error("Error seeding database:", error);
       res.status(500).json({ error: "Failed to seed database" });
+    }
+  });
+
+  app.get("/api/suppliers", async (req, res) => {
+    try {
+      const suppliers = await storage.getSuppliers();
+      res.json(suppliers);
+    } catch (error) {
+      console.error("Error fetching suppliers:", error);
+      res.status(500).json({ error: "Failed to fetch suppliers" });
+    }
+  });
+
+  app.get("/api/suppliers/:supplierId", async (req, res) => {
+    try {
+      const supplier = await storage.getSupplier(req.params.supplierId);
+      if (!supplier) {
+        return res.status(404).json({ error: "Supplier not found" });
+      }
+      res.json(supplier);
+    } catch (error) {
+      console.error("Error fetching supplier:", error);
+      res.status(500).json({ error: "Failed to fetch supplier" });
+    }
+  });
+
+  app.post("/api/suppliers", async (req, res) => {
+    try {
+      const supplier = await storage.createSupplier(req.body);
+      res.status(201).json(supplier);
+    } catch (error) {
+      console.error("Error creating supplier:", error);
+      res.status(500).json({ error: "Failed to create supplier" });
+    }
+  });
+
+  app.patch("/api/suppliers/:supplierId", async (req, res) => {
+    try {
+      const supplier = await storage.updateSupplier(req.params.supplierId, req.body);
+      if (!supplier) {
+        return res.status(404).json({ error: "Supplier not found" });
+      }
+      res.json(supplier);
+    } catch (error) {
+      console.error("Error updating supplier:", error);
+      res.status(500).json({ error: "Failed to update supplier" });
+    }
+  });
+
+  app.delete("/api/suppliers/:supplierId", async (req, res) => {
+    try {
+      await storage.deleteSupplier(req.params.supplierId);
+      res.status(204).send();
+    } catch (error) {
+      console.error("Error deleting supplier:", error);
+      res.status(500).json({ error: "Failed to delete supplier" });
+    }
+  });
+
+  app.get("/api/master-products", async (req, res) => {
+    try {
+      const masterProducts = await storage.getMasterProducts();
+      res.json(masterProducts);
+    } catch (error) {
+      console.error("Error fetching master products:", error);
+      res.status(500).json({ error: "Failed to fetch master products" });
+    }
+  });
+
+  app.get("/api/master-products/:masterProductId", async (req, res) => {
+    try {
+      const masterProduct = await storage.getMasterProduct(req.params.masterProductId);
+      if (!masterProduct) {
+        return res.status(404).json({ error: "Master product not found" });
+      }
+      res.json(masterProduct);
+    } catch (error) {
+      console.error("Error fetching master product:", error);
+      res.status(500).json({ error: "Failed to fetch master product" });
+    }
+  });
+
+  app.post("/api/master-products", async (req, res) => {
+    try {
+      const masterProduct = await storage.createMasterProduct(req.body);
+      res.status(201).json(masterProduct);
+    } catch (error) {
+      console.error("Error creating master product:", error);
+      res.status(500).json({ error: "Failed to create master product" });
+    }
+  });
+
+  app.patch("/api/master-products/:masterProductId", async (req, res) => {
+    try {
+      const masterProduct = await storage.updateMasterProduct(req.params.masterProductId, req.body);
+      if (!masterProduct) {
+        return res.status(404).json({ error: "Master product not found" });
+      }
+      res.json(masterProduct);
+    } catch (error) {
+      console.error("Error updating master product:", error);
+      res.status(500).json({ error: "Failed to update master product" });
+    }
+  });
+
+  app.delete("/api/master-products/:masterProductId", async (req, res) => {
+    try {
+      await storage.deleteMasterProduct(req.params.masterProductId);
+      res.status(204).send();
+    } catch (error) {
+      console.error("Error deleting master product:", error);
+      res.status(500).json({ error: "Failed to delete master product" });
+    }
+  });
+
+  app.get("/api/supplier-products", async (req, res) => {
+    try {
+      const supplierProducts = await storage.getSupplierProducts();
+      res.json(supplierProducts);
+    } catch (error) {
+      console.error("Error fetching supplier products:", error);
+      res.status(500).json({ error: "Failed to fetch supplier products" });
+    }
+  });
+
+  app.get("/api/supplier-products/:supplierProductId", async (req, res) => {
+    try {
+      const supplierProduct = await storage.getSupplierProduct(req.params.supplierProductId);
+      if (!supplierProduct) {
+        return res.status(404).json({ error: "Supplier product not found" });
+      }
+      res.json(supplierProduct);
+    } catch (error) {
+      console.error("Error fetching supplier product:", error);
+      res.status(500).json({ error: "Failed to fetch supplier product" });
+    }
+  });
+
+  app.get("/api/supplier-products/by-master/:masterProductId", async (req, res) => {
+    try {
+      const products = await storage.getSupplierProductsByMasterId(req.params.masterProductId);
+      res.json(products);
+    } catch (error) {
+      console.error("Error fetching supplier products by master:", error);
+      res.status(500).json({ error: "Failed to fetch supplier products" });
+    }
+  });
+
+  app.get("/api/supplier-products/by-supplier/:supplierId", async (req, res) => {
+    try {
+      const products = await storage.getSupplierProductsBySupplierId(req.params.supplierId);
+      res.json(products);
+    } catch (error) {
+      console.error("Error fetching supplier products by supplier:", error);
+      res.status(500).json({ error: "Failed to fetch supplier products" });
+    }
+  });
+
+  app.post("/api/supplier-products", async (req, res) => {
+    try {
+      const supplierProduct = await storage.createSupplierProduct(req.body);
+      res.status(201).json(supplierProduct);
+    } catch (error) {
+      console.error("Error creating supplier product:", error);
+      res.status(500).json({ error: "Failed to create supplier product" });
+    }
+  });
+
+  app.patch("/api/supplier-products/:supplierProductId", async (req, res) => {
+    try {
+      const supplierProduct = await storage.updateSupplierProduct(req.params.supplierProductId, req.body);
+      if (!supplierProduct) {
+        return res.status(404).json({ error: "Supplier product not found" });
+      }
+      res.json(supplierProduct);
+    } catch (error) {
+      console.error("Error updating supplier product:", error);
+      res.status(500).json({ error: "Failed to update supplier product" });
+    }
+  });
+
+  app.delete("/api/supplier-products/:supplierProductId", async (req, res) => {
+    try {
+      await storage.deleteSupplierProduct(req.params.supplierProductId);
+      res.status(204).send();
+    } catch (error) {
+      console.error("Error deleting supplier product:", error);
+      res.status(500).json({ error: "Failed to delete supplier product" });
     }
   });
 }
