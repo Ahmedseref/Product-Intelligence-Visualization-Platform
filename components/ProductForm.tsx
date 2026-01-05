@@ -1,5 +1,5 @@
 import React, { useState, useMemo } from 'react';
-import { Product, User, CustomField, TreeNode, TechnicalSpec } from '../types';
+import { Product, User, CustomField, TreeNode, TechnicalSpec, Supplier, MasterProduct } from '../types';
 import { CURRENCIES, UNITS, ICONS } from '../constants';
 import { Plus, Trash2, X } from 'lucide-react';
 
@@ -9,11 +9,13 @@ interface ProductFormProps {
   currentUser: User;
   customFields: CustomField[];
   treeNodes: TreeNode[];
+  suppliers: Supplier[];
+  masterProducts: MasterProduct[];
   onAddFieldDefinition: (field: CustomField) => void;
   onAddTreeNode: (node: TreeNode) => void;
 }
 
-const ProductForm: React.FC<ProductFormProps> = ({ onSubmit, onCancel, currentUser, customFields, treeNodes, onAddFieldDefinition, onAddTreeNode }) => {
+const ProductForm: React.FC<ProductFormProps> = ({ onSubmit, onCancel, currentUser, customFields, treeNodes, suppliers = [], masterProducts = [], onAddFieldDefinition, onAddTreeNode }) => {
   const [showNewFieldModal, setShowNewFieldModal] = useState(false);
   const [newFieldDef, setNewFieldDef] = useState<Partial<CustomField>>({ label: '', type: 'text' });
   
@@ -314,24 +316,63 @@ const ProductForm: React.FC<ProductFormProps> = ({ onSubmit, onCancel, currentUs
                
               <div className="grid grid-cols-2 gap-6">
                 <div className="space-y-1 col-span-2 sm:col-span-1">
-                  <label className="text-xs font-bold text-slate-500 uppercase tracking-wider">Product Name*</label>
-                  <input 
-                    type="text" required
+                  <label className="text-xs font-bold text-slate-500 uppercase tracking-wider">Product Name* (Master Product)</label>
+                  <select
+                    required
                     className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-sm focus:ring-2 focus:ring-blue-500 outline-none transition-all"
-                    placeholder="e.g. Ultra-Resistant Polymer"
                     value={formData.name}
-                    onChange={e => setFormData({...formData, name: e.target.value})}
-                  />
+                    onChange={e => {
+                      const selectedMp = masterProducts.find(mp => mp.name === e.target.value);
+                      setFormData({
+                        ...formData, 
+                        name: e.target.value,
+                        nodeId: selectedMp?.nodeId || formData.nodeId
+                      });
+                      if (selectedMp?.nodeId) {
+                        const node = treeNodes.find(n => n.id === selectedMp.nodeId);
+                        if (node) {
+                          let current = node;
+                          while (current?.parentId) {
+                            const parent = treeNodes.find(n => n.id === current?.parentId);
+                            if (!parent) break;
+                            current = parent;
+                          }
+                          if (current?.type === 'sector') setSelectedSector(current.id);
+                          const category = treeNodes.find(n => n.parentId === current?.id && (n.id === selectedMp.nodeId || treeNodes.some(c => c.parentId === n.id && c.id === selectedMp.nodeId)));
+                          if (category) setSelectedCategory(category.id);
+                          if (node.parentId && node.parentId !== current?.id) setSelectedSubcategory(selectedMp.nodeId);
+                        }
+                      }
+                    }}
+                  >
+                    <option value="">Select Master Product...</option>
+                    {masterProducts.filter(mp => mp.isActive).map(mp => (
+                      <option key={mp.id} value={mp.name}>{mp.name} ({mp.id})</option>
+                    ))}
+                  </select>
+                  <p className="text-[10px] text-slate-400 mt-1">Select from Master Product Catalog</p>
                 </div>
                 <div className="space-y-1 col-span-2 sm:col-span-1">
                   <label className="text-xs font-bold text-slate-500 uppercase tracking-wider">Supplier Name*</label>
-                  <input 
-                    type="text" required
+                  <select
+                    required
                     className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-sm focus:ring-2 focus:ring-blue-500 outline-none transition-all"
-                    placeholder="Supplier legal name"
                     value={formData.supplier}
-                    onChange={e => setFormData({...formData, supplier: e.target.value})}
-                  />
+                    onChange={e => {
+                      const selectedSupplier = suppliers.find(s => s.name === e.target.value);
+                      setFormData({
+                        ...formData, 
+                        supplier: e.target.value,
+                        supplierId: selectedSupplier?.id
+                      });
+                    }}
+                  >
+                    <option value="">Select Supplier...</option>
+                    {suppliers.filter(s => s.isActive).map(s => (
+                      <option key={s.id} value={s.name}>{s.name} ({s.id})</option>
+                    ))}
+                  </select>
+                  <p className="text-[10px] text-slate-400 mt-1">Select from Supplier Manager</p>
                 </div>
               </div>
 

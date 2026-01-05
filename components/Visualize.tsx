@@ -1,19 +1,24 @@
 
 import React, { useState, useMemo } from 'react';
-import { Product, ChartType, AggregationMethod } from '../types';
+import { Product, ChartType, AggregationMethod, MasterProduct, Supplier, SupplierProduct } from '../types';
 import { 
   BarChart, Bar, LineChart, Line, AreaChart, Area, PieChart, Pie, ScatterChart, Scatter, 
   XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, Cell 
 } from 'recharts';
 import { ICONS } from '../constants';
+import ProductNetworkGraph from './ProductNetworkGraph';
 
 interface VisualizeProps {
   products: Product[];
+  masterProducts: MasterProduct[];
+  suppliers: Supplier[];
+  supplierProducts: SupplierProduct[];
 }
 
 const COLORS = ['#3b82f6', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6', '#6366f1', '#ec4899'];
 
-const Visualize: React.FC<VisualizeProps> = ({ products }) => {
+const Visualize: React.FC<VisualizeProps> = ({ products, masterProducts = [], suppliers = [], supplierProducts = [] }) => {
+  const [activeTab, setActiveTab] = useState<'charts' | 'network'>('network');
   const [chartType, setChartType] = useState<ChartType>('bar');
   const [xAxis, setXAxis] = useState<string>('supplier');
   const [yAxis, setYAxis] = useState<string>('price');
@@ -107,6 +112,38 @@ const Visualize: React.FC<VisualizeProps> = ({ products }) => {
 
   return (
     <div className="flex flex-col h-[calc(100vh-160px)] gap-6">
+      <div className="flex items-center gap-4 mb-2">
+        <button
+          onClick={() => setActiveTab('network')}
+          className={`px-4 py-2 rounded-lg font-semibold text-sm transition-all ${
+            activeTab === 'network'
+              ? 'bg-blue-600 text-white shadow-lg shadow-blue-200'
+              : 'bg-white border border-slate-200 text-slate-600 hover:border-blue-300'
+          }`}
+        >
+          Product Network
+        </button>
+        <button
+          onClick={() => setActiveTab('charts')}
+          className={`px-4 py-2 rounded-lg font-semibold text-sm transition-all ${
+            activeTab === 'charts'
+              ? 'bg-blue-600 text-white shadow-lg shadow-blue-200'
+              : 'bg-white border border-slate-200 text-slate-600 hover:border-blue-300'
+          }`}
+        >
+          Analytics Charts
+        </button>
+      </div>
+
+      {activeTab === 'network' && (
+        <ProductNetworkGraph
+          masterProducts={masterProducts}
+          suppliers={suppliers}
+          supplierProducts={supplierProducts}
+        />
+      )}
+
+      {activeTab === 'charts' && (
       <div className="grid grid-cols-1 md:grid-cols-4 gap-6 flex-1 overflow-hidden">
         {/* Controls */}
         <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm space-y-8 flex flex-col">
@@ -203,6 +240,7 @@ const Visualize: React.FC<VisualizeProps> = ({ products }) => {
           </div>
         </div>
       </div>
+      )}
     </div>
   );
 };

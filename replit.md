@@ -27,6 +27,8 @@ A fully functional product intelligence platform with an expandable product taxo
 
 ## Key Features
 - **3-Tier Product Architecture**: Suppliers > Master Products > Supplier Products
+- **Linked Add Product Form**: Product Name and Supplier fields are linked to Master Product Catalog and Suppliers respectively
+- **Product Network Visualization**: Interactive graph showing master products at top with supplier product branches below (nodes + links)
 - Expandable product taxonomy tree with unlimited levels
 - Full CRUD operations for categories, suppliers, and products
 - Supplier Management with contact details and status tracking
@@ -45,7 +47,8 @@ A fully functional product intelligence platform with an expandable product taxo
 │   ├── Dashboard.tsx        # Dashboard with analytics
 │   ├── ProductList.tsx      # Product inventory view
 │   ├── ProductForm.tsx      # Add/edit product form
-│   ├── Visualize.tsx        # Data visualization view
+│   ├── Visualize.tsx        # Data visualization view (charts + network)
+│   ├── ProductNetworkGraph.tsx  # Network graph visualization
 │   ├── SupplierManager.tsx  # Supplier management UI
 │   └── MasterProductCatalog.tsx  # Master product catalog UI
 ├── server/
@@ -131,6 +134,10 @@ DATABASE_URL=postgresql://user:password@host:5432/database
 - `DELETE /api/supplier-products/:supplierProductId` - Delete a supplier product
 
 ## Recent Changes
+- 2026-01-05: Added Product Network Visualization with interactive SVG graph showing master products and supplier branches
+- 2026-01-05: Linked Add Product form fields to Master Product Catalog and Suppliers (dropdown selection)
+- 2026-01-05: Created ProductNetworkGraph component with zoom, hover effects, and filtering
+- 2026-01-05: Updated Visualize view with tabs for Product Network and Analytics Charts
 - 2026-01-05: Added 3-tier product architecture (Suppliers > Master Products > Supplier Products)
 - 2026-01-05: Created SupplierManager component with full CRUD operations, search, and contact management
 - 2026-01-05: Created MasterProductCatalog component with taxonomy linking and card-based UI

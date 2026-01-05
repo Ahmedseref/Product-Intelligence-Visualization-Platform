@@ -1,5 +1,5 @@
 import React, { useState, useMemo, useEffect, useCallback } from 'react';
-import { Product, ViewMode, User, CustomField, TreeNode, Supplier, MasterProduct } from './types';
+import { Product, ViewMode, User, CustomField, TreeNode, Supplier, MasterProduct, SupplierProduct } from './types';
 import { INITIAL_PRODUCTS, INITIAL_TREE_NODES } from './mockData';
 import { ICONS } from './constants';
 import Sidebar from './components/Sidebar';
@@ -19,6 +19,7 @@ const App: React.FC = () => {
   const [treeNodes, setTreeNodes] = useState<TreeNode[]>(INITIAL_TREE_NODES);
   const [suppliers, setSuppliers] = useState<Supplier[]>([]);
   const [masterProducts, setMasterProducts] = useState<MasterProduct[]>([]);
+  const [supplierProducts, setSupplierProducts] = useState<SupplierProduct[]>([]);
   const [customFieldConfigs, setCustomFieldConfigs] = useState<CustomField[]>([]);
   const [currentUser] = useState<User>({ id: 'U-01', name: 'Admin User', role: 'Admin' });
   const [searchQuery, setSearchQuery] = useState('');
@@ -43,12 +44,13 @@ const App: React.FC = () => {
     try {
       await retryFetch(() => api.seedDatabase(), 10, 1000);
       
-      const [nodesData, productsData, fieldsData, suppliersData, masterProductsData] = await Promise.all([
+      const [nodesData, productsData, fieldsData, suppliersData, masterProductsData, supplierProductsData] = await Promise.all([
         api.getTreeNodes(),
         api.getProducts(),
         api.getCustomFields(),
         api.getSuppliers(),
         api.getMasterProducts(),
+        api.getSupplierProducts(),
       ]);
 
       setTreeNodes(nodesData.map(n => ({
@@ -121,6 +123,29 @@ const App: React.FC = () => {
         isActive: mp.isActive ?? true,
         createdAt: mp.createdAt || new Date().toISOString(),
         updatedAt: mp.updatedAt || new Date().toISOString(),
+      })));
+
+      setSupplierProducts(supplierProductsData.map(sp => ({
+        id: sp.supplierProductId,
+        masterProductId: sp.masterProductId,
+        supplierId: sp.supplierId,
+        formFactor: sp.formFactor || undefined,
+        sku: sp.sku || undefined,
+        price: sp.price || 0,
+        currency: sp.currency || 'USD',
+        unit: sp.unit || undefined,
+        moq: sp.moq || 1,
+        leadTime: sp.leadTime || 0,
+        packagingType: sp.packagingType || undefined,
+        hsCode: sp.hsCode || undefined,
+        certifications: (sp.certifications as string[]) || [],
+        technicalSpecs: (sp.technicalSpecs as any[]) || [],
+        images: (sp.images as string[]) || [],
+        isActive: sp.isActive ?? true,
+        createdBy: sp.createdBy || undefined,
+        createdAt: sp.createdAt || new Date().toISOString(),
+        updatedAt: sp.updatedAt || new Date().toISOString(),
+        history: (sp.history as any[]) || [],
       })));
 
       setIsDbConnected(true);
@@ -587,7 +612,12 @@ const App: React.FC = () => {
               />
             )}
             {viewMode === 'visualize' && (
-              <Visualize products={filteredProducts} />
+              <Visualize 
+                products={filteredProducts}
+                masterProducts={masterProducts}
+                suppliers={suppliers}
+                supplierProducts={supplierProducts}
+              />
             )}
             {viewMode === 'add-product' && (
               <ProductForm 
@@ -596,6 +626,8 @@ const App: React.FC = () => {
                 currentUser={currentUser}
                 customFields={customFieldConfigs}
                 treeNodes={treeNodes}
+                suppliers={suppliers}
+                masterProducts={masterProducts}
                 onAddFieldDefinition={addCustomFieldDefinition}
                 onAddTreeNode={addTreeNode}
               />
