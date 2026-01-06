@@ -50832,7 +50832,6 @@ var import_express = __toESM(require_express2(), 1);
 var import_cors = __toESM(require_lib3(), 1);
 var import_path = __toESM(require("path"), 1);
 var import_fs2 = __toESM(require("fs"), 1);
-var import_url2 = require("url");
 
 // shared/schema.ts
 var schema_exports = {};
@@ -70454,9 +70453,6 @@ function registerObjectStorageRoutes(app2) {
 }
 
 // server/index.ts
-var import_meta = {};
-var __filename = (0, import_url2.fileURLToPath)(import_meta.url);
-var __dirname2 = import_path.default.dirname(__filename);
 var rootDir = process.cwd();
 console.log("Starting server...");
 console.log("Root directory:", rootDir);
@@ -70475,7 +70471,20 @@ app.get("/health", (req, res) => {
 });
 registerObjectStorageRoutes(app);
 registerRoutes(app);
-var distPath = import_fs2.default.existsSync(import_path.default.join(rootDir, "dist")) ? import_path.default.join(rootDir, "dist") : import_path.default.join(__dirname2, "..", "dist");
+function findDistPath() {
+  const candidates = [
+    import_path.default.join(rootDir, "dist"),
+    import_path.default.join(rootDir, "..", "dist"),
+    import_path.default.resolve("dist")
+  ];
+  for (const candidate of candidates) {
+    if (import_fs2.default.existsSync(candidate)) {
+      return candidate;
+    }
+  }
+  return import_path.default.join(rootDir, "dist");
+}
+var distPath = findDistPath();
 console.log("Static files path:", distPath);
 console.log("Static path exists:", import_fs2.default.existsSync(distPath));
 if (import_fs2.default.existsSync(distPath)) {
