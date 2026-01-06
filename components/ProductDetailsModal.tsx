@@ -1,7 +1,8 @@
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Product, HistoryEntry, CustomFieldValue, TreeNode } from '../types';
 import { ICONS } from '../constants';
+import FileAttachments, { Attachment } from './FileAttachments';
 
 interface ProductDetailsModalProps {
   product: Product;
@@ -11,9 +12,25 @@ interface ProductDetailsModalProps {
 }
 
 const ProductDetailsModal: React.FC<ProductDetailsModalProps> = ({ product, onClose, onUpdate, treeNodes }) => {
-  const [activeTab, setActiveTab] = useState<'details' | 'history' | 'custom'>('details');
+  const [activeTab, setActiveTab] = useState<'details' | 'history' | 'custom' | 'files'>('details');
   const [isEditingCustom, setIsEditingCustom] = useState(false);
   const [editedCustomFields, setEditedCustomFields] = useState<CustomFieldValue[]>(product.customFields || []);
+  const [attachments, setAttachments] = useState<Attachment[]>([]);
+
+  useEffect(() => {
+    const fetchAttachments = async () => {
+      try {
+        const response = await fetch(`/api/attachments/by-product/${product.id}`);
+        if (response.ok) {
+          const data = await response.json();
+          setAttachments(data);
+        }
+      } catch (error) {
+        console.error('Error fetching attachments:', error);
+      }
+    };
+    fetchAttachments();
+  }, [product.id]);
 
   const handleSaveCustomFields = () => {
     const updatedProduct = {
@@ -110,6 +127,12 @@ const ProductDetailsModal: React.FC<ProductDetailsModalProps> = ({ product, onCl
              className={`px-4 py-3 text-sm font-semibold transition-all border-b-2 ${activeTab === 'custom' ? 'border-blue-600 text-blue-600' : 'border-transparent text-slate-500 hover:text-slate-700'}`}
           >
             Technical Specs
+          </button>
+          <button 
+             onClick={() => setActiveTab('files')}
+             className={`px-4 py-3 text-sm font-semibold transition-all border-b-2 ${activeTab === 'files' ? 'border-blue-600 text-blue-600' : 'border-transparent text-slate-500 hover:text-slate-700'}`}
+          >
+            Files ({attachments.length})
           </button>
         </div>
 
@@ -264,6 +287,14 @@ const ProductDetailsModal: React.FC<ProductDetailsModalProps> = ({ product, onCl
                   )}
                 </div>
              </div>
+          )}
+
+          {activeTab === 'files' && (
+            <FileAttachments
+              supplierProductId={product.id}
+              attachments={attachments}
+              onAttachmentsChange={setAttachments}
+            />
           )}
         </div>
 
