@@ -24,6 +24,7 @@ A fully functional product intelligence platform with an expandable product taxo
 - **suppliers**: Supplier entities with contact information (S-0001 format IDs)
 - **master_products**: Base product concepts linked to taxonomy (P-0001 format IDs)
 - **supplier_products**: Supplier-specific variants with pricing/lead time (SP-001 format IDs)
+- **attachments**: File attachments linked to products (images, PDFs, Excel, Word, certificates)
 
 ## Key Features
 - **3-Tier Product Architecture**: Suppliers > Master Products > Supplier Products
