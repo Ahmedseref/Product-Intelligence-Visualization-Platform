@@ -2,6 +2,17 @@ import type { Express } from "express";
 import { ObjectStorageService, ObjectNotFoundError } from "./objectStorage";
 
 /**
+ * Check if object storage credentials are available.
+ */
+function hasObjectStorageCredentials(): boolean {
+  return !!(
+    process.env.DEFAULT_OBJECT_STORAGE_BUCKET_ID ||
+    process.env.PRIVATE_OBJECT_DIR ||
+    process.env.PUBLIC_OBJECT_SEARCH_PATHS
+  );
+}
+
+/**
  * Register object storage routes for file uploads.
  *
  * This provides example routes for the presigned URL upload flow:
@@ -14,6 +25,11 @@ import { ObjectStorageService, ObjectNotFoundError } from "./objectStorage";
  * - Add ACL policies for access control
  */
 export function registerObjectStorageRoutes(app: Express): void {
+  if (!hasObjectStorageCredentials()) {
+    console.log("Object storage credentials not found. File upload routes disabled.");
+    return;
+  }
+
   const objectStorageService = new ObjectStorageService();
 
   /**

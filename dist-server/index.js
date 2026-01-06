@@ -70408,7 +70408,14 @@ async function signObjectURL({
 }
 
 // server/replit_integrations/object_storage/routes.ts
+function hasObjectStorageCredentials() {
+  return !!(process.env.DEFAULT_OBJECT_STORAGE_BUCKET_ID || process.env.PRIVATE_OBJECT_DIR || process.env.PUBLIC_OBJECT_SEARCH_PATHS);
+}
 function registerObjectStorageRoutes(app2) {
+  if (!hasObjectStorageCredentials()) {
+    console.log("Object storage credentials not found. File upload routes disabled.");
+    return;
+  }
   const objectStorageService = new ObjectStorageService();
   app2.post("/api/uploads/request-url", async (req, res) => {
     try {
