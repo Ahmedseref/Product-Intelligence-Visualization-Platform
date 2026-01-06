@@ -7,6 +7,7 @@ import { registerRoutes } from "./routes";
 import { registerObjectStorageRoutes } from "./replit_integrations/object_storage";
 
 const rootDir = process.cwd();
+
 console.log("Starting server...");
 console.log("Root directory:", rootDir);
 console.log("NODE_ENV:", process.env.NODE_ENV);
@@ -29,7 +30,21 @@ app.get("/health", (req, res) => {
 registerObjectStorageRoutes(app);
 registerRoutes(app);
 
-const distPath = path.join(rootDir, "dist");
+function findDistPath(): string {
+  const candidates = [
+    path.join(rootDir, "dist"),
+    path.join(rootDir, "..", "dist"),
+    path.resolve("dist"),
+  ];
+  for (const candidate of candidates) {
+    if (fs.existsSync(candidate)) {
+      return candidate;
+    }
+  }
+  return path.join(rootDir, "dist");
+}
+
+const distPath = findDistPath();
 console.log("Static files path:", distPath);
 console.log("Static path exists:", fs.existsSync(distPath));
 
