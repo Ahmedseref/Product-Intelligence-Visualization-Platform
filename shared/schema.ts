@@ -34,6 +34,7 @@ export const supplierProducts = pgTable("supplier_products", {
   supplierProductId: varchar("supplier_product_id", { length: 100 }).notNull().unique(),
   masterProductId: varchar("master_product_id", { length: 100 }).notNull(),
   supplierId: varchar("supplier_id", { length: 100 }).notNull(),
+  productName: varchar("product_name", { length: 255 }),
   formFactor: varchar("form_factor", { length: 100 }),
   sku: varchar("sku", { length: 100 }),
   price: real("price").default(0),

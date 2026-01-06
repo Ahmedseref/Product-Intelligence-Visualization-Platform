@@ -316,7 +316,7 @@ const ProductForm: React.FC<ProductFormProps> = ({ onSubmit, onCancel, currentUs
                
               <div className="grid grid-cols-2 gap-6">
                 <div className="space-y-1 col-span-2 sm:col-span-1">
-                  <label className="text-xs font-bold text-slate-500 uppercase tracking-wider">Product Name* (Master Product)</label>
+                  <label className="text-xs font-bold text-slate-500 uppercase tracking-wider">Master Product*</label>
                   <select
                     required
                     className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-sm focus:ring-2 focus:ring-blue-500 outline-none transition-all"
@@ -374,6 +374,18 @@ const ProductForm: React.FC<ProductFormProps> = ({ onSubmit, onCancel, currentUs
                   </select>
                   <p className="text-[10px] text-slate-400 mt-1">Select from Supplier Manager</p>
                 </div>
+              </div>
+
+              <div className="space-y-1">
+                <label className="text-xs font-bold text-slate-500 uppercase tracking-wider">Product Name (Manufacturer Name)</label>
+                <input
+                  type="text"
+                  className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-sm focus:ring-2 focus:ring-blue-500 outline-none transition-all"
+                  placeholder="e.g. Akfix silicone sealant 100E, Sikaseal acetoxy sealant..."
+                  value={formData.manufacturer}
+                  onChange={e => setFormData({...formData, manufacturer: e.target.value})}
+                />
+                <p className="text-[10px] text-slate-400 mt-1">The specific product name from the manufacturer/supplier (different suppliers may have different names for the same product type)</p>
               </div>
 
               <div className="space-y-4">

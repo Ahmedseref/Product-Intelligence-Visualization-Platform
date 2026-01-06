@@ -60,6 +60,7 @@ export interface SupplierProduct {
   id: string;
   masterProductId: string;
   supplierId: string;
+  productName?: string;
   formFactor?: string;
   sku?: string;
   price: number;
