@@ -1,0 +1,130 @@
+✅ Feature 1
+Product Attachments (Images, PDF, Excel, Word, Certificates)
+
+You want each product to support:
+
+Images
+
+Technical documents (TDS, MSDS)
+
+Certificates
+
+Any file type
+
+This is absolutely standard in enterprise product systems.
+
+1️⃣ Concept: Product Attachments
+
+Instead of “images only”, introduce a generic attachment system.
+
+Attachment Types
+
+Image (jpg, png, webp)
+
+PDF (TDS, MSDS)
+
+Excel (pricing sheets)
+
+Word (spec sheets)
+
+Any other file
+
+2️⃣ Data Model Extension
+🔹 Attachment Entity
+Attachment {
+  id: string;                 // A-0001
+  productId: string;          // SupplierProduct ID
+  name: string;               // MSDS_Marble.pdf
+  type: "image" | "pdf" | "excel" | "word" | "other";
+  mimeType: string;           // application/pdf
+  size: number;               // bytes
+  storageKey: string;         // local reference
+  uploadedAt: Date;
+}
+
+🔹 SupplierProduct (Extended)
+SupplierProduct {
+  ...
+  attachments: Attachment[];
+}
+
+3️⃣ UI / UX – Add Product Tab
+📌 New Section: Product Files
+
+Inside Add Product / Edit Product
+
+UI Components
+
+📎 “Upload Files” button
+
+Drag & Drop area
+
+File type icons
+
+File preview (image thumbnails)
+
+File list with:
+
+Name
+
+Type
+
+Size
+
+Delete action
+
+📂 Example File Grouping (Optional)
+
+You can visually group files:
+
+📁 Technical Documents
+   - TDS_Marble.pdf
+   - MSDS_Marble.pdf
+
+📁 Certificates
+   - ISO_9001.pdf
+   - CE_Certificate.pdf
+
+📁 Images
+   - marble_tile.jpg
+
+
+(This can be UI-only grouping — storage stays flat.)
+
+4️⃣ File Storage Strategy (No Backend Required)
+
+Since you want data to persist after tab close, here are the realistic options:
+
+✅ Option A — IndexedDB (Recommended)
+
+✔ Supports large files
+✔ Binary storage
+✔ Persistent
+
+Why LocalStorage is NOT enough
+
+Size limit (~5MB)
+
+No binary support
+
+Storage Flow
+
+User uploads file
+
+File stored in IndexedDB
+
+Metadata saved with product
+
+File retrievable after reload
+
+✔ Works offline
+✔ No server needed
+✔ Industry-correct choice
+
+5️⃣ Security / Validation
+
+Max file size (configurable)
+
+Allowed file types
+
+Virus scan (only if backend added later)

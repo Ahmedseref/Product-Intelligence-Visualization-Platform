@@ -1,12 +1,13 @@
 import { 
   treeNodes, products, customFieldDefinitions,
-  suppliers, masterProducts, supplierProducts,
+  suppliers, masterProducts, supplierProducts, attachments,
   type TreeNode, type InsertTreeNode,
   type Product, type InsertProduct,
   type CustomFieldDefinition, type InsertCustomFieldDefinition,
   type Supplier, type InsertSupplier,
   type MasterProduct, type InsertMasterProduct,
-  type SupplierProduct, type InsertSupplierProduct
+  type SupplierProduct, type InsertSupplierProduct,
+  type Attachment, type InsertAttachment
 } from "@shared/schema";
 import { db } from "./db";
 import { eq, and, isNull } from "drizzle-orm";
@@ -202,7 +203,40 @@ export class DatabaseStorage implements IStorage {
   }
 
   async deleteSupplierProduct(supplierProductId: string): Promise<boolean> {
+    await db.delete(attachments).where(eq(attachments.supplierProductId, supplierProductId));
     const result = await db.delete(supplierProducts).where(eq(supplierProducts.supplierProductId, supplierProductId)).returning();
+    return result.length > 0;
+  }
+
+  async getAttachments(): Promise<Attachment[]> {
+    return await db.select().from(attachments).orderBy(attachments.uploadedAt);
+  }
+
+  async getAttachment(attachmentId: string): Promise<Attachment | undefined> {
+    const [attachment] = await db.select().from(attachments).where(eq(attachments.attachmentId, attachmentId));
+    return attachment || undefined;
+  }
+
+  async getAttachmentsByProductId(supplierProductId: string): Promise<Attachment[]> {
+    return await db.select().from(attachments).where(eq(attachments.supplierProductId, supplierProductId));
+  }
+
+  async createAttachment(attachment: InsertAttachment): Promise<Attachment> {
+    const [created] = await db.insert(attachments).values(attachment).returning();
+    return created;
+  }
+
+  async updateAttachment(attachmentId: string, updates: Partial<InsertAttachment>): Promise<Attachment | undefined> {
+    const [updated] = await db
+      .update(attachments)
+      .set(updates)
+      .where(eq(attachments.attachmentId, attachmentId))
+      .returning();
+    return updated || undefined;
+  }
+
+  async deleteAttachment(attachmentId: string): Promise<boolean> {
+    const result = await db.delete(attachments).where(eq(attachments.attachmentId, attachmentId)).returning();
     return result.length > 0;
   }
 }

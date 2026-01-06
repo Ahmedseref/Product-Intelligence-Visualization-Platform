@@ -109,6 +109,19 @@ export const customFieldDefinitions = pgTable("custom_field_definitions", {
   createdAt: timestamp("created_at").defaultNow(),
 });
 
+export const attachments = pgTable("attachments", {
+  id: serial("id").primaryKey(),
+  attachmentId: varchar("attachment_id", { length: 100 }).notNull().unique(),
+  supplierProductId: varchar("supplier_product_id", { length: 100 }).notNull(),
+  name: varchar("name", { length: 255 }).notNull(),
+  type: varchar("type", { length: 50 }).notNull(),
+  mimeType: varchar("mime_type", { length: 100 }),
+  size: integer("size").default(0),
+  objectPath: text("object_path").notNull(),
+  category: varchar("category", { length: 100 }),
+  uploadedAt: timestamp("uploaded_at").defaultNow(),
+});
+
 export const suppliersRelations = relations(suppliers, ({ many }) => ({
   supplierProducts: many(supplierProducts),
 }));
@@ -121,7 +134,7 @@ export const masterProductsRelations = relations(masterProducts, ({ many, one })
   }),
 }));
 
-export const supplierProductsRelations = relations(supplierProducts, ({ one }) => ({
+export const supplierProductsRelations = relations(supplierProducts, ({ one, many }) => ({
   masterProduct: one(masterProducts, {
     fields: [supplierProducts.masterProductId],
     references: [masterProducts.masterProductId],
@@ -129,6 +142,14 @@ export const supplierProductsRelations = relations(supplierProducts, ({ one }) =
   supplier: one(suppliers, {
     fields: [supplierProducts.supplierId],
     references: [suppliers.supplierId],
+  }),
+  attachments: many(attachments),
+}));
+
+export const attachmentsRelations = relations(attachments, ({ one }) => ({
+  supplierProduct: one(supplierProducts, {
+    fields: [attachments.supplierProductId],
+    references: [supplierProducts.supplierProductId],
   }),
 }));
 
@@ -157,3 +178,5 @@ export type Product = typeof products.$inferSelect;
 export type InsertProduct = typeof products.$inferInsert;
 export type CustomFieldDefinition = typeof customFieldDefinitions.$inferSelect;
 export type InsertCustomFieldDefinition = typeof customFieldDefinitions.$inferInsert;
+export type Attachment = typeof attachments.$inferSelect;
+export type InsertAttachment = typeof attachments.$inferInsert;

@@ -4,6 +4,7 @@ import cors from "cors";
 import path from "path";
 import fs from "fs";
 import { registerRoutes } from "./routes";
+import { registerObjectStorageRoutes } from "./replit_integrations/object_storage";
 
 const rootDir = process.cwd();
 console.log("Starting server...");
@@ -25,6 +26,7 @@ app.get("/health", (req, res) => {
   res.json({ status: "ok", timestamp: new Date().toISOString() });
 });
 
+registerObjectStorageRoutes(app);
 registerRoutes(app);
 
 const distPath = path.join(rootDir, "dist");

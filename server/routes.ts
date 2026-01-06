@@ -530,4 +530,70 @@ export function registerRoutes(app: Express): void {
       res.status(500).json({ error: "Failed to delete supplier product" });
     }
   });
+
+  app.get("/api/attachments", async (req, res) => {
+    try {
+      const attachments = await storage.getAttachments();
+      res.json(attachments);
+    } catch (error) {
+      console.error("Error fetching attachments:", error);
+      res.status(500).json({ error: "Failed to fetch attachments" });
+    }
+  });
+
+  app.get("/api/attachments/:attachmentId", async (req, res) => {
+    try {
+      const attachment = await storage.getAttachment(req.params.attachmentId);
+      if (!attachment) {
+        return res.status(404).json({ error: "Attachment not found" });
+      }
+      res.json(attachment);
+    } catch (error) {
+      console.error("Error fetching attachment:", error);
+      res.status(500).json({ error: "Failed to fetch attachment" });
+    }
+  });
+
+  app.get("/api/attachments/by-product/:supplierProductId", async (req, res) => {
+    try {
+      const attachments = await storage.getAttachmentsByProductId(req.params.supplierProductId);
+      res.json(attachments);
+    } catch (error) {
+      console.error("Error fetching attachments by product:", error);
+      res.status(500).json({ error: "Failed to fetch attachments" });
+    }
+  });
+
+  app.post("/api/attachments", async (req, res) => {
+    try {
+      const attachment = await storage.createAttachment(req.body);
+      res.status(201).json(attachment);
+    } catch (error) {
+      console.error("Error creating attachment:", error);
+      res.status(500).json({ error: "Failed to create attachment" });
+    }
+  });
+
+  app.patch("/api/attachments/:attachmentId", async (req, res) => {
+    try {
+      const attachment = await storage.updateAttachment(req.params.attachmentId, req.body);
+      if (!attachment) {
+        return res.status(404).json({ error: "Attachment not found" });
+      }
+      res.json(attachment);
+    } catch (error) {
+      console.error("Error updating attachment:", error);
+      res.status(500).json({ error: "Failed to update attachment" });
+    }
+  });
+
+  app.delete("/api/attachments/:attachmentId", async (req, res) => {
+    try {
+      await storage.deleteAttachment(req.params.attachmentId);
+      res.status(204).send();
+    } catch (error) {
+      console.error("Error deleting attachment:", error);
+      res.status(500).json({ error: "Failed to delete attachment" });
+    }
+  });
 }
