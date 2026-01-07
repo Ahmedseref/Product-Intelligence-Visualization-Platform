@@ -135,6 +135,8 @@ DATABASE_URL=postgresql://user:password@host:5432/database
 - `DELETE /api/supplier-products/:supplierProductId` - Delete a supplier product
 
 ## Recent Changes
+- 2026-01-07: Enhanced export to include all fields in separate columns (sector, category, sub-category, all hierarchy levels, technical specs, custom fields, etc.) for comprehensive data analysis
+- 2026-01-07: Added full product edit modal from Product Inventory (Edit button opens complete ProductForm)
 - 2026-01-07: Fixed production deployment crash by changing server bundle output to .cjs format (ES module conflict fix)
 - 2026-01-07: Added quick health check response on root path for deployment health checks
 - 2026-01-06: Added Product Name (Manufacturer Name) field to Add Product form for capturing supplier-specific product names

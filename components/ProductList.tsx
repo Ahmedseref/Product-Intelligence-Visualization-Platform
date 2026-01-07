@@ -95,6 +95,46 @@ const ProductList: React.FC<ProductListProps> = ({
     return node?.name || 'Uncategorized';
   };
 
+  const getHierarchyLevels = (nodeId: string) => {
+    const path: string[] = [];
+    let current = treeNodes.find(n => n.id === nodeId);
+    while (current) {
+      path.unshift(current.name);
+      current = treeNodes.find(n => n.id === current?.parentId);
+    }
+    return {
+      sector: path[0] || '',
+      category: path[1] || '',
+      subCategory: path[2] || '',
+      level4: path[3] || '',
+      level5: path[4] || '',
+      fullPath: path.join(' > ')
+    };
+  };
+
+  const getAllTechSpecKeys = (productsToExport: Product[]) => {
+    const keys = new Set<string>();
+    productsToExport.forEach(p => {
+      if (p.technicalSpecs) {
+        p.technicalSpecs.forEach(spec => keys.add(spec.name));
+      }
+    });
+    return Array.from(keys).sort();
+  };
+
+  const getAllCustomFieldKeys = (productsToExport: Product[]) => {
+    const keys = new Set<string>();
+    productsToExport.forEach(p => {
+      if (p.customFields) {
+        p.customFields.forEach(cf => {
+          const fieldDef = customFields.find(f => f.id === cf.fieldId);
+          if (fieldDef) keys.add(fieldDef.name);
+        });
+      }
+    });
+    return Array.from(keys).sort();
+  };
+
   const startEditing = (product: Product, field: string, currentValue: string | number) => {
     setEditingCell({ productId: product.id, field });
     setEditValue(String(currentValue));
@@ -214,25 +254,80 @@ const ProductList: React.FC<ProductListProps> = ({
   };
 
   const exportToCSV = (productsToExport: Product[]) => {
-    const headers = ['ID', 'Name', 'Supplier', 'Sector', 'Category', 'Hierarchy Path', 'Price', 'Currency', 'MOQ', 'Unit', 'Lead Time', 'Manufacturer', 'Description'];
-    const rows = productsToExport.map(p => [
-      p.id,
-      `"${p.name.replace(/"/g, '""')}"`,
-      `"${p.supplier.replace(/"/g, '""')}"`,
-      `"${getProductSector(p.nodeId)}"`,
-      `"${getProductCategory(p.nodeId)}"`,
-      `"${getProductPathString(p.nodeId)}"`,
-      p.price,
-      p.currency,
-      p.moq,
-      p.unit,
-      p.leadTime,
-      p.manufacturer || '',
-      `"${(p.description || '').replace(/"/g, '""')}"`
-    ]);
+    const techSpecKeys = getAllTechSpecKeys(productsToExport);
+    const customFieldKeys = getAllCustomFieldKeys(productsToExport);
+    
+    const baseHeaders = [
+      'ID', 'Name', 'Description', 'Supplier', 'Supplier ID',
+      'Sector', 'Category', 'Sub-Category', 'Level 4', 'Level 5', 'Full Hierarchy Path',
+      'Price', 'Currency', 'Unit', 'MOQ', 'Lead Time (days)',
+      'Manufacturer', 'Manufacturing Location', 'Image URL',
+      'HS Code', 'Packaging Type', 'Shelf Life', 'Storage Conditions',
+      'Date Added', 'Last Updated', 'Created By'
+    ];
+    
+    const techSpecHeaders = techSpecKeys.map(k => `Spec: ${k}`);
+    const customFieldHeaders = customFieldKeys.map(k => `Custom: ${k}`);
+    const headers = [...baseHeaders, ...techSpecHeaders, ...customFieldHeaders];
+    
+    const escapeCSV = (val: string | number | undefined | null) => {
+      if (val === undefined || val === null) return '';
+      const str = String(val);
+      if (str.includes(',') || str.includes('"') || str.includes('\n')) {
+        return `"${str.replace(/"/g, '""')}"`;
+      }
+      return str;
+    };
+    
+    const rows = productsToExport.map(p => {
+      const hierarchy = getHierarchyLevels(p.nodeId);
+      
+      const baseData = [
+        p.id,
+        escapeCSV(p.name),
+        escapeCSV(p.description),
+        escapeCSV(p.supplier),
+        escapeCSV(p.supplierId),
+        escapeCSV(hierarchy.sector),
+        escapeCSV(hierarchy.category),
+        escapeCSV(hierarchy.subCategory),
+        escapeCSV(hierarchy.level4),
+        escapeCSV(hierarchy.level5),
+        escapeCSV(hierarchy.fullPath),
+        p.price,
+        p.currency,
+        p.unit,
+        p.moq,
+        p.leadTime,
+        escapeCSV(p.manufacturer),
+        escapeCSV(p.manufacturingLocation),
+        escapeCSV(p.imageUrl),
+        escapeCSV(p.hsCode),
+        escapeCSV(p.packagingType),
+        escapeCSV(p.shelfLife),
+        escapeCSV(p.storageConditions),
+        escapeCSV(p.dateAdded),
+        escapeCSV(p.lastUpdated),
+        escapeCSV(p.createdBy)
+      ];
+      
+      const techSpecData = techSpecKeys.map(key => {
+        const spec = p.technicalSpecs?.find(s => s.name === key);
+        return spec ? escapeCSV(`${spec.value}${spec.unit ? ' ' + spec.unit : ''}`) : '';
+      });
+      
+      const customFieldData = customFieldKeys.map(key => {
+        const fieldDef = customFields.find(f => f.name === key);
+        if (!fieldDef) return '';
+        const cf = p.customFields?.find(f => f.fieldId === fieldDef.id);
+        return cf ? escapeCSV(cf.value) : '';
+      });
+      
+      return [...baseData, ...techSpecData, ...customFieldData];
+    });
     
     const csv = [headers.join(','), ...rows.map(r => r.join(','))].join('\n');
-    const blob = new Blob([csv], { type: 'text/csv' });
+    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
@@ -243,12 +338,60 @@ const ProductList: React.FC<ProductListProps> = ({
   };
 
   const exportToJSON = (productsToExport: Product[]) => {
-    const enrichedProducts = productsToExport.map(p => ({
-      ...p,
-      sector: getProductSector(p.nodeId),
-      category: getProductCategory(p.nodeId),
-      hierarchyPath: getProductPathString(p.nodeId)
-    }));
+    const enrichedProducts = productsToExport.map(p => {
+      const hierarchy = getHierarchyLevels(p.nodeId);
+      
+      const techSpecsObject: Record<string, string> = {};
+      if (p.technicalSpecs) {
+        p.technicalSpecs.forEach(spec => {
+          techSpecsObject[spec.name] = `${spec.value}${spec.unit ? ' ' + spec.unit : ''}`;
+        });
+      }
+      
+      const customFieldsObject: Record<string, string> = {};
+      if (p.customFields) {
+        p.customFields.forEach(cf => {
+          const fieldDef = customFields.find(f => f.id === cf.fieldId);
+          if (fieldDef) customFieldsObject[fieldDef.name] = cf.value;
+        });
+      }
+      
+      return {
+        id: p.id,
+        name: p.name,
+        description: p.description || '',
+        supplier: p.supplier,
+        supplierId: p.supplierId || '',
+        hierarchy: {
+          sector: hierarchy.sector,
+          category: hierarchy.category,
+          subCategory: hierarchy.subCategory,
+          level4: hierarchy.level4,
+          level5: hierarchy.level5,
+          fullPath: hierarchy.fullPath
+        },
+        pricing: {
+          price: p.price,
+          currency: p.currency,
+          unit: p.unit,
+          moq: p.moq
+        },
+        leadTimeDays: p.leadTime,
+        manufacturer: p.manufacturer || '',
+        manufacturingLocation: p.manufacturingLocation || '',
+        imageUrl: p.imageUrl || '',
+        hsCode: p.hsCode || '',
+        packagingType: p.packagingType || '',
+        shelfLife: p.shelfLife || '',
+        storageConditions: p.storageConditions || '',
+        technicalSpecifications: techSpecsObject,
+        customFields: customFieldsObject,
+        dateAdded: p.dateAdded,
+        lastUpdated: p.lastUpdated,
+        createdBy: p.createdBy || ''
+      };
+    });
+    
     const json = JSON.stringify(enrichedProducts, null, 2);
     const blob = new Blob([json], { type: 'application/json' });
     const url = URL.createObjectURL(blob);
