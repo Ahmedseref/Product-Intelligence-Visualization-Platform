@@ -27,6 +27,13 @@ app.get("/health", (req, res) => {
   res.json({ status: "ok", timestamp: new Date().toISOString() });
 });
 
+app.get("/", (req, res, next) => {
+  if (req.headers['user-agent']?.includes('health') || req.headers['x-health-check']) {
+    return res.status(200).send('OK');
+  }
+  next();
+});
+
 registerObjectStorageRoutes(app);
 registerRoutes(app);
 
