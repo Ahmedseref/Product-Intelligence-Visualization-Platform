@@ -610,6 +610,11 @@ const App: React.FC = () => {
                 onCreate={addProduct}
                 customFields={customFieldConfigs}
                 treeNodes={treeNodes}
+                suppliers={suppliers}
+                masterProducts={masterProducts}
+                currentUser={currentUser}
+                onAddFieldDefinition={addCustomFieldDefinition}
+                onAddTreeNode={addTreeNode}
               />
             )}
             {viewMode === 'visualize' && (

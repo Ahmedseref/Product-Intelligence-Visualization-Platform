@@ -1,7 +1,8 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { Product, CustomField, TreeNode } from '../types';
+import { Product, CustomField, TreeNode, Supplier, MasterProduct, User } from '../types';
 import { ICONS, CURRENCIES, UNITS } from '../constants';
 import ProductDetailsModal from './ProductDetailsModal';
+import ProductForm from './ProductForm';
 import { Check, X, Download, Filter, FileText, ChevronDown, Copy, Trash2 } from 'lucide-react';
 
 interface ProductListProps {
@@ -11,6 +12,11 @@ interface ProductListProps {
   onCreate?: (p: Product) => void;
   customFields: CustomField[];
   treeNodes: TreeNode[];
+  suppliers?: Supplier[];
+  masterProducts?: MasterProduct[];
+  currentUser?: User;
+  onAddFieldDefinition?: (field: CustomField) => void;
+  onAddTreeNode?: (node: TreeNode) => void;
 }
 
 interface EditingCell {
@@ -25,8 +31,12 @@ interface FilterState {
   leadTimeMax: string;
 }
 
-const ProductList: React.FC<ProductListProps> = ({ products, onUpdate, onDelete, onCreate, customFields, treeNodes }) => {
+const ProductList: React.FC<ProductListProps> = ({ 
+  products, onUpdate, onDelete, onCreate, customFields, treeNodes,
+  suppliers = [], masterProducts = [], currentUser, onAddFieldDefinition, onAddTreeNode 
+}) => {
   const [selectedProduct, setSelectedProduct] = useState<Product | null>(null);
+  const [editingProduct, setEditingProduct] = useState<Product | null>(null);
   const [sortField, setSortField] = useState<keyof Product>('name');
   const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('asc');
   const [editingCell, setEditingCell] = useState<EditingCell | null>(null);
@@ -627,7 +637,7 @@ const ProductList: React.FC<ProductListProps> = ({ products, onUpdate, onDelete,
                   <td className="px-4 py-4 text-right">
                     <div className="flex items-center justify-end gap-1" onClick={e => e.stopPropagation()}>
                       <button 
-                        onClick={() => startEditing(p, 'name', p.name)}
+                        onClick={() => currentUser ? setEditingProduct(p) : startEditing(p, 'name', p.name)}
                         className="p-1.5 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-all"
                         title="Edit product"
                       >
@@ -779,6 +789,29 @@ const ProductList: React.FC<ProductListProps> = ({ products, onUpdate, onDelete,
           onUpdate={onUpdate}
           treeNodes={treeNodes}
         />
+      )}
+
+      {editingProduct && currentUser && onAddFieldDefinition && onAddTreeNode && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 overflow-y-auto p-4">
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-5xl max-h-[90vh] overflow-y-auto">
+            <ProductForm
+              initialProduct={editingProduct}
+              mode="edit"
+              onSubmit={(updatedProduct) => {
+                onUpdate(updatedProduct);
+                setEditingProduct(null);
+              }}
+              onCancel={() => setEditingProduct(null)}
+              currentUser={currentUser}
+              customFields={customFields}
+              treeNodes={treeNodes}
+              suppliers={suppliers}
+              masterProducts={masterProducts}
+              onAddFieldDefinition={onAddFieldDefinition}
+              onAddTreeNode={onAddTreeNode}
+            />
+          </div>
+        </div>
       )}
 
       {(showFilterPanel || showExportMenu) && (

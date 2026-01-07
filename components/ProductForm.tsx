@@ -13,27 +13,46 @@ interface ProductFormProps {
   masterProducts: MasterProduct[];
   onAddFieldDefinition: (field: CustomField) => void;
   onAddTreeNode: (node: TreeNode) => void;
+  initialProduct?: Product;
+  mode?: 'create' | 'edit';
 }
 
-const ProductForm: React.FC<ProductFormProps> = ({ onSubmit, onCancel, currentUser, customFields, treeNodes, suppliers = [], masterProducts = [], onAddFieldDefinition, onAddTreeNode }) => {
+const ProductForm: React.FC<ProductFormProps> = ({ onSubmit, onCancel, currentUser, customFields, treeNodes, suppliers = [], masterProducts = [], onAddFieldDefinition, onAddTreeNode, initialProduct, mode = 'create' }) => {
+  const isEditMode = mode === 'edit' && initialProduct;
+  
   const [showNewFieldModal, setShowNewFieldModal] = useState(false);
   const [newFieldDef, setNewFieldDef] = useState<Partial<CustomField>>({ label: '', type: 'text' });
   
-  const [selectedSector, setSelectedSector] = useState<string>('');
-  const [selectedCategory, setSelectedCategory] = useState<string>('');
-  const [selectedSubcategory, setSelectedSubcategory] = useState<string>('');
+  const getNodePath = (nodeId: string) => {
+    const path: string[] = [];
+    let current = treeNodes.find(n => n.id === nodeId);
+    while (current) {
+      path.unshift(current.id);
+      current = treeNodes.find(n => n.id === current?.parentId);
+    }
+    return path;
+  };
+  
+  const initialPath = initialProduct ? getNodePath(initialProduct.nodeId) : [];
+  
+  const [selectedSector, setSelectedSector] = useState<string>(initialPath[0] || '');
+  const [selectedCategory, setSelectedCategory] = useState<string>(initialPath[1] || '');
+  const [selectedSubcategory, setSelectedSubcategory] = useState<string>(initialPath[2] || '');
   
   const [showAddSector, setShowAddSector] = useState(false);
   const [showAddCategory, setShowAddCategory] = useState(false);
   const [showAddSubcategory, setShowAddSubcategory] = useState(false);
   const [newNodeName, setNewNodeName] = useState('');
   
-  const [technicalSpecs, setTechnicalSpecs] = useState<TechnicalSpec[]>([]);
+  const [technicalSpecs, setTechnicalSpecs] = useState<TechnicalSpec[]>(initialProduct?.technicalSpecs || []);
   const [newSpecName, setNewSpecName] = useState('');
   const [newSpecValue, setNewSpecValue] = useState('');
   const [newSpecUnit, setNewSpecUnit] = useState('');
   
-  const [formData, setFormData] = useState<Partial<Product>>({
+  const [formData, setFormData] = useState<Partial<Product>>(isEditMode ? {
+    ...initialProduct,
+    lastUpdated: new Date().toISOString()
+  } : {
     id: `PRD-${Math.floor(1000 + Math.random() * 9000)}`,
     name: '',
     supplier: '',
@@ -298,12 +317,18 @@ const ProductForm: React.FC<ProductFormProps> = ({ onSubmit, onCancel, currentUs
       <form onSubmit={handleSubmit} className="space-y-8 pb-20">
         <div className="flex items-center justify-between">
           <div>
-            <h2 className="text-2xl font-bold text-slate-800 tracking-tight">Register New Product</h2>
-            <p className="text-sm text-slate-400">Assign to the taxonomy tree and define technical specs.</p>
+            <h2 className="text-2xl font-bold text-slate-800 tracking-tight">
+              {isEditMode ? 'Edit Product' : 'Register New Product'}
+            </h2>
+            <p className="text-sm text-slate-400">
+              {isEditMode ? 'Update product details and specifications.' : 'Assign to the taxonomy tree and define technical specs.'}
+            </p>
           </div>
           <div className="flex gap-3">
             <button type="button" onClick={onCancel} className="px-6 py-2 border border-slate-200 text-slate-500 rounded-xl font-bold hover:bg-slate-50 transition-all">Cancel</button>
-            <button type="submit" className="px-8 py-2 bg-blue-600 text-white rounded-xl font-bold shadow-lg shadow-blue-200 hover:bg-blue-700 transition-all">Save Product Card</button>
+            <button type="submit" className="px-8 py-2 bg-blue-600 text-white rounded-xl font-bold shadow-lg shadow-blue-200 hover:bg-blue-700 transition-all">
+              {isEditMode ? 'Update Product' : 'Save Product Card'}
+            </button>
           </div>
         </div>
 
