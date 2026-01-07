@@ -607,6 +607,7 @@ const App: React.FC = () => {
                 products={filteredProducts} 
                 onUpdate={updateProduct} 
                 onDelete={deleteProduct}
+                onCreate={addProduct}
                 customFields={customFieldConfigs}
                 treeNodes={treeNodes}
               />

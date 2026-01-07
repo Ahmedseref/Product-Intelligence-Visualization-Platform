@@ -2,12 +2,13 @@ import React, { useState, useRef, useEffect } from 'react';
 import { Product, CustomField, TreeNode } from '../types';
 import { ICONS, CURRENCIES, UNITS } from '../constants';
 import ProductDetailsModal from './ProductDetailsModal';
-import { Check, X, Download, Filter, FileText, ChevronDown } from 'lucide-react';
+import { Check, X, Download, Filter, FileText, ChevronDown, Copy, Trash2 } from 'lucide-react';
 
 interface ProductListProps {
   products: Product[];
   onUpdate: (p: Product) => void;
   onDelete: (id: string) => void;
+  onCreate?: (p: Product) => void;
   customFields: CustomField[];
   treeNodes: TreeNode[];
 }
@@ -24,7 +25,7 @@ interface FilterState {
   leadTimeMax: string;
 }
 
-const ProductList: React.FC<ProductListProps> = ({ products, onUpdate, onDelete, customFields, treeNodes }) => {
+const ProductList: React.FC<ProductListProps> = ({ products, onUpdate, onDelete, onCreate, customFields, treeNodes }) => {
   const [selectedProduct, setSelectedProduct] = useState<Product | null>(null);
   const [sortField, setSortField] = useState<keyof Product>('name');
   const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('asc');
@@ -295,6 +296,33 @@ const ProductList: React.FC<ProductListProps> = ({ products, onUpdate, onDelete,
 
   const hasActiveFilters = filters.sector || filters.priceMin || filters.priceMax || filters.leadTimeMax;
 
+  const duplicateProduct = (product: Product) => {
+    if (!onCreate) return;
+    const newId = `PRD-${Date.now()}-${Math.random().toString(36).substr(2, 5)}`;
+    const duplicatedProduct: Product = {
+      ...product,
+      id: newId,
+      name: `${product.name} (Copy)`,
+      lastUpdated: new Date().toISOString(),
+      history: [{
+        id: `hist-${Date.now()}`,
+        timestamp: new Date().toISOString(),
+        userId: 'system',
+        userName: 'System',
+        changes: { source: { old: '', new: `Duplicated from ${product.id}` } },
+        snapshot: {}
+      }]
+    };
+    onCreate(duplicatedProduct);
+  };
+
+  const deleteSelected = () => {
+    if (selectedIds.size === 0) return;
+    if (!confirm(`Are you sure you want to delete ${selectedIds.size} product(s)?`)) return;
+    selectedIds.forEach(id => onDelete(id));
+    setSelectedIds(new Set());
+  };
+
   const renderEditableCell = (product: Product, field: string, displayValue: React.ReactNode, rawValue: string | number, className?: string) => {
     if (isEditing(product.id, field)) {
       return (
@@ -468,12 +496,20 @@ const ProductList: React.FC<ProductListProps> = ({ products, onUpdate, onDelete,
           </div>
 
           {selectedIds.size > 0 && (
-            <button 
-              onClick={() => setShowPIModal(true)}
-              className="flex items-center gap-2 px-3 py-1.5 bg-emerald-600 text-white rounded-lg text-sm font-medium hover:bg-emerald-700 transition-all"
-            >
-              <FileText size={16} /> Create PI ({selectedIds.size})
-            </button>
+            <>
+              <button 
+                onClick={() => setShowPIModal(true)}
+                className="flex items-center gap-2 px-3 py-1.5 bg-emerald-600 text-white rounded-lg text-sm font-medium hover:bg-emerald-700 transition-all"
+              >
+                <FileText size={16} /> Create PI ({selectedIds.size})
+              </button>
+              <button 
+                onClick={deleteSelected}
+                className="flex items-center gap-2 px-3 py-1.5 bg-red-600 text-white rounded-lg text-sm font-medium hover:bg-red-700 transition-all"
+              >
+                <Trash2 size={16} /> Delete ({selectedIds.size})
+              </button>
+            </>
           )}
         </div>
 
@@ -589,13 +625,29 @@ const ProductList: React.FC<ProductListProps> = ({ products, onUpdate, onDelete,
                     )}
                   </td>
                   <td className="px-4 py-4 text-right">
-                    <div className="flex items-center justify-end gap-2" onClick={e => e.stopPropagation()}>
+                    <div className="flex items-center justify-end gap-1" onClick={e => e.stopPropagation()}>
                       <button 
-                        onClick={() => setSelectedProduct(p)}
+                        onClick={() => startEditing(p, 'name', p.name)}
                         className="p-1.5 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-all"
-                        title="View details"
+                        title="Edit product"
                       >
                         {ICONS.Edit}
+                      </button>
+                      {onCreate && (
+                        <button 
+                          onClick={() => duplicateProduct(p)}
+                          className="p-1.5 text-slate-400 hover:text-emerald-600 hover:bg-emerald-50 rounded-lg transition-all"
+                          title="Duplicate product"
+                        >
+                          <Copy size={16} />
+                        </button>
+                      )}
+                      <button 
+                        onClick={() => setSelectedProduct(p)}
+                        className="p-1.5 text-slate-400 hover:text-slate-600 hover:bg-slate-100 rounded-lg transition-all"
+                        title="View details"
+                      >
+                        {ICONS.Details}
                       </button>
                       <button 
                         onClick={() => onDelete(p.id)}
