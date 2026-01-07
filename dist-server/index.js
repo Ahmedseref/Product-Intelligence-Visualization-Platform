@@ -70471,8 +70471,10 @@ app.get("/health", (req, res) => {
   res.json({ status: "ok", timestamp: (/* @__PURE__ */ new Date()).toISOString() });
 });
 app.get("/", (req, res, next) => {
-  if (req.headers["user-agent"]?.includes("health") || req.headers["x-health-check"]) {
-    return res.status(200).send("OK");
+  const acceptHeader = req.headers["accept"] || "";
+  const isBrowser = acceptHeader.includes("text/html");
+  if (!isBrowser) {
+    return res.status(200).json({ status: "ok", service: "product-intelligence-platform" });
   }
   next();
 });
