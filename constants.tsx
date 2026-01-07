@@ -53,4 +53,4 @@ export const ICONS = {
 export const SECTORS = ['Retail', 'Industrial', 'Chemical', 'Textile', 'Food & Beverage', 'Electronics'];
 export const CATEGORIES = ['Raw Materials', 'Finished Goods', 'Components', 'Packaging'];
 export const CURRENCIES = ['USD', 'EUR', 'GBP', 'CNY', 'JPY'];
-export const UNITS = ['kg', 'ton', 'piece', 'liter', 'box', 'pallet'];
+export const UNITS = ['kg', 'ton', 'piece', 'liter', 'box', 'pallet', 'm', 'm²', 'm³', 'ft', 'ft²', 'ft³', 'inch', 'cm', 'mm', 'gallon', 'oz', 'lb', 'set', 'pair', 'roll', 'sheet', 'pack', 'carton', 'Other'];

@@ -604,13 +604,40 @@ const ProductForm: React.FC<ProductFormProps> = ({ onSubmit, onCancel, currentUs
                 </div>
                 <div className="space-y-1">
                   <label className="text-xs font-bold text-slate-500 uppercase tracking-wider">Unit</label>
-                  <select 
-                    className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-sm outline-none"
-                    value={formData.unit}
-                    onChange={e => setFormData({...formData, unit: e.target.value})}
-                  >
-                    {UNITS.map(u => <option key={u} value={u}>{u}</option>)}
-                  </select>
+                  {UNITS.includes(formData.unit) || formData.unit === '' ? (
+                    <select 
+                      className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-sm outline-none"
+                      value={UNITS.includes(formData.unit) ? formData.unit : 'Other'}
+                      onChange={e => {
+                        if (e.target.value === 'Other') {
+                          setFormData({...formData, unit: ''});
+                        } else {
+                          setFormData({...formData, unit: e.target.value});
+                        }
+                      }}
+                    >
+                      {UNITS.map(u => <option key={u} value={u}>{u}</option>)}
+                    </select>
+                  ) : (
+                    <div className="flex gap-2">
+                      <input 
+                        type="text"
+                        placeholder="Enter custom unit..."
+                        className="flex-1 bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-sm outline-none"
+                        value={formData.unit}
+                        onChange={e => setFormData({...formData, unit: e.target.value})}
+                        autoFocus
+                      />
+                      <button
+                        type="button"
+                        onClick={() => setFormData({...formData, unit: 'kg'})}
+                        className="px-3 py-2 bg-slate-200 text-slate-600 rounded-xl text-sm hover:bg-slate-300"
+                        title="Back to list"
+                      >
+                        List
+                      </button>
+                    </div>
+                  )}
                 </div>
                 <div className="space-y-1">
                   <label className="text-xs font-bold text-slate-500 uppercase tracking-wider">MOQ</label>
