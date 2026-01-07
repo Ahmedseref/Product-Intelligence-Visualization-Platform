@@ -135,6 +135,8 @@ DATABASE_URL=postgresql://user:password@host:5432/database
 - `DELETE /api/supplier-products/:supplierProductId` - Delete a supplier product
 
 ## Recent Changes
+- 2026-01-07: Fixed production deployment crash by changing server bundle output to .cjs format (ES module conflict fix)
+- 2026-01-07: Added quick health check response on root path for deployment health checks
 - 2026-01-06: Added Product Name (Manufacturer Name) field to Add Product form for capturing supplier-specific product names
 - 2026-01-06: Fixed production build by removing conflicting importmap from index.html
 - 2026-01-05: Added Product Network Visualization with interactive SVG graph showing master products and supplier branches
