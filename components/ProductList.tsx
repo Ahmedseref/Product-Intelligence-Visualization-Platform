@@ -961,7 +961,9 @@ const ProductList: React.FC<ProductListProps> = ({
                         {renderEditableCell(
                           p, 
                           'name', 
-                          <span className="text-sm font-semibold text-slate-900 group-hover:text-blue-700 transition-colors whitespace-nowrap">{p.name}</span>,
+                          <span className="text-sm font-semibold text-slate-900 group-hover:text-blue-700 transition-colors whitespace-nowrap">
+                            {p.name}{p.manufacturer ? ` (${p.manufacturer})` : ''}
+                          </span>,
                           p.name
                         )}
                       </td>
