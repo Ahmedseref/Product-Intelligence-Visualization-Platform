@@ -135,6 +135,12 @@ DATABASE_URL=postgresql://user:password@host:5432/database
 - `DELETE /api/supplier-products/:supplierProductId` - Delete a supplier product
 
 ## Recent Changes
+- 2026-01-08: Enhanced Product Inventory table with dynamic columns, column visibility toggle, and advanced filtering
+  - Removed image preview from table for cleaner data view
+  - Added separate columns: ID, Product Name, Supplier, Sector, Category, Sub-Category, Price, Currency, Unit, MOQ, Lead Time, Manufacturer, Location, Description
+  - Added "Columns" dropdown to show/hide columns with Show All/Reset options
+  - Enhanced filters: Sector, Category, Supplier, Manufacturer, Price range, Lead Time range, MOQ range
+  - All columns are sortable by clicking headers
 - 2026-01-07: Enhanced export to include all fields in separate columns (sector, category, sub-category, all hierarchy levels, technical specs, custom fields, etc.) for comprehensive data analysis
 - 2026-01-07: Added full product edit modal from Product Inventory (Edit button opens complete ProductForm)
 - 2026-01-07: Fixed production deployment crash by changing server bundle output to .cjs format (ES module conflict fix)

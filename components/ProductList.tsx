@@ -3,7 +3,7 @@ import { Product, CustomField, TreeNode, Supplier, MasterProduct, User } from '.
 import { ICONS, CURRENCIES, UNITS } from '../constants';
 import ProductDetailsModal from './ProductDetailsModal';
 import ProductForm from './ProductForm';
-import { Check, X, Download, Filter, FileText, ChevronDown, Copy, Trash2 } from 'lucide-react';
+import { Check, X, Download, Filter, FileText, ChevronDown, Copy, Trash2, Columns, Eye, EyeOff } from 'lucide-react';
 
 interface ProductListProps {
   products: Product[];
@@ -26,10 +26,42 @@ interface EditingCell {
 
 interface FilterState {
   sector: string;
+  category: string;
+  supplier: string;
+  manufacturer: string;
   priceMin: string;
   priceMax: string;
+  leadTimeMin: string;
   leadTimeMax: string;
+  moqMin: string;
+  moqMax: string;
 }
+
+type ColumnKey = 'id' | 'name' | 'supplier' | 'sector' | 'category' | 'subCategory' | 'price' | 'currency' | 'unit' | 'moq' | 'leadTime' | 'manufacturer' | 'location' | 'description';
+
+interface ColumnConfig {
+  key: ColumnKey;
+  label: string;
+  sortable: boolean;
+  defaultVisible: boolean;
+}
+
+const ALL_COLUMNS: ColumnConfig[] = [
+  { key: 'id', label: 'ID', sortable: true, defaultVisible: true },
+  { key: 'name', label: 'Product Name', sortable: true, defaultVisible: true },
+  { key: 'supplier', label: 'Supplier', sortable: true, defaultVisible: true },
+  { key: 'sector', label: 'Sector', sortable: true, defaultVisible: true },
+  { key: 'category', label: 'Category', sortable: true, defaultVisible: true },
+  { key: 'subCategory', label: 'Sub-Category', sortable: true, defaultVisible: false },
+  { key: 'price', label: 'Price', sortable: true, defaultVisible: true },
+  { key: 'currency', label: 'Currency', sortable: true, defaultVisible: false },
+  { key: 'unit', label: 'Unit', sortable: true, defaultVisible: false },
+  { key: 'moq', label: 'MOQ', sortable: true, defaultVisible: true },
+  { key: 'leadTime', label: 'Lead Time', sortable: true, defaultVisible: true },
+  { key: 'manufacturer', label: 'Manufacturer', sortable: true, defaultVisible: false },
+  { key: 'location', label: 'Location', sortable: true, defaultVisible: false },
+  { key: 'description', label: 'Description', sortable: false, defaultVisible: false },
+];
 
 const ProductList: React.FC<ProductListProps> = ({ 
   products, onUpdate, onDelete, onCreate, customFields, treeNodes,
@@ -37,20 +69,30 @@ const ProductList: React.FC<ProductListProps> = ({
 }) => {
   const [selectedProduct, setSelectedProduct] = useState<Product | null>(null);
   const [editingProduct, setEditingProduct] = useState<Product | null>(null);
-  const [sortField, setSortField] = useState<keyof Product>('name');
+  const [sortField, setSortField] = useState<ColumnKey>('name');
   const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('asc');
   const [editingCell, setEditingCell] = useState<EditingCell | null>(null);
   const [editValue, setEditValue] = useState<string>('');
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [showFilterPanel, setShowFilterPanel] = useState(false);
   const [showExportMenu, setShowExportMenu] = useState(false);
+  const [showColumnsMenu, setShowColumnsMenu] = useState(false);
   const [showPIModal, setShowPIModal] = useState(false);
   const [piName, setPIName] = useState('');
+  const [visibleColumns, setVisibleColumns] = useState<Set<ColumnKey>>(
+    new Set(ALL_COLUMNS.filter(c => c.defaultVisible).map(c => c.key))
+  );
   const [filters, setFilters] = useState<FilterState>({
     sector: '',
+    category: '',
+    supplier: '',
+    manufacturer: '',
     priceMin: '',
     priceMax: '',
-    leadTimeMax: ''
+    leadTimeMin: '',
+    leadTimeMax: '',
+    moqMin: '',
+    moqMax: ''
   });
   const inputRef = useRef<HTMLInputElement>(null);
   const skipBlurRef = useRef(false);
@@ -62,13 +104,31 @@ const ProductList: React.FC<ProductListProps> = ({
     }
   }, [editingCell]);
 
-  const handleSort = (field: keyof Product) => {
+  const handleSort = (field: ColumnKey) => {
     if (sortField === field) {
       setSortOrder(sortOrder === 'asc' ? 'desc' : 'asc');
     } else {
       setSortField(field);
       setSortOrder('asc');
     }
+  };
+
+  const toggleColumn = (key: ColumnKey) => {
+    const newSet = new Set(visibleColumns);
+    if (newSet.has(key)) {
+      newSet.delete(key);
+    } else {
+      newSet.add(key);
+    }
+    setVisibleColumns(newSet);
+  };
+
+  const showAllColumns = () => {
+    setVisibleColumns(new Set(ALL_COLUMNS.map(c => c.key)));
+  };
+
+  const resetColumns = () => {
+    setVisibleColumns(new Set(ALL_COLUMNS.filter(c => c.defaultVisible).map(c => c.key)));
   };
 
   const getProductPathString = (nodeId: string) => {
@@ -211,18 +271,49 @@ const ProductList: React.FC<ProductListProps> = ({
   };
 
   const sectors = [...new Set(treeNodes.filter(n => !n.parentId).map(n => n.name))];
+  const categories = [...new Set(products.map(p => getHierarchyLevels(p.nodeId).category).filter(Boolean))];
+  const uniqueSuppliers = [...new Set(products.map(p => p.supplier).filter(Boolean))];
+  const manufacturers = [...new Set(products.map(p => p.manufacturer).filter(Boolean))];
 
   const filteredProducts = products.filter(p => {
-    if (filters.sector && getProductSector(p.nodeId) !== filters.sector) return false;
+    const hierarchy = getHierarchyLevels(p.nodeId);
+    if (filters.sector && hierarchy.sector !== filters.sector) return false;
+    if (filters.category && hierarchy.category !== filters.category) return false;
+    if (filters.supplier && p.supplier !== filters.supplier) return false;
+    if (filters.manufacturer && p.manufacturer !== filters.manufacturer) return false;
     if (filters.priceMin && p.price < parseFloat(filters.priceMin)) return false;
     if (filters.priceMax && p.price > parseFloat(filters.priceMax)) return false;
+    if (filters.leadTimeMin && p.leadTime < parseInt(filters.leadTimeMin)) return false;
     if (filters.leadTimeMax && p.leadTime > parseInt(filters.leadTimeMax)) return false;
+    if (filters.moqMin && p.moq < parseInt(filters.moqMin)) return false;
+    if (filters.moqMax && p.moq > parseInt(filters.moqMax)) return false;
     return true;
   });
 
+  const getSortValue = (p: Product, field: ColumnKey): string | number => {
+    const hierarchy = getHierarchyLevels(p.nodeId);
+    switch (field) {
+      case 'id': return p.id;
+      case 'name': return p.name;
+      case 'supplier': return p.supplier;
+      case 'sector': return hierarchy.sector;
+      case 'category': return hierarchy.category;
+      case 'subCategory': return hierarchy.subCategory;
+      case 'price': return p.price;
+      case 'currency': return p.currency;
+      case 'unit': return p.unit;
+      case 'moq': return p.moq;
+      case 'leadTime': return p.leadTime;
+      case 'manufacturer': return p.manufacturer || '';
+      case 'location': return p.manufacturingLocation || '';
+      case 'description': return p.description || '';
+      default: return '';
+    }
+  };
+
   const sortedProducts = [...filteredProducts].sort((a, b) => {
-    const valA = a[sortField];
-    const valB = b[sortField];
+    const valA = getSortValue(a, sortField);
+    const valB = getSortValue(b, sortField);
     if (typeof valA === 'string' && typeof valB === 'string') {
       return sortOrder === 'asc' ? valA.localeCompare(valB) : valB.localeCompare(valA);
     }
@@ -444,10 +535,23 @@ const ProductList: React.FC<ProductListProps> = ({
   };
 
   const clearFilters = () => {
-    setFilters({ sector: '', priceMin: '', priceMax: '', leadTimeMax: '' });
+    setFilters({ 
+      sector: '', 
+      category: '',
+      supplier: '',
+      manufacturer: '',
+      priceMin: '', 
+      priceMax: '', 
+      leadTimeMin: '',
+      leadTimeMax: '',
+      moqMin: '',
+      moqMax: ''
+    });
   };
 
-  const hasActiveFilters = filters.sector || filters.priceMin || filters.priceMax || filters.leadTimeMax;
+  const hasActiveFilters = filters.sector || filters.category || filters.supplier || filters.manufacturer || 
+    filters.priceMin || filters.priceMax || filters.leadTimeMin || filters.leadTimeMax || 
+    filters.moqMin || filters.moqMax;
 
   const duplicateProduct = (product: Product) => {
     if (!onCreate) return;
@@ -540,57 +644,128 @@ const ProductList: React.FC<ProductListProps> = ({
             </button>
             
             {showFilterPanel && (
-              <div className="absolute top-full left-0 mt-2 bg-white border border-slate-200 rounded-xl shadow-lg p-4 z-20 w-72">
-                <div className="space-y-4">
-                  <div>
-                    <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Sector</label>
-                    <select 
-                      value={filters.sector}
-                      onChange={e => setFilters({...filters, sector: e.target.value})}
-                      className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm"
-                    >
-                      <option value="">All Sectors</option>
-                      {sectors.map(s => <option key={s} value={s}>{s}</option>)}
-                    </select>
+              <div className="absolute top-full left-0 mt-2 bg-white border border-slate-200 rounded-xl shadow-lg p-4 z-20 w-80 max-h-[70vh] overflow-y-auto">
+                <div className="space-y-3">
+                  <div className="grid grid-cols-2 gap-2">
+                    <div>
+                      <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Sector</label>
+                      <select 
+                        value={filters.sector}
+                        onChange={e => setFilters({...filters, sector: e.target.value})}
+                        className="w-full px-2 py-1.5 border border-slate-200 rounded-lg text-sm"
+                      >
+                        <option value="">All</option>
+                        {sectors.map(s => <option key={s} value={s}>{s}</option>)}
+                      </select>
+                    </div>
+                    <div>
+                      <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Category</label>
+                      <select 
+                        value={filters.category}
+                        onChange={e => setFilters({...filters, category: e.target.value})}
+                        className="w-full px-2 py-1.5 border border-slate-200 rounded-lg text-sm"
+                      >
+                        <option value="">All</option>
+                        {categories.map(c => <option key={c} value={c}>{c}</option>)}
+                      </select>
+                    </div>
                   </div>
                   <div className="grid grid-cols-2 gap-2">
                     <div>
-                      <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Min Price</label>
+                      <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Supplier</label>
+                      <select 
+                        value={filters.supplier}
+                        onChange={e => setFilters({...filters, supplier: e.target.value})}
+                        className="w-full px-2 py-1.5 border border-slate-200 rounded-lg text-sm"
+                      >
+                        <option value="">All</option>
+                        {uniqueSuppliers.map(s => <option key={s} value={s}>{s}</option>)}
+                      </select>
+                    </div>
+                    <div>
+                      <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Manufacturer</label>
+                      <select 
+                        value={filters.manufacturer}
+                        onChange={e => setFilters({...filters, manufacturer: e.target.value})}
+                        className="w-full px-2 py-1.5 border border-slate-200 rounded-lg text-sm"
+                      >
+                        <option value="">All</option>
+                        {manufacturers.map(m => <option key={m} value={m}>{m}</option>)}
+                      </select>
+                    </div>
+                  </div>
+                  <div className="grid grid-cols-2 gap-2">
+                    <div>
+                      <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Price Min</label>
                       <input 
                         type="number"
                         value={filters.priceMin}
                         onChange={e => setFilters({...filters, priceMin: e.target.value})}
-                        className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm"
+                        className="w-full px-2 py-1.5 border border-slate-200 rounded-lg text-sm"
                         placeholder="0"
                       />
                     </div>
                     <div>
-                      <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Max Price</label>
+                      <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Price Max</label>
                       <input 
                         type="number"
                         value={filters.priceMax}
                         onChange={e => setFilters({...filters, priceMax: e.target.value})}
-                        className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm"
+                        className="w-full px-2 py-1.5 border border-slate-200 rounded-lg text-sm"
                         placeholder="∞"
                       />
                     </div>
                   </div>
-                  <div>
-                    <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Max Lead Time (days)</label>
-                    <input 
-                      type="number"
-                      value={filters.leadTimeMax}
-                      onChange={e => setFilters({...filters, leadTimeMax: e.target.value})}
-                      className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm"
-                      placeholder="∞"
-                    />
+                  <div className="grid grid-cols-2 gap-2">
+                    <div>
+                      <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Lead Time Min</label>
+                      <input 
+                        type="number"
+                        value={filters.leadTimeMin}
+                        onChange={e => setFilters({...filters, leadTimeMin: e.target.value})}
+                        className="w-full px-2 py-1.5 border border-slate-200 rounded-lg text-sm"
+                        placeholder="0"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Lead Time Max</label>
+                      <input 
+                        type="number"
+                        value={filters.leadTimeMax}
+                        onChange={e => setFilters({...filters, leadTimeMax: e.target.value})}
+                        className="w-full px-2 py-1.5 border border-slate-200 rounded-lg text-sm"
+                        placeholder="∞"
+                      />
+                    </div>
+                  </div>
+                  <div className="grid grid-cols-2 gap-2">
+                    <div>
+                      <label className="block text-xs font-bold text-slate-500 uppercase mb-1">MOQ Min</label>
+                      <input 
+                        type="number"
+                        value={filters.moqMin}
+                        onChange={e => setFilters({...filters, moqMin: e.target.value})}
+                        className="w-full px-2 py-1.5 border border-slate-200 rounded-lg text-sm"
+                        placeholder="0"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-xs font-bold text-slate-500 uppercase mb-1">MOQ Max</label>
+                      <input 
+                        type="number"
+                        value={filters.moqMax}
+                        onChange={e => setFilters({...filters, moqMax: e.target.value})}
+                        className="w-full px-2 py-1.5 border border-slate-200 rounded-lg text-sm"
+                        placeholder="∞"
+                      />
+                    </div>
                   </div>
                   <div className="flex gap-2 pt-2 border-t border-slate-100">
                     <button 
                       onClick={clearFilters}
                       className="flex-1 px-3 py-2 text-sm text-slate-600 hover:bg-slate-50 rounded-lg"
                     >
-                      Clear
+                      Clear All
                     </button>
                     <button 
                       onClick={() => setShowFilterPanel(false)}
@@ -600,6 +775,55 @@ const ProductList: React.FC<ProductListProps> = ({
                     </button>
                   </div>
                 </div>
+              </div>
+            )}
+          </div>
+
+          <div className="relative">
+            <button 
+              onClick={() => setShowColumnsMenu(!showColumnsMenu)}
+              className="flex items-center gap-2 px-3 py-1.5 bg-white border border-slate-200 rounded-lg text-sm font-medium text-slate-700 hover:bg-slate-50 transition-all"
+            >
+              <Columns size={16} /> Columns
+              <ChevronDown size={14} />
+            </button>
+            
+            {showColumnsMenu && (
+              <div className="absolute top-full left-0 mt-2 bg-white border border-slate-200 rounded-xl shadow-lg py-2 z-20 w-56 max-h-80 overflow-y-auto">
+                <div className="px-3 py-2 border-b border-slate-100 flex gap-2">
+                  <button 
+                    onClick={showAllColumns}
+                    className="text-xs text-blue-600 hover:underline"
+                  >
+                    Show All
+                  </button>
+                  <span className="text-slate-300">|</span>
+                  <button 
+                    onClick={resetColumns}
+                    className="text-xs text-slate-500 hover:underline"
+                  >
+                    Reset
+                  </button>
+                </div>
+                {ALL_COLUMNS.map(col => (
+                  <label 
+                    key={col.key}
+                    className="flex items-center gap-2 px-3 py-2 hover:bg-slate-50 cursor-pointer"
+                  >
+                    <input 
+                      type="checkbox"
+                      checked={visibleColumns.has(col.key)}
+                      onChange={() => toggleColumn(col.key)}
+                      className="w-4 h-4 rounded border-slate-300 text-blue-600 focus:ring-blue-500"
+                    />
+                    <span className="text-sm text-slate-700">{col.label}</span>
+                    {visibleColumns.has(col.key) ? (
+                      <Eye size={14} className="ml-auto text-blue-500" />
+                    ) : (
+                      <EyeOff size={14} className="ml-auto text-slate-300" />
+                    )}
+                  </label>
+                ))}
               </div>
             )}
           </div>
@@ -679,10 +903,10 @@ const ProductList: React.FC<ProductListProps> = ({
 
       <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
         <div className="overflow-x-auto">
-          <table className="w-full text-left border-collapse">
+          <table className="w-full text-left border-collapse min-w-max">
             <thead>
               <tr className="bg-slate-50 border-b border-slate-200">
-                <th className="px-4 py-4 w-10">
+                <th className="px-3 py-3 w-10 sticky left-0 bg-slate-50 z-10">
                   <input 
                     type="checkbox"
                     checked={selectedIds.size === sortedProducts.length && sortedProducts.length > 0}
@@ -690,94 +914,125 @@ const ProductList: React.FC<ProductListProps> = ({
                     className="w-4 h-4 rounded border-slate-300 text-blue-600 focus:ring-blue-500"
                   />
                 </th>
-                <th className="px-4 py-4 text-[10px] font-bold text-slate-500 uppercase tracking-widest cursor-pointer" onClick={() => handleSort('id')}>
-                  ID {sortField === 'id' && (sortOrder === 'asc' ? '↑' : '↓')}
-                </th>
-                <th className="px-4 py-4 text-[10px] font-bold text-slate-500 uppercase tracking-widest cursor-pointer" onClick={() => handleSort('name')}>
-                  Product {sortField === 'name' && (sortOrder === 'asc' ? '↑' : '↓')}
-                </th>
-                <th className="px-4 py-4 text-[10px] font-bold text-slate-500 uppercase tracking-widest">
-                  Hierarchy Path
-                </th>
-                <th className="px-4 py-4 text-[10px] font-bold text-slate-500 uppercase tracking-widest cursor-pointer" onClick={() => handleSort('price')}>
-                  Pricing {sortField === 'price' && (sortOrder === 'asc' ? '↑' : '↓')}
-                </th>
-                <th className="px-4 py-4 text-[10px] font-bold text-slate-500 uppercase tracking-widest cursor-pointer" onClick={() => handleSort('leadTime')}>
-                  Lead Time {sortField === 'leadTime' && (sortOrder === 'asc' ? '↑' : '↓')}
-                </th>
-                <th className="px-4 py-4 text-[10px] font-bold text-slate-500 uppercase tracking-widest text-right">
+                {ALL_COLUMNS.filter(col => visibleColumns.has(col.key)).map(col => (
+                  <th 
+                    key={col.key}
+                    className={`px-3 py-3 text-[10px] font-bold text-slate-500 uppercase tracking-widest whitespace-nowrap ${col.sortable ? 'cursor-pointer hover:bg-slate-100' : ''}`}
+                    onClick={() => col.sortable && handleSort(col.key)}
+                  >
+                    {col.label} {col.sortable && sortField === col.key && (sortOrder === 'asc' ? '↑' : '↓')}
+                  </th>
+                ))}
+                <th className="px-3 py-3 text-[10px] font-bold text-slate-500 uppercase tracking-widest text-right sticky right-0 bg-slate-50 z-10">
                   Actions
                 </th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100">
-              {sortedProducts.map((p) => (
-                <tr 
-                  key={p.id} 
-                  className={`group hover:bg-blue-50/30 transition-colors cursor-pointer ${selectedIds.has(p.id) ? 'bg-blue-50/50' : ''}`}
-                  onClick={() => !editingCell && setSelectedProduct(p)}
-                >
-                  <td className="px-4 py-4" onClick={e => e.stopPropagation()}>
-                    <input 
-                      type="checkbox"
-                      checked={selectedIds.has(p.id)}
-                      onChange={() => toggleSelection(p.id)}
-                      className="w-4 h-4 rounded border-slate-300 text-blue-600 focus:ring-blue-500"
-                    />
-                  </td>
-                  <td className="px-4 py-4 text-xs font-mono font-bold text-blue-600">{p.id}</td>
-                  <td className="px-4 py-4">
-                    <div className="flex items-center gap-3">
-                      <img src={p.imageUrl} alt={p.name} className="w-10 h-10 rounded-lg object-cover bg-slate-100 border border-slate-200 flex-shrink-0" />
-                      <div className="min-w-0">
+              {sortedProducts.map((p) => {
+                const hierarchy = getHierarchyLevels(p.nodeId);
+                return (
+                  <tr 
+                    key={p.id} 
+                    className={`group hover:bg-blue-50/30 transition-colors cursor-pointer ${selectedIds.has(p.id) ? 'bg-blue-50/50' : ''}`}
+                    onClick={() => !editingCell && setSelectedProduct(p)}
+                  >
+                    <td className="px-3 py-3 sticky left-0 bg-white group-hover:bg-blue-50/30 z-10" onClick={e => e.stopPropagation()}>
+                      <input 
+                        type="checkbox"
+                        checked={selectedIds.has(p.id)}
+                        onChange={() => toggleSelection(p.id)}
+                        className="w-4 h-4 rounded border-slate-300 text-blue-600 focus:ring-blue-500"
+                      />
+                    </td>
+                    {visibleColumns.has('id') && (
+                      <td className="px-3 py-3 text-xs font-mono font-bold text-blue-600 whitespace-nowrap">{p.id}</td>
+                    )}
+                    {visibleColumns.has('name') && (
+                      <td className="px-3 py-3">
                         {renderEditableCell(
                           p, 
                           'name', 
-                          <span className="text-sm font-semibold text-slate-900 group-hover:text-blue-700 transition-colors block truncate">{p.name}</span>,
+                          <span className="text-sm font-semibold text-slate-900 group-hover:text-blue-700 transition-colors whitespace-nowrap">{p.name}</span>,
                           p.name
                         )}
+                      </td>
+                    )}
+                    {visibleColumns.has('supplier') && (
+                      <td className="px-3 py-3">
                         {renderEditableCell(
                           p,
                           'supplier',
-                          <span className="text-[10px] text-slate-500 truncate block">{p.supplier}</span>,
+                          <span className="text-sm text-slate-600 whitespace-nowrap">{p.supplier}</span>,
                           p.supplier
                         )}
-                      </div>
-                    </div>
-                  </td>
-                  <td className="px-4 py-4">
-                    <span className="text-[10px] font-medium text-slate-400 block max-w-[200px] truncate" title={getProductPathString(p.nodeId)}>
-                      {getProductPathString(p.nodeId) || 'Uncategorized'}
-                    </span>
-                  </td>
-                  <td className="px-4 py-4">
-                    <div className="space-y-1">
-                      {renderEditableCell(
-                        p,
-                        'price',
-                        <div className="text-sm font-bold text-slate-900">{p.currency} {p.price.toLocaleString()}</div>,
-                        p.price
-                      )}
-                      {renderEditableCell(
-                        p,
-                        'moq',
-                        <div className="text-[10px] text-slate-400">Min. {p.moq} {p.unit}</div>,
-                        p.moq
-                      )}
-                    </div>
-                  </td>
-                  <td className="px-4 py-4">
-                    {renderEditableCell(
-                      p,
-                      'leadTime',
-                      <div className="flex items-center gap-2">
-                        <span className={`w-2 h-2 rounded-full ${p.leadTime > 30 ? 'bg-amber-400' : 'bg-emerald-400'}`}></span>
-                        <span className="text-xs text-slate-600">{p.leadTime}d</span>
-                      </div>,
-                      p.leadTime
+                      </td>
                     )}
-                  </td>
-                  <td className="px-4 py-4 text-right">
+                    {visibleColumns.has('sector') && (
+                      <td className="px-3 py-3 text-sm text-slate-600 whitespace-nowrap">{hierarchy.sector || '-'}</td>
+                    )}
+                    {visibleColumns.has('category') && (
+                      <td className="px-3 py-3 text-sm text-slate-600 whitespace-nowrap">{hierarchy.category || '-'}</td>
+                    )}
+                    {visibleColumns.has('subCategory') && (
+                      <td className="px-3 py-3 text-sm text-slate-600 whitespace-nowrap">{hierarchy.subCategory || '-'}</td>
+                    )}
+                    {visibleColumns.has('price') && (
+                      <td className="px-3 py-3">
+                        {renderEditableCell(
+                          p,
+                          'price',
+                          <span className="text-sm font-semibold text-slate-900 whitespace-nowrap">{p.price.toLocaleString()}</span>,
+                          p.price
+                        )}
+                      </td>
+                    )}
+                    {visibleColumns.has('currency') && (
+                      <td className="px-3 py-3 text-sm text-slate-600 whitespace-nowrap">{p.currency}</td>
+                    )}
+                    {visibleColumns.has('unit') && (
+                      <td className="px-3 py-3 text-sm text-slate-600 whitespace-nowrap">{p.unit}</td>
+                    )}
+                    {visibleColumns.has('moq') && (
+                      <td className="px-3 py-3">
+                        {renderEditableCell(
+                          p,
+                          'moq',
+                          <span className="text-sm text-slate-600 whitespace-nowrap">{p.moq}</span>,
+                          p.moq
+                        )}
+                      </td>
+                    )}
+                    {visibleColumns.has('leadTime') && (
+                      <td className="px-3 py-3">
+                        {renderEditableCell(
+                          p,
+                          'leadTime',
+                          <div className="flex items-center gap-2 whitespace-nowrap">
+                            <span className={`w-2 h-2 rounded-full ${p.leadTime > 30 ? 'bg-amber-400' : 'bg-emerald-400'}`}></span>
+                            <span className="text-sm text-slate-600">{p.leadTime}d</span>
+                          </div>,
+                          p.leadTime
+                        )}
+                      </td>
+                    )}
+                    {visibleColumns.has('manufacturer') && (
+                      <td className="px-3 py-3">
+                        {renderEditableCell(
+                          p,
+                          'manufacturer',
+                          <span className="text-sm text-slate-600 whitespace-nowrap">{p.manufacturer || '-'}</span>,
+                          p.manufacturer || ''
+                        )}
+                      </td>
+                    )}
+                    {visibleColumns.has('location') && (
+                      <td className="px-3 py-3 text-sm text-slate-600 whitespace-nowrap">{p.manufacturingLocation || '-'}</td>
+                    )}
+                    {visibleColumns.has('description') && (
+                      <td className="px-3 py-3 text-sm text-slate-500 max-w-xs truncate" title={p.description}>{p.description || '-'}</td>
+                    )}
+                    <td className="px-3 py-3 text-right sticky right-0 bg-white group-hover:bg-blue-50/30 z-10">
                     <div className="flex items-center justify-end gap-1" onClick={e => e.stopPropagation()}>
                       <button 
                         onClick={() => currentUser ? setEditingProduct(p) : startEditing(p, 'name', p.name)}
@@ -812,10 +1067,11 @@ const ProductList: React.FC<ProductListProps> = ({
                     </div>
                   </td>
                 </tr>
-              ))}
+                );
+              })}
               {sortedProducts.length === 0 && (
                 <tr>
-                  <td colSpan={7} className="px-6 py-20 text-center">
+                  <td colSpan={visibleColumns.size + 2} className="px-6 py-20 text-center">
                     <div className="flex flex-col items-center gap-3 text-slate-400">
                       <div className="w-12 h-12 bg-slate-50 rounded-full flex items-center justify-center">
                         {ICONS.Inventory}
@@ -957,12 +1213,13 @@ const ProductList: React.FC<ProductListProps> = ({
         </div>
       )}
 
-      {(showFilterPanel || showExportMenu) && (
+      {(showFilterPanel || showExportMenu || showColumnsMenu) && (
         <div 
           className="fixed inset-0 z-10" 
           onClick={() => {
             setShowFilterPanel(false);
             setShowExportMenu(false);
+            setShowColumnsMenu(false);
           }}
         />
       )}
