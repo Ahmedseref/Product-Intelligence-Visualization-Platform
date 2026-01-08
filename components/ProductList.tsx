@@ -37,7 +37,7 @@ interface FilterState {
   moqMax: string;
 }
 
-type ColumnKey = 'id' | 'name' | 'supplier' | 'sector' | 'category' | 'subCategory' | 'price' | 'currency' | 'unit' | 'moq' | 'leadTime' | 'manufacturer' | 'location' | 'description';
+type ColumnKey = 'id' | 'name' | 'masterProduct' | 'supplier' | 'sector' | 'category' | 'subCategory' | 'price' | 'currency' | 'unit' | 'moq' | 'leadTime' | 'manufacturer' | 'location' | 'description';
 
 interface ColumnConfig {
   key: ColumnKey;
@@ -49,6 +49,7 @@ interface ColumnConfig {
 const ALL_COLUMNS: ColumnConfig[] = [
   { key: 'id', label: 'ID', sortable: true, defaultVisible: true },
   { key: 'name', label: 'Product Name', sortable: true, defaultVisible: true },
+  { key: 'masterProduct', label: 'Master Product', sortable: true, defaultVisible: true },
   { key: 'supplier', label: 'Supplier', sortable: true, defaultVisible: true },
   { key: 'sector', label: 'Sector', sortable: true, defaultVisible: true },
   { key: 'category', label: 'Category', sortable: true, defaultVisible: true },
@@ -290,11 +291,18 @@ const ProductList: React.FC<ProductListProps> = ({
     return true;
   });
 
+  const getMasterProductName = (masterProductId?: string) => {
+    if (!masterProductId) return '';
+    const mp = masterProducts.find(m => m.id === masterProductId);
+    return mp?.name || '';
+  };
+
   const getSortValue = (p: Product, field: ColumnKey): string | number => {
     const hierarchy = getHierarchyLevels(p.nodeId);
     switch (field) {
       case 'id': return p.id;
       case 'name': return p.name;
+      case 'masterProduct': return getMasterProductName(p.masterProductId);
       case 'supplier': return p.supplier;
       case 'sector': return hierarchy.sector;
       case 'category': return hierarchy.category;
@@ -956,6 +964,11 @@ const ProductList: React.FC<ProductListProps> = ({
                           <span className="text-sm font-semibold text-slate-900 group-hover:text-blue-700 transition-colors whitespace-nowrap">{p.name}</span>,
                           p.name
                         )}
+                      </td>
+                    )}
+                    {visibleColumns.has('masterProduct') && (
+                      <td className="px-3 py-3 text-sm text-slate-600 whitespace-nowrap">
+                        {getMasterProductName(p.masterProductId) || '-'}
                       </td>
                     )}
                     {visibleColumns.has('supplier') && (

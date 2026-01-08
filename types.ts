@@ -99,6 +99,7 @@ export interface Product {
   name: string;
   supplier: string;
   supplierId?: string;
+  masterProductId?: string;
   nodeId: string; // Linked to the tree
   manufacturer: string;
   manufacturingLocation: string;
