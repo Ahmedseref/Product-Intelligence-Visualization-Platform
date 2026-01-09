@@ -703,7 +703,7 @@ const ProductList: React.FC<ProductListProps> = ({
     return (
       <div 
         className={`cursor-text hover:bg-blue-50 hover:ring-1 hover:ring-blue-200 rounded px-1 py-0.5 transition-all ${className || ''}`}
-        onDoubleClick={(e) => {
+        onClick={(e) => {
           e.stopPropagation();
           if (clickTimeoutRef.current) {
             clearTimeout(clickTimeoutRef.current);
@@ -711,7 +711,7 @@ const ProductList: React.FC<ProductListProps> = ({
           }
           startEditing(product, field, rawValue);
         }}
-        title="Double-click to edit"
+        title="Click to edit"
       >
         {displayValue}
       </div>
