@@ -75,6 +75,7 @@ const ProductList: React.FC<ProductListProps> = ({
   const [editingCell, setEditingCell] = useState<EditingCell | null>(null);
   const [editValue, setEditValue] = useState<string>('');
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const clickTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const [showFilterPanel, setShowFilterPanel] = useState(false);
   const [showExportMenu, setShowExportMenu] = useState(false);
   const [showColumnsMenu, setShowColumnsMenu] = useState(false);
@@ -622,6 +623,10 @@ const ProductList: React.FC<ProductListProps> = ({
         className={`cursor-text hover:bg-blue-50 hover:ring-1 hover:ring-blue-200 rounded px-1 py-0.5 transition-all ${className || ''}`}
         onDoubleClick={(e) => {
           e.stopPropagation();
+          if (clickTimeoutRef.current) {
+            clearTimeout(clickTimeoutRef.current);
+            clickTimeoutRef.current = null;
+          }
           startEditing(product, field, rawValue);
         }}
         title="Double-click to edit"
@@ -943,7 +948,15 @@ const ProductList: React.FC<ProductListProps> = ({
                   <tr 
                     key={p.id} 
                     className={`group hover:bg-blue-50/30 transition-colors cursor-pointer ${selectedIds.has(p.id) ? 'bg-blue-50/50' : ''}`}
-                    onClick={() => !editingCell && setSelectedProduct(p)}
+                    onClick={() => {
+                      if (editingCell) return;
+                      if (clickTimeoutRef.current) {
+                        clearTimeout(clickTimeoutRef.current);
+                      }
+                      clickTimeoutRef.current = setTimeout(() => {
+                        setSelectedProduct(p);
+                      }, 250);
+                    }}
                   >
                     <td className="px-3 py-3 sticky left-0 bg-white group-hover:bg-blue-50/30 z-10" onClick={e => e.stopPropagation()}>
                       <input 
