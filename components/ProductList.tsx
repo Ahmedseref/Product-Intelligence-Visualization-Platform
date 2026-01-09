@@ -102,7 +102,9 @@ const ProductList: React.FC<ProductListProps> = ({
   useEffect(() => {
     if (editingCell && inputRef.current) {
       inputRef.current.focus();
-      inputRef.current.select();
+      if ('select' in inputRef.current && typeof inputRef.current.select === 'function') {
+        inputRef.current.select();
+      }
     }
   }, [editingCell]);
 
@@ -201,6 +203,8 @@ const ProductList: React.FC<ProductListProps> = ({
     setEditingCell({ productId: product.id, field });
     if (field === 'supplier') {
       setEditValue(product.supplierId || '');
+    } else if (field === 'masterProduct') {
+      setEditValue(product.masterProductId || '');
     } else {
       setEditValue(String(currentValue));
     }
@@ -227,6 +231,14 @@ const ProductList: React.FC<ProductListProps> = ({
         if (selectedSupplier) {
           updatedProduct.supplier = selectedSupplier.name;
           updatedProduct.supplierId = selectedSupplier.id;
+        }
+        break;
+      case 'masterProduct':
+        const selectedMasterProduct = masterProducts.find(mp => mp.id === editValue);
+        if (selectedMasterProduct) {
+          updatedProduct.masterProductId = selectedMasterProduct.id;
+        } else if (editValue === '') {
+          updatedProduct.masterProductId = undefined;
         }
         break;
       case 'price':
@@ -613,6 +625,37 @@ const ProductList: React.FC<ProductListProps> = ({
               <option value="">Select Supplier</option>
               {suppliers.filter(s => s.isActive).map(s => (
                 <option key={s.id} value={s.id}>{s.name}</option>
+              ))}
+            </select>
+            <button 
+              onMouseDown={(e) => handleSaveClick(e, product)}
+              className="p-1 text-emerald-600 hover:bg-emerald-50 rounded"
+            >
+              <Check size={14} />
+            </button>
+            <button 
+              onMouseDown={(e) => handleCancelClick(e)}
+              className="p-1 text-red-600 hover:bg-red-50 rounded"
+            >
+              <X size={14} />
+            </button>
+          </div>
+        );
+      }
+      if (field === 'masterProduct') {
+        return (
+          <div className="flex items-center gap-1" onClick={e => e.stopPropagation()}>
+            <select
+              ref={inputRef as React.RefObject<HTMLSelectElement>}
+              value={editValue}
+              onChange={e => setEditValue(e.target.value)}
+              onKeyDown={e => handleKeyDown(e, product)}
+              onBlur={() => handleBlur(product)}
+              className="w-full px-2 py-1 text-sm border border-blue-400 rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
+            >
+              <option value="">Select Master Product</option>
+              {masterProducts.filter(mp => mp.isActive).map(mp => (
+                <option key={mp.id} value={mp.id}>{mp.name}</option>
               ))}
             </select>
             <button 
@@ -1021,8 +1064,13 @@ const ProductList: React.FC<ProductListProps> = ({
                       </td>
                     )}
                     {visibleColumns.has('masterProduct') && (
-                      <td className="px-3 py-3 text-sm text-slate-600 whitespace-nowrap">
-                        {getMasterProductName(p.masterProductId) || '-'}
+                      <td className="px-3 py-3">
+                        {renderEditableCell(
+                          p,
+                          'masterProduct',
+                          <span className="text-sm text-slate-600 whitespace-nowrap">{getMasterProductName(p.masterProductId) || '-'}</span>,
+                          p.masterProductId || ''
+                        )}
                       </td>
                     )}
                     {visibleColumns.has('supplier') && (
