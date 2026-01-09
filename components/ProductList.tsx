@@ -322,8 +322,8 @@ const ProductList: React.FC<ProductListProps> = ({
     const hierarchy = getHierarchyLevels(p.nodeId);
     switch (field) {
       case 'id': return p.id;
-      case 'name': return p.name;
-      case 'masterProduct': return getMasterProductName(p.masterProductId);
+      case 'name': return p.manufacturer || '';
+      case 'masterProduct': return getMasterProductName(p.masterProductId) || p.name || '';
       case 'supplier': return p.supplier;
       case 'sector': return hierarchy.sector;
       case 'category': return hierarchy.category;
@@ -1055,11 +1055,11 @@ const ProductList: React.FC<ProductListProps> = ({
                       <td className="px-3 py-3">
                         {renderEditableCell(
                           p, 
-                          'name', 
+                          'manufacturer', 
                           <span className="text-sm font-semibold text-slate-900 group-hover:text-blue-700 transition-colors whitespace-nowrap">
-                            {p.name}{p.manufacturer ? ` (${p.manufacturer})` : ''}
+                            {p.manufacturer || '-'}
                           </span>,
-                          p.name
+                          p.manufacturer || ''
                         )}
                       </td>
                     )}
@@ -1068,7 +1068,7 @@ const ProductList: React.FC<ProductListProps> = ({
                         {renderEditableCell(
                           p,
                           'masterProduct',
-                          <span className="text-sm text-slate-600 whitespace-nowrap">{getMasterProductName(p.masterProductId) || '-'}</span>,
+                          <span className="text-sm text-slate-600 whitespace-nowrap">{getMasterProductName(p.masterProductId) || p.name || '-'}</span>,
                           p.masterProductId || ''
                         )}
                       </td>
