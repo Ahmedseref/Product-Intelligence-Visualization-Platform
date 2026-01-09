@@ -135,6 +135,14 @@ DATABASE_URL=postgresql://user:password@host:5432/database
 - `DELETE /api/supplier-products/:supplierProductId` - Delete a supplier product
 
 ## Recent Changes
+- 2026-01-09: Added double-click inline editing to Technical Specifications in ProductForm
+  - Users can now double-click on Attribute, Value, or Unit to edit existing specs
+  - Press Enter to save, Escape to cancel, or click outside to save
+  - Visual feedback with hover highlight indicating editable cells
+- 2026-01-09: Fixed Product Inventory column display
+  - Product Name column now correctly shows supplier's specific product name (manufacturer field)
+  - Master Product column shows the base product from Master Product Catalog
+  - Sorting by Product Name now sorts by supplier product name
 - 2026-01-08: Enhanced Product Inventory table with dynamic columns, column visibility toggle, and advanced filtering
   - Removed image preview from table for cleaner data view
   - Added separate columns: ID, Product Name, Supplier, Sector, Category, Sub-Category, Price, Currency, Unit, MOQ, Lead Time, Manufacturer, Location, Description

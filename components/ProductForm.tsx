@@ -48,6 +48,8 @@ const ProductForm: React.FC<ProductFormProps> = ({ onSubmit, onCancel, currentUs
   const [newSpecName, setNewSpecName] = useState('');
   const [newSpecValue, setNewSpecValue] = useState('');
   const [newSpecUnit, setNewSpecUnit] = useState('');
+  const [editingSpec, setEditingSpec] = useState<{ specId: string; field: 'name' | 'value' | 'unit' } | null>(null);
+  const [editSpecValue, setEditSpecValue] = useState('');
   
   const [formData, setFormData] = useState<Partial<Product>>(isEditMode ? {
     ...initialProduct,
@@ -187,6 +189,28 @@ const ProductForm: React.FC<ProductFormProps> = ({ onSubmit, onCancel, currentUs
 
   const removeTechnicalSpec = (id: string) => {
     setTechnicalSpecs(technicalSpecs.filter(s => s.id !== id));
+  };
+
+  const startEditSpec = (specId: string, field: 'name' | 'value' | 'unit', currentValue: string) => {
+    setEditingSpec({ specId, field });
+    setEditSpecValue(currentValue);
+  };
+
+  const saveSpecEdit = () => {
+    if (!editingSpec) return;
+    setTechnicalSpecs(technicalSpecs.map(spec => {
+      if (spec.id === editingSpec.specId) {
+        return { ...spec, [editingSpec.field]: editSpecValue.trim() || (editingSpec.field === 'unit' ? undefined : spec[editingSpec.field]) };
+      }
+      return spec;
+    }));
+    setEditingSpec(null);
+    setEditSpecValue('');
+  };
+
+  const cancelSpecEdit = () => {
+    setEditingSpec(null);
+    setEditSpecValue('');
   };
 
   const handleCustomFieldChange = (fieldId: string, value: any) => {
@@ -502,15 +526,78 @@ const ProductForm: React.FC<ProductFormProps> = ({ onSubmit, onCancel, currentUs
                       <div className="flex-1 grid grid-cols-3 gap-4 text-sm">
                         <div>
                           <span className="text-[10px] text-slate-400 uppercase">Attribute</span>
-                          <p className="font-semibold text-slate-800">{spec.name}</p>
+                          {editingSpec?.specId === spec.id && editingSpec?.field === 'name' ? (
+                            <input
+                              type="text"
+                              autoFocus
+                              className="w-full bg-white border border-emerald-400 rounded px-2 py-1 text-sm font-semibold text-slate-800 outline-none focus:ring-2 focus:ring-emerald-500"
+                              value={editSpecValue}
+                              onChange={e => setEditSpecValue(e.target.value)}
+                              onBlur={saveSpecEdit}
+                              onKeyDown={e => {
+                                if (e.key === 'Enter') saveSpecEdit();
+                                if (e.key === 'Escape') cancelSpecEdit();
+                              }}
+                            />
+                          ) : (
+                            <p 
+                              className="font-semibold text-slate-800 cursor-pointer hover:bg-emerald-100 rounded px-1 py-0.5 -mx-1 transition-colors"
+                              onDoubleClick={() => startEditSpec(spec.id, 'name', spec.name)}
+                              title="Double-click to edit"
+                            >
+                              {spec.name}
+                            </p>
+                          )}
                         </div>
                         <div>
                           <span className="text-[10px] text-slate-400 uppercase">Value</span>
-                          <p className="font-semibold text-slate-800">{spec.value}</p>
+                          {editingSpec?.specId === spec.id && editingSpec?.field === 'value' ? (
+                            <input
+                              type="text"
+                              autoFocus
+                              className="w-full bg-white border border-emerald-400 rounded px-2 py-1 text-sm font-semibold text-slate-800 outline-none focus:ring-2 focus:ring-emerald-500"
+                              value={editSpecValue}
+                              onChange={e => setEditSpecValue(e.target.value)}
+                              onBlur={saveSpecEdit}
+                              onKeyDown={e => {
+                                if (e.key === 'Enter') saveSpecEdit();
+                                if (e.key === 'Escape') cancelSpecEdit();
+                              }}
+                            />
+                          ) : (
+                            <p 
+                              className="font-semibold text-slate-800 cursor-pointer hover:bg-emerald-100 rounded px-1 py-0.5 -mx-1 transition-colors"
+                              onDoubleClick={() => startEditSpec(spec.id, 'value', spec.value)}
+                              title="Double-click to edit"
+                            >
+                              {spec.value}
+                            </p>
+                          )}
                         </div>
                         <div>
                           <span className="text-[10px] text-slate-400 uppercase">Unit</span>
-                          <p className="font-semibold text-slate-800">{spec.unit || '-'}</p>
+                          {editingSpec?.specId === spec.id && editingSpec?.field === 'unit' ? (
+                            <input
+                              type="text"
+                              autoFocus
+                              className="w-full bg-white border border-emerald-400 rounded px-2 py-1 text-sm font-semibold text-slate-800 outline-none focus:ring-2 focus:ring-emerald-500"
+                              value={editSpecValue}
+                              onChange={e => setEditSpecValue(e.target.value)}
+                              onBlur={saveSpecEdit}
+                              onKeyDown={e => {
+                                if (e.key === 'Enter') saveSpecEdit();
+                                if (e.key === 'Escape') cancelSpecEdit();
+                              }}
+                            />
+                          ) : (
+                            <p 
+                              className="font-semibold text-slate-800 cursor-pointer hover:bg-emerald-100 rounded px-1 py-0.5 -mx-1 transition-colors"
+                              onDoubleClick={() => startEditSpec(spec.id, 'unit', spec.unit || '')}
+                              title="Double-click to edit"
+                            >
+                              {spec.unit || '-'}
+                            </p>
+                          )}
                         </div>
                       </div>
                       <button 
