@@ -199,7 +199,11 @@ const ProductList: React.FC<ProductListProps> = ({
 
   const startEditing = (product: Product, field: string, currentValue: string | number) => {
     setEditingCell({ productId: product.id, field });
-    setEditValue(String(currentValue));
+    if (field === 'supplier') {
+      setEditValue(product.supplierId || '');
+    } else {
+      setEditValue(String(currentValue));
+    }
   };
 
   const cancelEditing = () => {
@@ -219,7 +223,11 @@ const ProductList: React.FC<ProductListProps> = ({
         updatedProduct.name = editValue;
         break;
       case 'supplier':
-        updatedProduct.supplier = editValue;
+        const selectedSupplier = suppliers.find(s => s.id === editValue);
+        if (selectedSupplier) {
+          updatedProduct.supplier = selectedSupplier.name;
+          updatedProduct.supplierId = selectedSupplier.id;
+        }
         break;
       case 'price':
         updatedProduct.price = parseFloat(editValue) || 0;
@@ -591,6 +599,37 @@ const ProductList: React.FC<ProductListProps> = ({
 
   const renderEditableCell = (product: Product, field: string, displayValue: React.ReactNode, rawValue: string | number, className?: string) => {
     if (isEditing(product.id, field)) {
+      if (field === 'supplier') {
+        return (
+          <div className="flex items-center gap-1" onClick={e => e.stopPropagation()}>
+            <select
+              ref={inputRef as React.RefObject<HTMLSelectElement>}
+              value={editValue}
+              onChange={e => setEditValue(e.target.value)}
+              onKeyDown={e => handleKeyDown(e, product)}
+              onBlur={() => handleBlur(product)}
+              className="w-full px-2 py-1 text-sm border border-blue-400 rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
+            >
+              <option value="">Select Supplier</option>
+              {suppliers.filter(s => s.isActive).map(s => (
+                <option key={s.id} value={s.id}>{s.name}</option>
+              ))}
+            </select>
+            <button 
+              onMouseDown={(e) => handleSaveClick(e, product)}
+              className="p-1 text-emerald-600 hover:bg-emerald-50 rounded"
+            >
+              <Check size={14} />
+            </button>
+            <button 
+              onMouseDown={(e) => handleCancelClick(e)}
+              className="p-1 text-red-600 hover:bg-red-50 rounded"
+            >
+              <X size={14} />
+            </button>
+          </div>
+        );
+      }
       return (
         <div className="flex items-center gap-1" onClick={e => e.stopPropagation()}>
           <input
