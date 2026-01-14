@@ -306,9 +306,11 @@ const MassImportWizard: React.FC<MassImportWizardProps> = ({ onImport, onCancel,
         const node = treeNodes.find(n => n.id === product.nodeId);
         if (node) {
           product.category = node.name;
-          let current = node;
-          while (current.parentId) {
-            current = treeNodes.find(n => n.id === current.parentId)!;
+          let current: TreeNode | undefined = node;
+          while (current && current.parentId) {
+            const parent = treeNodes.find(n => n.id === current!.parentId);
+            if (!parent) break;
+            current = parent;
           }
           product.sector = current?.name || '';
         }
