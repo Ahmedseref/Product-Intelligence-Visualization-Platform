@@ -32,7 +32,7 @@ export const masterProducts = pgTable("master_products", {
 export const supplierProducts = pgTable("supplier_products", {
   id: serial("id").primaryKey(),
   supplierProductId: varchar("supplier_product_id", { length: 100 }).notNull().unique(),
-  masterProductId: varchar("master_product_id", { length: 100 }).notNull(),
+  masterProductId: varchar("master_product_id", { length: 100 }),
   supplierId: varchar("supplier_id", { length: 100 }).notNull(),
   productName: varchar("product_name", { length: 255 }),
   formFactor: varchar("form_factor", { length: 100 }),
@@ -136,10 +136,6 @@ export const masterProductsRelations = relations(masterProducts, ({ many, one })
 }));
 
 export const supplierProductsRelations = relations(supplierProducts, ({ one, many }) => ({
-  masterProduct: one(masterProducts, {
-    fields: [supplierProducts.masterProductId],
-    references: [masterProducts.masterProductId],
-  }),
   supplier: one(suppliers, {
     fields: [supplierProducts.supplierId],
     references: [suppliers.supplierId],

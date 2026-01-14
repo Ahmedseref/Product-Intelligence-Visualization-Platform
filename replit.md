@@ -22,18 +22,17 @@ A fully functional product intelligence platform with an expandable product taxo
 - **products**: Product data linked to taxonomy nodes (legacy, kept for compatibility)
 - **custom_fields**: User-defined field configurations
 - **suppliers**: Supplier entities with contact information (S-0001 format IDs)
-- **master_products**: Base product concepts linked to taxonomy (P-0001 format IDs)
+- **master_products**: (LEGACY - unused) Base product concepts linked to taxonomy
 - **supplier_products**: Supplier-specific variants with pricing/lead time (SP-001 format IDs)
 - **attachments**: File attachments linked to products (images, PDFs, Excel, Word, certificates)
 
 ## Key Features
-- **3-Tier Product Architecture**: Suppliers > Master Products > Supplier Products
-- **Linked Add Product Form**: Product Name and Supplier fields are linked to Master Product Catalog and Suppliers respectively
-- **Product Network Visualization**: Interactive graph showing master products at top with supplier product branches below (nodes + links)
+- **2-Tier Product Architecture**: Suppliers > Products (simplified from previous 3-tier)
+- **Product Form**: Product Name field for base product, Supplier dropdown linked to Suppliers tab
+- **Analytics Charts**: Data visualization with bar, line, pie, and area charts
 - Expandable product taxonomy tree with unlimited levels
 - Full CRUD operations for categories, suppliers, and products
 - Supplier Management with contact details and status tracking
-- Master Product Catalog with taxonomy linking
 - Drag-and-drop reordering of tree nodes
 - Real-time database synchronization
 - Dashboard with analytics and visualizations
@@ -48,10 +47,8 @@ A fully functional product intelligence platform with an expandable product taxo
 │   ├── Dashboard.tsx        # Dashboard with analytics
 │   ├── ProductList.tsx      # Product inventory view
 │   ├── ProductForm.tsx      # Add/edit product form
-│   ├── Visualize.tsx        # Data visualization view (charts + network)
-│   ├── ProductNetworkGraph.tsx  # Network graph visualization
-│   ├── SupplierManager.tsx  # Supplier management UI
-│   └── MasterProductCatalog.tsx  # Master product catalog UI
+│   ├── Visualize.tsx        # Data visualization view (Analytics Charts)
+│   └── SupplierManager.tsx  # Supplier management UI
 ├── server/
 │   ├── index.ts             # Express server entry point
 │   ├── routes.ts            # API route definitions
@@ -123,25 +120,26 @@ DATABASE_URL=postgresql://user:password@host:5432/database
 - `POST /api/suppliers` - Create a new supplier
 - `PATCH /api/suppliers/:supplierId` - Update a supplier
 - `DELETE /api/suppliers/:supplierId` - Delete a supplier
-- `GET /api/master-products` - Get all master products
-- `POST /api/master-products` - Create a new master product
-- `PATCH /api/master-products/:masterProductId` - Update a master product
-- `DELETE /api/master-products/:masterProductId` - Delete a master product
 - `GET /api/supplier-products` - Get all supplier products
-- `GET /api/supplier-products/by-master/:masterProductId` - Get supplier products by master product
 - `GET /api/supplier-products/by-supplier/:supplierId` - Get supplier products by supplier
 - `POST /api/supplier-products` - Create a new supplier product
 - `PATCH /api/supplier-products/:supplierProductId` - Update a supplier product
 - `DELETE /api/supplier-products/:supplierProductId` - Delete a supplier product
 
 ## Recent Changes
+- 2026-01-14: Removed Master Product concept from the app
+  - Removed Master Product Catalog from navigation and sidebar
+  - Removed Master Product column from Product Inventory table
+  - Simplified Add Product form to use direct Product Name input instead of Master Product dropdown
+  - Removed Product Network visualization (replaced with Analytics Charts only)
+  - Removed master product API endpoints and functions
+  - Simplified to 2-tier architecture: Suppliers > Products
 - 2026-01-09: Added double-click inline editing to Technical Specifications in ProductForm
   - Users can now double-click on Attribute, Value, or Unit to edit existing specs
   - Press Enter to save, Escape to cancel, or click outside to save
   - Visual feedback with hover highlight indicating editable cells
 - 2026-01-09: Fixed Product Inventory column display
   - Product Name column now correctly shows supplier's specific product name (manufacturer field)
-  - Master Product column shows the base product from Master Product Catalog
   - Sorting by Product Name now sorts by supplier product name
 - 2026-01-08: Enhanced Product Inventory table with dynamic columns, column visibility toggle, and advanced filtering
   - Removed image preview from table for cleaner data view

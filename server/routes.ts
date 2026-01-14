@@ -302,40 +302,6 @@ export function registerRoutes(app: Express): void {
         }
       }
 
-      const existingMasterProducts = await storage.getMasterProducts();
-      if (existingMasterProducts.length === 0) {
-        const initialMasterProducts = [
-          {
-            masterProductId: 'P-0001',
-            name: 'Industrial Epoxy Resin',
-            nodeId: 'node-3',
-            description: 'High-performance epoxy resin for industrial bonding and coating applications',
-            imageUrl: 'https://picsum.photos/seed/resin/400/300',
-            isActive: true,
-          },
-          {
-            masterProductId: 'P-0002',
-            name: 'Organic Cotton Fabric',
-            nodeId: 'node-6',
-            description: 'Sustainable organic cotton fabric for apparel and home textiles',
-            imageUrl: 'https://picsum.photos/seed/cotton/400/300',
-            isActive: true,
-          },
-          {
-            masterProductId: 'P-0003',
-            name: 'Precision Microprocessor',
-            nodeId: 'node-9',
-            description: 'High-speed processing units for edge computing and IoT devices',
-            imageUrl: 'https://picsum.photos/seed/chip/400/300',
-            isActive: true,
-          },
-        ];
-
-        for (const mp of initialMasterProducts) {
-          await storage.createMasterProduct(mp);
-        }
-      }
-
       res.json({ message: "Database seeded successfully" });
     } catch (error) {
       console.error("Error seeding database:", error);
@@ -399,62 +365,6 @@ export function registerRoutes(app: Express): void {
     }
   });
 
-  app.get("/api/master-products", async (req, res) => {
-    try {
-      const masterProducts = await storage.getMasterProducts();
-      res.json(masterProducts);
-    } catch (error) {
-      console.error("Error fetching master products:", error);
-      res.status(500).json({ error: "Failed to fetch master products" });
-    }
-  });
-
-  app.get("/api/master-products/:masterProductId", async (req, res) => {
-    try {
-      const masterProduct = await storage.getMasterProduct(req.params.masterProductId);
-      if (!masterProduct) {
-        return res.status(404).json({ error: "Master product not found" });
-      }
-      res.json(masterProduct);
-    } catch (error) {
-      console.error("Error fetching master product:", error);
-      res.status(500).json({ error: "Failed to fetch master product" });
-    }
-  });
-
-  app.post("/api/master-products", async (req, res) => {
-    try {
-      const masterProduct = await storage.createMasterProduct(req.body);
-      res.status(201).json(masterProduct);
-    } catch (error) {
-      console.error("Error creating master product:", error);
-      res.status(500).json({ error: "Failed to create master product" });
-    }
-  });
-
-  app.patch("/api/master-products/:masterProductId", async (req, res) => {
-    try {
-      const masterProduct = await storage.updateMasterProduct(req.params.masterProductId, req.body);
-      if (!masterProduct) {
-        return res.status(404).json({ error: "Master product not found" });
-      }
-      res.json(masterProduct);
-    } catch (error) {
-      console.error("Error updating master product:", error);
-      res.status(500).json({ error: "Failed to update master product" });
-    }
-  });
-
-  app.delete("/api/master-products/:masterProductId", async (req, res) => {
-    try {
-      await storage.deleteMasterProduct(req.params.masterProductId);
-      res.status(204).send();
-    } catch (error) {
-      console.error("Error deleting master product:", error);
-      res.status(500).json({ error: "Failed to delete master product" });
-    }
-  });
-
   app.get("/api/supplier-products", async (req, res) => {
     try {
       const supplierProducts = await storage.getSupplierProducts();
@@ -475,16 +385,6 @@ export function registerRoutes(app: Express): void {
     } catch (error) {
       console.error("Error fetching supplier product:", error);
       res.status(500).json({ error: "Failed to fetch supplier product" });
-    }
-  });
-
-  app.get("/api/supplier-products/by-master/:masterProductId", async (req, res) => {
-    try {
-      const products = await storage.getSupplierProductsByMasterId(req.params.masterProductId);
-      res.json(products);
-    } catch (error) {
-      console.error("Error fetching supplier products by master:", error);
-      res.status(500).json({ error: "Failed to fetch supplier products" });
     }
   });
 

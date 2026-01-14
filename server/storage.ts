@@ -1,11 +1,10 @@
 import { 
   treeNodes, products, customFieldDefinitions,
-  suppliers, masterProducts, supplierProducts, attachments,
+  suppliers, supplierProducts, attachments,
   type TreeNode, type InsertTreeNode,
   type Product, type InsertProduct,
   type CustomFieldDefinition, type InsertCustomFieldDefinition,
   type Supplier, type InsertSupplier,
-  type MasterProduct, type InsertMasterProduct,
   type SupplierProduct, type InsertSupplierProduct,
   type Attachment, type InsertAttachment
 } from "@shared/schema";
@@ -142,35 +141,6 @@ export class DatabaseStorage implements IStorage {
     return result.length > 0;
   }
 
-  async getMasterProducts(): Promise<MasterProduct[]> {
-    return await db.select().from(masterProducts).orderBy(masterProducts.name);
-  }
-
-  async getMasterProduct(masterProductId: string): Promise<MasterProduct | undefined> {
-    const [mp] = await db.select().from(masterProducts).where(eq(masterProducts.masterProductId, masterProductId));
-    return mp || undefined;
-  }
-
-  async createMasterProduct(mp: InsertMasterProduct): Promise<MasterProduct> {
-    const [created] = await db.insert(masterProducts).values(mp).returning();
-    return created;
-  }
-
-  async updateMasterProduct(masterProductId: string, updates: Partial<InsertMasterProduct>): Promise<MasterProduct | undefined> {
-    const [updated] = await db
-      .update(masterProducts)
-      .set({ ...updates, updatedAt: new Date() })
-      .where(eq(masterProducts.masterProductId, masterProductId))
-      .returning();
-    return updated || undefined;
-  }
-
-  async deleteMasterProduct(masterProductId: string): Promise<boolean> {
-    await db.delete(supplierProducts).where(eq(supplierProducts.masterProductId, masterProductId));
-    const result = await db.delete(masterProducts).where(eq(masterProducts.masterProductId, masterProductId)).returning();
-    return result.length > 0;
-  }
-
   async getSupplierProducts(): Promise<SupplierProduct[]> {
     return await db.select().from(supplierProducts).orderBy(supplierProducts.createdAt);
   }
@@ -178,10 +148,6 @@ export class DatabaseStorage implements IStorage {
   async getSupplierProduct(supplierProductId: string): Promise<SupplierProduct | undefined> {
     const [sp] = await db.select().from(supplierProducts).where(eq(supplierProducts.supplierProductId, supplierProductId));
     return sp || undefined;
-  }
-
-  async getSupplierProductsByMasterId(masterProductId: string): Promise<SupplierProduct[]> {
-    return await db.select().from(supplierProducts).where(eq(supplierProducts.masterProductId, masterProductId));
   }
 
   async getSupplierProductsBySupplierId(supplierId: string): Promise<SupplierProduct[]> {

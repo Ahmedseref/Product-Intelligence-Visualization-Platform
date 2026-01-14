@@ -77,22 +77,9 @@ export interface SupplierData {
   updatedAt?: string;
 }
 
-export interface MasterProductData {
-  id?: number;
-  masterProductId: string;
-  name: string;
-  nodeId: string;
-  description?: string;
-  imageUrl?: string;
-  isActive?: boolean;
-  createdAt?: string;
-  updatedAt?: string;
-}
-
 export interface SupplierProductData {
   id?: number;
   supplierProductId: string;
-  masterProductId: string;
   supplierId: string;
   formFactor?: string;
   sku?: string;
@@ -242,47 +229,8 @@ export const api = {
     if (!res.ok) throw new Error('Failed to delete supplier');
   },
 
-  async getMasterProducts(): Promise<MasterProductData[]> {
-    const res = await fetch(`${API_BASE}/master-products`);
-    if (!res.ok) throw new Error('Failed to fetch master products');
-    return res.json();
-  },
-
-  async createMasterProduct(mp: Omit<MasterProductData, 'id'>): Promise<MasterProductData> {
-    const res = await fetch(`${API_BASE}/master-products`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(mp),
-    });
-    if (!res.ok) throw new Error('Failed to create master product');
-    return res.json();
-  },
-
-  async updateMasterProduct(masterProductId: string, updates: Partial<MasterProductData>): Promise<MasterProductData> {
-    const res = await fetch(`${API_BASE}/master-products/${masterProductId}`, {
-      method: 'PATCH',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(updates),
-    });
-    if (!res.ok) throw new Error('Failed to update master product');
-    return res.json();
-  },
-
-  async deleteMasterProduct(masterProductId: string): Promise<void> {
-    const res = await fetch(`${API_BASE}/master-products/${masterProductId}`, {
-      method: 'DELETE',
-    });
-    if (!res.ok) throw new Error('Failed to delete master product');
-  },
-
   async getSupplierProducts(): Promise<SupplierProductData[]> {
     const res = await fetch(`${API_BASE}/supplier-products`);
-    if (!res.ok) throw new Error('Failed to fetch supplier products');
-    return res.json();
-  },
-
-  async getSupplierProductsByMaster(masterProductId: string): Promise<SupplierProductData[]> {
-    const res = await fetch(`${API_BASE}/supplier-products/by-master/${masterProductId}`);
     if (!res.ok) throw new Error('Failed to fetch supplier products');
     return res.json();
   },

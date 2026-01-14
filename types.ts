@@ -45,20 +45,8 @@ export interface Supplier {
   updatedAt: string;
 }
 
-export interface MasterProduct {
-  id: string;
-  name: string;
-  nodeId: string;
-  description?: string;
-  imageUrl?: string;
-  isActive: boolean;
-  createdAt: string;
-  updatedAt: string;
-}
-
 export interface SupplierProduct {
   id: string;
-  masterProductId: string;
   supplierId: string;
   productName?: string;
   formFactor?: string;
@@ -78,7 +66,6 @@ export interface SupplierProduct {
   createdAt: string;
   updatedAt: string;
   history: HistoryEntry[];
-  masterProductName?: string;
   supplierName?: string;
   categoryName?: string;
 }
@@ -99,7 +86,6 @@ export interface Product {
   name: string;
   supplier: string;
   supplierId?: string;
-  masterProductId?: string;
   nodeId: string; // Linked to the tree
   manufacturer: string;
   manufacturingLocation: string;
@@ -138,7 +124,7 @@ export interface ChartConfig {
   aggregation: AggregationMethod;
 }
 
-export type ViewMode = 'dashboard' | 'inventory' | 'visualize' | 'add-product' | 'taxonomy-manager' | 'suppliers' | 'master-products';
+export type ViewMode = 'dashboard' | 'inventory' | 'visualize' | 'add-product' | 'taxonomy-manager' | 'suppliers';
 export type UserRole = 'Admin' | 'Editor' | 'Viewer';
 
 export interface User {

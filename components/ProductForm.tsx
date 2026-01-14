@@ -1,5 +1,5 @@
 import React, { useState, useMemo } from 'react';
-import { Product, User, CustomField, TreeNode, TechnicalSpec, Supplier, MasterProduct } from '../types';
+import { Product, User, CustomField, TreeNode, TechnicalSpec, Supplier } from '../types';
 import { CURRENCIES, UNITS, ICONS } from '../constants';
 import { Plus, Trash2, X } from 'lucide-react';
 
@@ -10,14 +10,13 @@ interface ProductFormProps {
   customFields: CustomField[];
   treeNodes: TreeNode[];
   suppliers: Supplier[];
-  masterProducts: MasterProduct[];
   onAddFieldDefinition: (field: CustomField) => void;
   onAddTreeNode: (node: TreeNode) => void;
   initialProduct?: Product;
   mode?: 'create' | 'edit';
 }
 
-const ProductForm: React.FC<ProductFormProps> = ({ onSubmit, onCancel, currentUser, customFields, treeNodes, suppliers = [], masterProducts = [], onAddFieldDefinition, onAddTreeNode, initialProduct, mode = 'create' }) => {
+const ProductForm: React.FC<ProductFormProps> = ({ onSubmit, onCancel, currentUser, customFields, treeNodes, suppliers = [], onAddFieldDefinition, onAddTreeNode, initialProduct, mode = 'create' }) => {
   const isEditMode = mode === 'edit' && initialProduct;
   
   const [showNewFieldModal, setShowNewFieldModal] = useState(false);
@@ -365,41 +364,16 @@ const ProductForm: React.FC<ProductFormProps> = ({ onSubmit, onCancel, currentUs
                
               <div className="grid grid-cols-2 gap-6">
                 <div className="space-y-1 col-span-2 sm:col-span-1">
-                  <label className="text-xs font-bold text-slate-500 uppercase tracking-wider">Master Product*</label>
-                  <select
+                  <label className="text-xs font-bold text-slate-500 uppercase tracking-wider">Product Name*</label>
+                  <input
+                    type="text"
                     required
                     className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-sm focus:ring-2 focus:ring-blue-500 outline-none transition-all"
+                    placeholder="e.g. Marble Tile, Rockwool Insulation..."
                     value={formData.name}
-                    onChange={e => {
-                      const selectedMp = masterProducts.find(mp => mp.name === e.target.value);
-                      setFormData({
-                        ...formData, 
-                        name: e.target.value,
-                        nodeId: selectedMp?.nodeId || formData.nodeId
-                      });
-                      if (selectedMp?.nodeId) {
-                        const node = treeNodes.find(n => n.id === selectedMp.nodeId);
-                        if (node) {
-                          let current = node;
-                          while (current?.parentId) {
-                            const parent = treeNodes.find(n => n.id === current?.parentId);
-                            if (!parent) break;
-                            current = parent;
-                          }
-                          if (current?.type === 'sector') setSelectedSector(current.id);
-                          const category = treeNodes.find(n => n.parentId === current?.id && (n.id === selectedMp.nodeId || treeNodes.some(c => c.parentId === n.id && c.id === selectedMp.nodeId)));
-                          if (category) setSelectedCategory(category.id);
-                          if (node.parentId && node.parentId !== current?.id) setSelectedSubcategory(selectedMp.nodeId);
-                        }
-                      }
-                    }}
-                  >
-                    <option value="">Select Master Product...</option>
-                    {masterProducts.filter(mp => mp.isActive).map(mp => (
-                      <option key={mp.id} value={mp.name}>{mp.name} ({mp.id})</option>
-                    ))}
-                  </select>
-                  <p className="text-[10px] text-slate-400 mt-1">Select from Master Product Catalog</p>
+                    onChange={e => setFormData({...formData, name: e.target.value})}
+                  />
+                  <p className="text-[10px] text-slate-400 mt-1">Base product name for this item</p>
                 </div>
                 <div className="space-y-1 col-span-2 sm:col-span-1">
                   <label className="text-xs font-bold text-slate-500 uppercase tracking-wider">Supplier Name*</label>

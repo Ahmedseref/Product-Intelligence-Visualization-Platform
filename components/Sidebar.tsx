@@ -14,7 +14,6 @@ const Sidebar: React.FC<SidebarProps> = ({ currentView, setView, user }) => {
     { id: 'dashboard', label: 'Dashboard', icon: ICONS.Dashboard },
     { id: 'taxonomy-manager', label: 'Taxonomy Builder', icon: ICONS.Tree },
     { id: 'suppliers', label: 'Suppliers', icon: ICONS.Users },
-    { id: 'master-products', label: 'Master Products', icon: ICONS.Package },
     { id: 'inventory', label: 'Product Inventory', icon: ICONS.Inventory },
     { id: 'visualize', label: 'Visualization', icon: ICONS.Visualize },
     { id: 'add-product', label: 'Add Product', icon: ICONS.Add },

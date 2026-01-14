@@ -1,5 +1,5 @@
 import React, { useState, useMemo, useEffect, useCallback } from 'react';
-import { Product, ViewMode, User, CustomField, TreeNode, Supplier, MasterProduct, SupplierProduct } from './types';
+import { Product, ViewMode, User, CustomField, TreeNode, Supplier, SupplierProduct } from './types';
 import { INITIAL_PRODUCTS, INITIAL_TREE_NODES } from './mockData';
 import { ICONS } from './constants';
 import Sidebar from './components/Sidebar';
@@ -10,7 +10,6 @@ import ProductForm from './components/ProductForm';
 import ProductTree from './components/ProductTree';
 import TaxonomyBuilder from './components/TaxonomyBuilder';
 import SupplierManager from './components/SupplierManager';
-import MasterProductCatalog from './components/MasterProductCatalog';
 import { api } from './client/api';
 
 const App: React.FC = () => {
@@ -18,7 +17,6 @@ const App: React.FC = () => {
   const [products, setProducts] = useState<Product[]>(INITIAL_PRODUCTS);
   const [treeNodes, setTreeNodes] = useState<TreeNode[]>(INITIAL_TREE_NODES);
   const [suppliers, setSuppliers] = useState<Supplier[]>([]);
-  const [masterProducts, setMasterProducts] = useState<MasterProduct[]>([]);
   const [supplierProducts, setSupplierProducts] = useState<SupplierProduct[]>([]);
   const [customFieldConfigs, setCustomFieldConfigs] = useState<CustomField[]>([]);
   const [currentUser] = useState<User>({ id: 'U-01', name: 'Admin User', role: 'Admin' });
@@ -44,12 +42,11 @@ const App: React.FC = () => {
     try {
       await retryFetch(() => api.seedDatabase(), 10, 1000);
       
-      const [nodesData, productsData, fieldsData, suppliersData, masterProductsData, supplierProductsData] = await Promise.all([
+      const [nodesData, productsData, fieldsData, suppliersData, supplierProductsData] = await Promise.all([
         api.getTreeNodes(),
         api.getProducts(),
         api.getCustomFields(),
         api.getSuppliers(),
-        api.getMasterProducts(),
         api.getSupplierProducts(),
       ]);
 
@@ -114,20 +111,8 @@ const App: React.FC = () => {
         updatedAt: s.updatedAt || new Date().toISOString(),
       })));
 
-      setMasterProducts(masterProductsData.map(mp => ({
-        id: mp.masterProductId,
-        name: mp.name,
-        nodeId: mp.nodeId,
-        description: mp.description || undefined,
-        imageUrl: mp.imageUrl || undefined,
-        isActive: mp.isActive ?? true,
-        createdAt: mp.createdAt || new Date().toISOString(),
-        updatedAt: mp.updatedAt || new Date().toISOString(),
-      })));
-
       setSupplierProducts(supplierProductsData.map(sp => ({
         id: sp.supplierProductId,
-        masterProductId: sp.masterProductId,
         supplierId: sp.supplierId,
         formFactor: sp.formFactor || undefined,
         sku: sp.sku || undefined,
@@ -315,54 +300,6 @@ const App: React.FC = () => {
     } catch (err) {
       console.error('Failed to delete supplier:', err);
       setSuppliers(prev => prev.filter(s => s.id !== id));
-    }
-  };
-
-  const addMasterProduct = async (mp: Omit<MasterProduct, 'id' | 'createdAt' | 'updatedAt'> & { id: string }) => {
-    const newMp: MasterProduct = {
-      ...mp,
-      createdAt: new Date().toISOString(),
-      updatedAt: new Date().toISOString(),
-    };
-    try {
-      await api.createMasterProduct({
-        masterProductId: newMp.id,
-        name: newMp.name,
-        nodeId: newMp.nodeId,
-        description: newMp.description,
-        imageUrl: newMp.imageUrl,
-        isActive: newMp.isActive,
-      });
-      setMasterProducts(prev => [...prev, newMp]);
-    } catch (err) {
-      console.error('Failed to add master product:', err);
-      setMasterProducts(prev => [...prev, newMp]);
-    }
-  };
-
-  const updateMasterProduct = async (id: string, updates: Partial<MasterProduct>) => {
-    try {
-      await api.updateMasterProduct(id, {
-        name: updates.name,
-        nodeId: updates.nodeId,
-        description: updates.description,
-        imageUrl: updates.imageUrl,
-        isActive: updates.isActive,
-      });
-      setMasterProducts(prev => prev.map(mp => mp.id === id ? { ...mp, ...updates, updatedAt: new Date().toISOString() } : mp));
-    } catch (err) {
-      console.error('Failed to update master product:', err);
-      setMasterProducts(prev => prev.map(mp => mp.id === id ? { ...mp, ...updates, updatedAt: new Date().toISOString() } : mp));
-    }
-  };
-
-  const deleteMasterProduct = async (id: string) => {
-    try {
-      await api.deleteMasterProduct(id);
-      setMasterProducts(prev => prev.filter(mp => mp.id !== id));
-    } catch (err) {
-      console.error('Failed to delete master product:', err);
-      setMasterProducts(prev => prev.filter(mp => mp.id !== id));
     }
   };
 
@@ -611,7 +548,6 @@ const App: React.FC = () => {
                 customFields={customFieldConfigs}
                 treeNodes={treeNodes}
                 suppliers={suppliers}
-                masterProducts={masterProducts}
                 currentUser={currentUser}
                 onAddFieldDefinition={addCustomFieldDefinition}
                 onAddTreeNode={addTreeNode}
@@ -620,7 +556,6 @@ const App: React.FC = () => {
             {viewMode === 'visualize' && (
               <Visualize 
                 products={filteredProducts}
-                masterProducts={masterProducts}
                 suppliers={suppliers}
                 supplierProducts={supplierProducts}
               />
@@ -633,7 +568,6 @@ const App: React.FC = () => {
                 customFields={customFieldConfigs}
                 treeNodes={treeNodes}
                 suppliers={suppliers}
-                masterProducts={masterProducts}
                 onAddFieldDefinition={addCustomFieldDefinition}
                 onAddTreeNode={addTreeNode}
               />
@@ -653,15 +587,6 @@ const App: React.FC = () => {
                 onAddSupplier={addSupplier}
                 onUpdateSupplier={updateSupplier}
                 onDeleteSupplier={deleteSupplier}
-              />
-            )}
-            {viewMode === 'master-products' && (
-              <MasterProductCatalog
-                masterProducts={masterProducts}
-                treeNodes={treeNodes}
-                onAddMasterProduct={addMasterProduct}
-                onUpdateMasterProduct={updateMasterProduct}
-                onDeleteMasterProduct={deleteMasterProduct}
               />
             )}
           </main>
