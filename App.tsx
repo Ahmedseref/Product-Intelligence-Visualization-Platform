@@ -263,8 +263,8 @@ const App: React.FC = () => {
     }
   };
 
-  const deleteProduct = async (id: string) => {
-    if (window.confirm('Are you sure you want to delete this product?')) {
+  const deleteProduct = async (id: string, skipConfirm = false) => {
+    if (skipConfirm || window.confirm('Are you sure you want to delete this product?')) {
       try {
         await api.deleteProduct(id);
         setProducts(prev => prev.filter(p => p.id !== id));

@@ -8,7 +8,7 @@ import { Check, X, Download, Filter, FileText, ChevronDown, Copy, Trash2, Column
 interface ProductListProps {
   products: Product[];
   onUpdate: (p: Product) => void;
-  onDelete: (id: string) => void;
+  onDelete: (id: string, skipConfirm?: boolean) => void;
   onCreate?: (p: Product) => void;
   customFields: CustomField[];
   treeNodes: TreeNode[];
@@ -586,7 +586,7 @@ const ProductList: React.FC<ProductListProps> = ({
   const deleteSelected = () => {
     if (selectedIds.size === 0) return;
     if (!confirm(`Are you sure you want to delete ${selectedIds.size} product(s)?`)) return;
-    selectedIds.forEach(id => onDelete(id));
+    selectedIds.forEach(id => onDelete(id, true));
     setSelectedIds(new Set());
   };
 
