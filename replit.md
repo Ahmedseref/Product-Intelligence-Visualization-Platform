@@ -127,6 +127,14 @@ DATABASE_URL=postgresql://user:password@host:5432/database
 - `DELETE /api/supplier-products/:supplierProductId` - Delete a supplier product
 
 ## Recent Changes
+- 2026-01-14: Added Mass Product Import wizard feature
+  - 4-step wizard: File Upload > Column Mapping > Required Fields > Review & Import
+  - Supports CSV, XLS, XLSX file formats with drag-and-drop upload
+  - Automatic column header detection with smart mapping suggestions
+  - Column mapping interface with dropdown field selection and ignore option
+  - Required fields completion with default values (Supplier, Category, Currency, Unit, MOQ, Lead Time)
+  - Preview of products before import with validation
+  - Toggle between Single Product and Mass Import modes in Add Product tab
 - 2026-01-14: Removed Master Product concept from the app
   - Removed Master Product Catalog from navigation and sidebar
   - Removed Master Product column from Product Inventory table
