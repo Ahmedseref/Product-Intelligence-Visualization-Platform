@@ -1005,11 +1005,11 @@ const ProductList: React.FC<ProductListProps> = ({
                       <td className="px-3 py-3">
                         {renderEditableCell(
                           p, 
-                          'manufacturer', 
+                          'name', 
                           <span className="text-sm font-semibold text-slate-900 group-hover:text-blue-700 transition-colors whitespace-nowrap">
-                            {p.manufacturer || '-'}
+                            {p.name || '-'}
                           </span>,
-                          p.manufacturer || ''
+                          p.name || ''
                         )}
                       </td>
                     )}
