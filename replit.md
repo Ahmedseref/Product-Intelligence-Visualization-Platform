@@ -127,6 +127,14 @@ DATABASE_URL=postgresql://user:password@host:5432/database
 - `DELETE /api/supplier-products/:supplierProductId` - Delete a supplier product
 
 ## Recent Changes
+- 2026-01-15: Added Global Floating Notes Widget
+  - Floating note panel accessible on all pages
+  - Draggable with position memory
+  - Minimize/expand functionality
+  - Add, edit, delete notes with checklist toggles
+  - Completed notes show strikethrough
+  - Persists to localStorage
+  - Syncs across browser tabs automatically
 - 2026-01-14: Added Mass Product Import wizard feature
   - 4-step wizard: File Upload > Column Mapping > Required Fields > Review & Import
   - Supports CSV, XLS, XLSX file formats with drag-and-drop upload
