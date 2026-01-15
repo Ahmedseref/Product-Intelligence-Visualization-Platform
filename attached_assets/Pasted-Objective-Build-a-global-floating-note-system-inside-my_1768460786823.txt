@@ -1,0 +1,157 @@
+Objective
+Build a global floating note system inside my web application. The notes must be accessible across all pages, routes, and tabs of the app, remaining available regardless of navigation.
+
+Core Requirements
+1. Global Floating Note Widget
+
+A note widget that:
+
+Floats above all app content
+
+Is visible and accessible on every page and tab
+
+Persists during route changes (SPA navigation)
+
+Default position: bottom-right corner
+
+Must not interfere with core app interactions
+
+2. Draggable Behavior
+
+The widget must:
+
+Be draggable anywhere on the screen
+
+Remember its last position
+
+Dragging should feel smooth and responsive
+
+3. Minimize & Expand
+
+The widget must include:
+
+Minimize button → collapses into a compact icon/bar
+
+Expand button → restores the full notes panel
+
+Minimized state:
+
+Takes minimal screen space
+
+Remains draggable and clickable
+
+Is visible across all pages
+
+4. Note Management
+
+Users must be able to:
+
+Add new notes
+
+Edit notes inline
+
+Delete notes
+
+Use checklist functionality
+
+Each note must include:
+
+Text content
+
+Checkbox (completed / not completed)
+
+Edit action
+
+Delete action
+
+5. Checklist Behavior
+
+Completed notes:
+
+Are visually distinct (e.g., strikethrough, faded)
+
+Users can toggle completion on and off
+
+6. Global Persistence
+
+Notes must persist:
+
+Across all app pages and tabs
+
+After page refresh
+
+Use localStorage (or IndexedDB if preferred)
+
+Store:
+
+Notes content
+
+Completion status
+
+Widget position
+
+Minimized / expanded state
+
+7. Multi-Tab Sync (Important)
+
+Changes in one browser tab must:
+
+Reflect automatically in other open tabs
+
+Use storage events or equivalent sync logic
+
+UI / UX Guidelines
+
+Minimal, modern UI
+
+Non-blocking overlay
+
+Smooth animations for:
+
+Dragging
+
+Adding/editing notes
+
+Minimizing / expanding
+
+Responsive for desktop and tablet
+
+Technical Constraints
+
+Implement using vanilla JavaScript or React
+
+No heavy external libraries
+
+Modular architecture:
+
+FloatingWidget component
+
+NotesManager
+
+StorageService
+
+Widget should mount at a global/root level so it persists across routes
+
+Deliverables
+
+Fully functional global floating note system
+
+Well-commented, maintainable code
+
+Easy to extend later with:
+
+Tags
+
+Search
+
+Reminders
+
+Export / import notes
+
+Optional Enhancements
+
+Keyboard shortcut to toggle widget visibility
+
+Auto-save while typing
+
+Pin important notes to top

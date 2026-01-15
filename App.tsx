@@ -11,6 +11,7 @@ import ProductTree from './components/ProductTree';
 import TaxonomyBuilder from './components/TaxonomyBuilder';
 import SupplierManager from './components/SupplierManager';
 import MassImportWizard from './components/MassImportWizard';
+import FloatingNotesWidget from './components/FloatingNotesWidget';
 import { api } from './client/api';
 
 const App: React.FC = () => {
@@ -673,6 +674,7 @@ const App: React.FC = () => {
           </main>
         </div>
       </div>
+      <FloatingNotesWidget />
     </div>
   );
 };
