@@ -603,6 +603,8 @@ const App: React.FC = () => {
                 products={filteredProducts}
                 suppliers={suppliers}
                 supplierProducts={supplierProducts}
+                treeNodes={treeNodes}
+                customFields={customFieldConfigs}
               />
             )}
             {viewMode === 'add-product' && (

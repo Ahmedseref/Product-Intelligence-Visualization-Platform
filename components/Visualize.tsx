@@ -1,22 +1,26 @@
 
 import React, { useState, useMemo } from 'react';
-import { Product, ChartType, AggregationMethod, Supplier, SupplierProduct } from '../types';
+import { Product, ChartType, AggregationMethod, Supplier, SupplierProduct, TreeNode, CustomField } from '../types';
 import { 
   BarChart, Bar, LineChart, Line, AreaChart, Area, PieChart, Pie, ScatterChart, Scatter, 
   XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, Cell 
 } from 'recharts';
 import { ICONS } from '../constants';
+import ProductHeatmap from './ProductHeatmap';
+import { BarChart3, Grid3X3 } from 'lucide-react';
 
 interface VisualizeProps {
   products: Product[];
   suppliers: Supplier[];
   supplierProducts: SupplierProduct[];
+  treeNodes?: TreeNode[];
+  customFields?: CustomField[];
 }
 
 const COLORS = ['#3b82f6', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6', '#6366f1', '#ec4899'];
 
-const Visualize: React.FC<VisualizeProps> = ({ products, suppliers = [], supplierProducts = [] }) => {
-  const [activeTab, setActiveTab] = useState<'charts'>('charts');
+const Visualize: React.FC<VisualizeProps> = ({ products, suppliers = [], supplierProducts = [], treeNodes = [], customFields = [] }) => {
+  const [activeTab, setActiveTab] = useState<'charts' | 'heatmap'>('charts');
   const [chartType, setChartType] = useState<ChartType>('bar');
   const [xAxis, setXAxis] = useState<string>('supplier');
   const [yAxis, setYAxis] = useState<string>('price');
@@ -110,9 +114,42 @@ const Visualize: React.FC<VisualizeProps> = ({ products, suppliers = [], supplie
 
   return (
     <div className="flex flex-col h-[calc(100vh-160px)] gap-6">
-      <div className="flex items-center gap-4 mb-2">
-        <h2 className="text-xl font-bold text-slate-800">Analytics Charts</h2>
+      <div className="flex items-center justify-between mb-2">
+        <h2 className="text-xl font-bold text-slate-800">Data Visualization</h2>
+        <div className="flex bg-slate-100 rounded-xl p-1">
+          <button
+            onClick={() => setActiveTab('charts')}
+            className={`flex items-center gap-2 px-4 py-2 rounded-lg font-medium text-sm transition-all ${
+              activeTab === 'charts'
+                ? 'bg-white text-blue-600 shadow-sm'
+                : 'text-slate-500 hover:text-slate-700'
+            }`}
+          >
+            <BarChart3 className="w-4 h-4" />
+            Analytics Charts
+          </button>
+          <button
+            onClick={() => setActiveTab('heatmap')}
+            className={`flex items-center gap-2 px-4 py-2 rounded-lg font-medium text-sm transition-all ${
+              activeTab === 'heatmap'
+                ? 'bg-white text-blue-600 shadow-sm'
+                : 'text-slate-500 hover:text-slate-700'
+            }`}
+          >
+            <Grid3X3 className="w-4 h-4" />
+            Usage Density Matrix
+          </button>
+        </div>
       </div>
+
+      {activeTab === 'heatmap' && (
+        <ProductHeatmap
+          products={products}
+          treeNodes={treeNodes}
+          suppliers={suppliers}
+          customFields={customFields}
+        />
+      )}
 
       {activeTab === 'charts' && (
       <div className="grid grid-cols-1 md:grid-cols-4 gap-6 flex-1 overflow-hidden">

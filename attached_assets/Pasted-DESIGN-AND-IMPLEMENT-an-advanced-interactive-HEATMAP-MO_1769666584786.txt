@@ -1,0 +1,126 @@
+DESIGN AND IMPLEMENT an advanced interactive HEATMAP MODULE called:
+
+in the Visulization tab in the navigation bar create "Product Usage Density Matrix"
+
+### Core Objective
+Create an interactive heatmap that visualizes the density of products across:
+- Y-axis → User-selected Product Categories (or Sub-Categories / Groups)
+- X-axis → User-selected Usage Areas / Industries (Application Sectors)
+
+The heatmap should dynamically update based on user selections and database content.
+
+---
+
+## Functional Requirements
+
+### 1. User Inputs (Filters Panel)
+Create a filter panel that allows:
+- Multi-select Product Scope:
+  - Sector
+  - Category
+  - Sub-Category
+  - Group
+- Multi-select Usage Areas / Industries (e.g. Industrial, Commercial, Residential, Infrastructure, Food & Beverage, Healthcare, Parking, Sports)
+- Optional filters:
+  - Supplier
+  - Manufacturer (Rename to be Brand)
+  - Price range
+  - Custom fields (from custom_field_definitions)
+
+Selections must be reactive and update the heatmap in real time.
+
+---
+
+### 2. Heatmap Structure
+- Render a matrix heatmap similar to the attached reference image.
+- Each cell represents:
+  "Number of products matching (Product Category × Usage Area)"
+
+Color scale:
+- Light color → low density
+- Dark color → high density
+- Automatically normalized based on max value in current selection
+
+Axes:
+- X-axis: Usage Areas
+- Y-axis: Product Categories / Groups (based on user drill-down level)
+
+---
+
+### 3. Hover Interaction (Critical)
+On hover over any heatmap cell, show a rich tooltip containing:
+
+- Total number of products in this cell
+- Number of unique suppliers providing these products
+- Min / Max / Avg price
+- List preview (max 5 items):
+  - Product name
+  - Supplier
+
+
+Tooltip must be performant and not block UI.
+
+---
+
+### 4. Click Interaction (Drill-Down)
+When user clicks a cell:
+- Open a modal or side panel
+- Show full product list filtered by that exact Category × Usage Area
+- Reuse existing Product Inventory table component if possible
+- Allow:
+  - Export to CSV
+  - Create Product Intelligence (PI) Report
+  - Save as preset view
+
+---
+
+### 5. Backend Logic
+Create a new analytics endpoint:
+
+Responsibilities:
+- Aggregate products by taxonomy node × usage area
+- Count:
+  - products
+  - distinct suppliers
+  - distinct brands
+- Return structured matrix data optimized for frontend rendering
+
+Use Drizzle ORM aggregation (GROUP BY).
+
+---
+
+### 6. Data Model Notes
+- Usage Areas can be:
+  - stored in product.custom_fields
+  - OR derived from taxonomy metadata
+- Design flexibly to support both
+
+---
+
+### 7. Frontend Implementation
+- Create a new React component:
+
+- Use:
+- Recharts OR custom SVG grid (preferred if Recharts heatmap is limiting)
+- Tailwind for layout
+- Must support:
+- Responsive resizing
+- Dark/light mode compatibility
+- Large datasets (1000+ products)
+
+---
+
+### 8. Performance Considerations
+- Debounce filter changes
+- Memoize computed matrix
+- Avoid N+1 queries
+- Cache heatmap results per filter set if possible
+
+---
+
+### 9. UX Expectations
+- Professional B2B analytics look
+- Clear legends and axis labels
+- Empty-state handling
+- Loading skeleton while fetching data
+- Error handling with retry
