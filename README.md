@@ -27,7 +27,8 @@ The Product Intelligence & Visualization Platform is designed to help businesses
 - **Inline Editing**: Double-click to edit node names directly
 - **CRUD Operations**: Create, read, update, and delete taxonomy nodes
 
-### 2. Product Management
+### 2. Product Management (2-Tier Architecture)
+- **Simplified Structure**: Suppliers > Products (streamlined from previous 3-tier system)
 - **Comprehensive Product Data**: Store detailed product information including:
   - Basic info (name, supplier, manufacturer)
   - Pricing (price, currency, MOQ)
@@ -38,28 +39,53 @@ The Product Intelligence & Visualization Platform is designed to help businesses
 - **History Tracking**: Track all changes made to products
 - **Image Support**: Add product images via URL
 
-### 3. Product Inventory View
+### 3. Mass Product Import Wizard
+- **4-Step Wizard**: File Upload > Column Mapping > Required Fields > Review & Import
+- **Multiple File Formats**: Supports CSV, XLS, and XLSX files
+- **Drag-and-Drop Upload**: Easy file upload with automatic format detection
+- **Smart Column Mapping**: Auto-detection of column headers with dropdown field selection
+- **Default Values**: Set default values for unmapped required fields (Supplier, Category, Currency, Unit, MOQ, Lead Time)
+- **Preview Before Import**: Review first 5 products before final import
+
+### 4. Product Inventory View
+- **Dynamic Columns**: Show/hide columns with visibility toggle and Show All/Reset options
 - **Data Grid Display**: View all products in a sortable, filterable table
 - **Inline Editing**: Double-click cells to edit values directly
 - **Bulk Selection**: Select multiple products for batch operations
-- **Filtering**: Filter by sector, price range, and lead time
-- **Export**: Export data to CSV or JSON format (all or selected products)
+- **Advanced Filtering**: Filter by Sector, Category, Supplier, Manufacturer, Price range, Lead Time range, MOQ range
+- **Export**: Export data to CSV or JSON with all fields in separate columns
+- **Mass Delete**: Delete multiple selected products with single confirmation
 
-### 4. Dashboard & Analytics
-- **Overview Statistics**: Total products, categories, average prices
+### 5. Dashboard & Analytics
+- **Overview Statistics**: Total products, active suppliers, average lead time, total base value
 - **Visual Charts**: Bar charts, pie charts, and line graphs
-- **Recent Activity**: Track recent changes and additions
 - **Category Distribution**: See product distribution across taxonomy
+- **Price Distribution**: Analyze pricing patterns across categories
 
-### 5. Product Intelligence (PI) Reports
+### 6. Product Intelligence (PI) Reports
 - **Generate Reports**: Create PI reports from selected products
 - **Summary Analytics**: Automatic calculation of averages, ranges, and distributions
 - **Comparative Analysis**: Compare products across different metrics
 
-### 6. Data Visualization
-- **Multiple Chart Types**: Bar, line, pie, scatter, and area charts
+### 7. Data Visualization
+- **Analytics Charts**: Bar, line, pie, scatter, and area charts
 - **Customizable Views**: Configure axes and aggregation methods
 - **Interactive Charts**: Hover for details, click for drill-down
+
+### 8. Supplier Management
+- **Supplier Directory**: Manage supplier entities with contact information
+- **Auto-Generated IDs**: Suppliers use S-0001 format IDs
+- **Contact Details**: Store name, country, email, phone, address, website
+- **Status Tracking**: Track active/inactive supplier status
+
+### 9. Global Floating Notes Widget
+- **Always Accessible**: Floating note panel visible on all pages
+- **Draggable**: Move anywhere on screen with position memory
+- **Minimize/Expand**: Collapse to icon or expand to full panel
+- **Note Management**: Add, edit, delete notes with checklist toggles
+- **Completion Tracking**: Mark notes complete with strikethrough display
+- **Persistence**: Notes saved to localStorage, survives page refresh
+- **Multi-Tab Sync**: Changes sync automatically across browser tabs
 
 ## Technology Stack
 
@@ -331,6 +357,23 @@ npm run start
 | `npm run build` | Build for production |
 | `npm run start` | Start production server |
 | `npm run db:push` | Push schema changes to database |
+
+## Recent Updates
+
+### January 2026
+- **Global Floating Notes Widget**: Added a draggable, persistent notes panel accessible on all pages with checklist functionality and multi-tab sync
+- **Mass Product Import Wizard**: New 4-step wizard for bulk importing products from CSV, XLS, and XLSX files with smart column mapping
+- **Simplified 2-Tier Architecture**: Streamlined from Suppliers > Master Products > Products to Suppliers > Products
+- **Enhanced Product Inventory**: Added dynamic column visibility, advanced filtering (Sector, Category, Supplier, Manufacturer, Price/Lead Time/MOQ ranges), and comprehensive export
+- **Improved Mass Delete**: Single confirmation for bulk deletions instead of per-item prompts
+- **Inline Editing for Technical Specs**: Double-click to edit specifications directly in the product form
+- **Production Deployment Fixes**: Resolved ES module conflicts for reliable Hostinger deployment
+
+### December 2025
+- **PostgreSQL Integration**: Full database persistence with Drizzle ORM
+- **Technical Specifications**: Added multi-spec support with attribute/value/unit fields
+- **Cascading Dropdowns**: Sector/Category/Sub-Category selection with inline creation
+- **Export Enhancements**: All fields exported in separate columns for data analysis
 
 ## License
 
