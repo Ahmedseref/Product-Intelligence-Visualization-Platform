@@ -47,7 +47,8 @@ A fully functional product intelligence platform with an expandable product taxo
 │   ├── Dashboard.tsx        # Dashboard with analytics
 │   ├── ProductList.tsx      # Product inventory view
 │   ├── ProductForm.tsx      # Add/edit product form
-│   ├── Visualize.tsx        # Data visualization view (Analytics Charts)
+│   ├── Visualize.tsx        # Data visualization view (Analytics Charts, Usage Density Matrix)
+│   ├── ProductHeatmap.tsx   # Interactive heatmap for product usage density
 │   └── SupplierManager.tsx  # Supplier management UI
 ├── server/
 │   ├── index.ts             # Express server entry point
@@ -127,6 +128,14 @@ DATABASE_URL=postgresql://user:password@host:5432/database
 - `DELETE /api/supplier-products/:supplierProductId` - Delete a supplier product
 
 ## Recent Changes
+- 2026-01-29: Added Product Usage Density Matrix (Interactive Heatmap)
+  - SVG-based heatmap grid showing product distribution across categories and usage areas
+  - Multi-select filter panel for categories, usage areas, suppliers, brands, and price ranges
+  - Category level selector (sector/category/subcategory/group)
+  - Hover tooltips with rich statistics (count, suppliers, brands, price min/avg/max, top products)
+  - Click drill-down modal with detailed product table and CSV export
+  - Tab navigation in Visualization view between Analytics Charts and Usage Density Matrix
+  - Color intensity based on product count with gradient legend
 - 2026-01-15: Added Global Floating Notes Widget
   - Floating note panel accessible on all pages
   - Draggable with position memory
