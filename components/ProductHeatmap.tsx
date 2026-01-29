@@ -1,6 +1,6 @@
 import React, { useState, useMemo, useCallback, useRef, useEffect } from 'react';
 import { Product, TreeNode, Supplier, CustomField } from '../types';
-import { Filter, X, Download, FileText, ChevronDown, Loader2 } from 'lucide-react';
+import { Filter, X, Download, FileText, ChevronDown } from 'lucide-react';
 
 interface ProductHeatmapProps {
   products: Product[];
@@ -58,7 +58,6 @@ const ProductHeatmap: React.FC<ProductHeatmapProps> = ({
   const [showFilters, setShowFilters] = useState(true);
   const [tooltip, setTooltip] = useState<TooltipData | null>(null);
   const [drillDownCell, setDrillDownCell] = useState<HeatmapCell | null>(null);
-  const [isLoading, setIsLoading] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
   const debounceRef = useRef<NodeJS.Timeout>();
 
@@ -139,8 +138,6 @@ const ProductHeatmap: React.FC<ProductHeatmapProps> = ({
   }, [products, selectedSuppliers, selectedBrands, priceRange]);
 
   const heatmapData = useMemo(() => {
-    setIsLoading(true);
-    
     const categories = selectedCategories.length > 0 
       ? categoriesByLevel.filter(c => selectedCategories.includes(c.id))
       : categoriesByLevel;
@@ -187,7 +184,6 @@ const ProductHeatmap: React.FC<ProductHeatmapProps> = ({
       matrix.push(row);
     });
 
-    setIsLoading(false);
     return { matrix, maxCount, categories, usageAreas };
   }, [filteredProducts, categoriesByLevel, selectedCategories, selectedUsageAreas, allUsageAreas, getProductCategory, getProductUsageAreas]);
 
@@ -381,12 +377,6 @@ const ProductHeatmap: React.FC<ProductHeatmapProps> = ({
       )}
 
       <div ref={containerRef} className="relative bg-white rounded-2xl border border-slate-200 p-6 overflow-auto">
-        {isLoading && (
-          <div className="absolute inset-0 bg-white/80 flex items-center justify-center z-10">
-            <Loader2 className="w-8 h-8 text-blue-600 animate-spin" />
-          </div>
-        )}
-
         {heatmapData.matrix.length === 0 ? (
           <div className="text-center py-12 text-slate-400">
             <Filter className="w-12 h-12 mx-auto mb-4 opacity-50" />
