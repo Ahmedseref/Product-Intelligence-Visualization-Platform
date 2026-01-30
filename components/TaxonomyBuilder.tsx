@@ -1,6 +1,9 @@
-import React, { useState, useMemo, useCallback } from 'react';
+import React, { useState, useMemo, useCallback, useRef, useEffect } from 'react';
 import { TreeNode, Product } from '../types';
-import { ChevronRight, ChevronDown, Plus, Edit2, Trash2, Package, FolderTree, X, Check } from 'lucide-react';
+import { 
+  ChevronRight, ChevronDown, Plus, Edit2, Trash2, Package, FolderTree, X, Check, 
+  Search, GripVertical, Building2, Layers, Grid3X3, Tag, AlertTriangle
+} from 'lucide-react';
 
 interface TaxonomyBuilderProps {
   treeNodes: TreeNode[];
@@ -16,9 +19,46 @@ interface TreeNodeWithLevel extends TreeNode {
   productCount: number;
 }
 
-const LEVEL_LABELS = ['Level 0 - Root', 'Level 1 - Sector', 'Level 2 - Category', 'Level 3 - Sub-Category'];
-const LEVEL_COLORS = ['bg-slate-100', 'bg-blue-50', 'bg-green-50', 'bg-amber-50', 'bg-purple-50', 'bg-pink-50'];
-const LEVEL_BORDERS = ['border-slate-300', 'border-blue-300', 'border-green-300', 'border-amber-300', 'border-purple-300', 'border-pink-300'];
+interface DragState {
+  nodeId: string;
+  nodeName: string;
+  level: number;
+}
+
+const LEVEL_CONFIG = {
+  sector: {
+    label: 'Sector',
+    icon: Building2,
+    bgClass: 'bg-blue-50',
+    borderClass: 'border-blue-300',
+    badgeClass: 'bg-blue-100 text-blue-700 border-blue-200',
+    textClass: 'text-blue-900 font-bold',
+  },
+  category: {
+    label: 'Category',
+    icon: Layers,
+    bgClass: 'bg-emerald-50',
+    borderClass: 'border-emerald-200',
+    badgeClass: 'bg-emerald-100 text-emerald-700 border-emerald-200',
+    textClass: 'text-emerald-900 font-semibold',
+  },
+  subcategory: {
+    label: 'Sub',
+    icon: Grid3X3,
+    bgClass: 'bg-white',
+    borderClass: 'border-slate-300',
+    badgeClass: 'bg-slate-100 text-slate-600 border-slate-200',
+    textClass: 'text-slate-800 font-medium',
+  },
+  group: {
+    label: 'Custom',
+    icon: Tag,
+    bgClass: 'bg-white',
+    borderClass: 'border-dashed border-slate-300',
+    badgeClass: 'bg-purple-50 text-purple-600 border-purple-200',
+    textClass: 'text-slate-700',
+  },
+};
 
 const TaxonomyBuilder: React.FC<TaxonomyBuilderProps> = ({
   treeNodes,
@@ -34,6 +74,16 @@ const TaxonomyBuilder: React.FC<TaxonomyBuilderProps> = ({
   const [addParentId, setAddParentId] = useState<string | null>(null);
   const [newNodeName, setNewNodeName] = useState('');
   const [newNodeType, setNewNodeType] = useState<'sector' | 'category' | 'subcategory' | 'group'>('category');
+  const [searchQuery, setSearchQuery] = useState('');
+  const [hoveredNodeId, setHoveredNodeId] = useState<string | null>(null);
+  const [savingId, setSavingId] = useState<string | null>(null);
+  const [dragState, setDragState] = useState<DragState | null>(null);
+  const [dropTargetId, setDropTargetId] = useState<string | null>(null);
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState<TreeNodeWithLevel | null>(null);
+  const [showMoveConfirm, setShowMoveConfirm] = useState<{ nodeId: string; nodeName: string; targetId: string | null; targetName: string } | null>(null);
+  const [editCancelled, setEditCancelled] = useState(false);
+  
+  const editInputRef = useRef<HTMLInputElement>(null);
 
   const buildTree = useCallback((nodes: TreeNode[], parentId: string | null, level: number): TreeNodeWithLevel[] => {
     return nodes
@@ -59,6 +109,50 @@ const TaxonomyBuilder: React.FC<TaxonomyBuilderProps> = ({
 
   const tree = useMemo(() => buildTree(treeNodes, null, 1), [treeNodes, buildTree]);
   const totalProducts = products.length;
+
+  const filteredTree = useMemo(() => {
+    if (!searchQuery.trim()) return tree;
+    
+    const query = searchQuery.toLowerCase();
+    
+    const filterNodes = (nodes: TreeNodeWithLevel[]): TreeNodeWithLevel[] => {
+      return nodes.reduce<TreeNodeWithLevel[]>((acc, node) => {
+        const matchesSearch = node.name.toLowerCase().includes(query);
+        const filteredChildren = filterNodes(node.children);
+        
+        if (matchesSearch || filteredChildren.length > 0) {
+          acc.push({
+            ...node,
+            children: matchesSearch ? node.children : filteredChildren,
+          });
+        }
+        return acc;
+      }, []);
+    };
+    
+    return filterNodes(tree);
+  }, [tree, searchQuery]);
+
+  useEffect(() => {
+    if (searchQuery.trim()) {
+      const allNodeIds = new Set<string>();
+      const collectIds = (nodes: TreeNodeWithLevel[]) => {
+        nodes.forEach(n => {
+          allNodeIds.add(n.id);
+          collectIds(n.children);
+        });
+      };
+      collectIds(filteredTree);
+      setExpandedNodes(prev => new Set([...prev, ...allNodeIds]));
+    }
+  }, [searchQuery, filteredTree]);
+
+  useEffect(() => {
+    if (editingId && editInputRef.current) {
+      editInputRef.current.focus();
+      editInputRef.current.select();
+    }
+  }, [editingId]);
 
   const toggleExpand = (nodeId: string) => {
     setExpandedNodes(prev => {
@@ -101,109 +195,272 @@ const TaxonomyBuilder: React.FC<TaxonomyBuilderProps> = ({
   const startEdit = (node: TreeNode) => {
     setEditingId(node.id);
     setEditName(node.name);
+    setEditCancelled(false);
   };
 
-  const saveEdit = (nodeId: string) => {
+  const saveEdit = async (nodeId: string) => {
+    if (editCancelled) {
+      setEditCancelled(false);
+      return;
+    }
     if (editName.trim()) {
+      setSavingId(nodeId);
       onUpdateNode(nodeId, { name: editName.trim() });
+      setTimeout(() => setSavingId(null), 500);
     }
     setEditingId(null);
     setEditName('');
   };
 
   const cancelEdit = () => {
+    setEditCancelled(true);
     setEditingId(null);
     setEditName('');
   };
 
-  const getLevelLabel = (level: number): string => {
-    if (level <= 3) return LEVEL_LABELS[level] || `Level ${level}`;
-    return `Level ${level}`;
+  const handleDeleteClick = (node: TreeNodeWithLevel) => {
+    if (node.productCount > 0 || node.children.length > 0) {
+      setShowDeleteConfirm(node);
+    } else {
+      onDeleteNode(node.id);
+    }
   };
 
-  const renderTreeNode = (node: TreeNodeWithLevel, isLast: boolean): React.ReactNode => {
+  const confirmDelete = () => {
+    if (showDeleteConfirm) {
+      onDeleteNode(showDeleteConfirm.id);
+      setShowDeleteConfirm(null);
+    }
+  };
+
+  const isDescendantOf = useCallback((nodeId: string, potentialAncestorId: string): boolean => {
+    const findNode = (nodes: TreeNodeWithLevel[]): TreeNodeWithLevel | null => {
+      for (const n of nodes) {
+        if (n.id === potentialAncestorId) return n;
+        const found = findNode(n.children);
+        if (found) return found;
+      }
+      return null;
+    };
+    
+    const checkDescendants = (node: TreeNodeWithLevel): boolean => {
+      if (node.id === nodeId) return true;
+      return node.children.some(child => checkDescendants(child));
+    };
+    
+    const ancestor = findNode(tree);
+    return ancestor ? checkDescendants(ancestor) : false;
+  }, [tree]);
+
+  const getNodeById = useCallback((nodeId: string): TreeNodeWithLevel | null => {
+    const findNode = (nodes: TreeNodeWithLevel[]): TreeNodeWithLevel | null => {
+      for (const n of nodes) {
+        if (n.id === nodeId) return n;
+        const found = findNode(n.children);
+        if (found) return found;
+      }
+      return null;
+    };
+    return findNode(tree);
+  }, [tree]);
+
+  const handleDragStart = (e: React.DragEvent, node: TreeNodeWithLevel) => {
+    setDragState({ nodeId: node.id, nodeName: node.name, level: node.level });
+    e.dataTransfer.effectAllowed = 'move';
+    e.dataTransfer.setData('text/plain', node.id);
+  };
+
+  const isValidDropTarget = useCallback((targetId: string | null): boolean => {
+    if (!dragState) return false;
+    if (targetId === dragState.nodeId) return false;
+    if (targetId && isDescendantOf(targetId, dragState.nodeId)) return false;
+    return true;
+  }, [dragState, isDescendantOf]);
+
+  const handleDragOver = (e: React.DragEvent, targetId: string) => {
+    e.preventDefault();
+    if (dragState && isValidDropTarget(targetId)) {
+      setDropTargetId(targetId);
+    } else {
+      setDropTargetId(null);
+    }
+  };
+
+  const handleDragLeave = () => {
+    setDropTargetId(null);
+  };
+
+  const handleDrop = (e: React.DragEvent, targetId: string | null) => {
+    e.preventDefault();
+    if (dragState && isValidDropTarget(targetId)) {
+      const targetNode = targetId ? getNodeById(targetId) : null;
+      setShowMoveConfirm({
+        nodeId: dragState.nodeId,
+        nodeName: dragState.nodeName,
+        targetId,
+        targetName: targetNode?.name || 'Root'
+      });
+    }
+    setDragState(null);
+    setDropTargetId(null);
+  };
+
+  const confirmMove = () => {
+    if (showMoveConfirm) {
+      onUpdateNode(showMoveConfirm.nodeId, { parentId: showMoveConfirm.targetId });
+      if (showMoveConfirm.targetId) {
+        setExpandedNodes(prev => new Set([...prev, showMoveConfirm.targetId!]));
+      }
+      setShowMoveConfirm(null);
+    }
+  };
+
+  const handleDragEnd = () => {
+    setDragState(null);
+    setDropTargetId(null);
+  };
+
+  const getNodeConfig = (type: string) => {
+    return LEVEL_CONFIG[type as keyof typeof LEVEL_CONFIG] || LEVEL_CONFIG.group;
+  };
+
+  const getDepthLineOpacity = (level: number): string => {
+    const opacities = ['border-slate-400', 'border-slate-300', 'border-slate-200', 'border-slate-100'];
+    return opacities[Math.min(level - 1, opacities.length - 1)];
+  };
+
+  const renderTreeNode = (node: TreeNodeWithLevel, isLast: boolean, ancestors: string[] = []): React.ReactNode => {
     const isExpanded = expandedNodes.has(node.id);
     const hasChildren = node.children.length > 0;
-    const colorIndex = Math.min(node.level, LEVEL_COLORS.length - 1);
+    const config = getNodeConfig(node.type);
+    const Icon = config.icon;
+    const isHovered = hoveredNodeId === node.id;
+    const isDropTarget = dropTargetId === node.id;
+    const isDragging = dragState?.nodeId === node.id;
+    const isSaving = savingId === node.id;
 
     return (
-      <div key={node.id} className="relative">
-        <div className="flex items-start gap-2 mb-3">
-          <div className={`flex items-center min-w-[120px] px-2 py-1 rounded text-xs font-medium ${LEVEL_COLORS[colorIndex]} ${LEVEL_BORDERS[colorIndex]} border`}>
-            {node.type === 'sector' ? 'Sector' : node.type === 'category' ? 'Category' : node.type === 'subcategory' ? 'Sub-Category' : `Level ${node.level}`}
-          </div>
-          
-          <div className={`flex-1 flex items-center gap-2 p-3 rounded-lg border-2 ${LEVEL_COLORS[colorIndex]} ${LEVEL_BORDERS[colorIndex]} hover:shadow-md transition-shadow`}>
+      <div key={node.id} className={`relative ${isDragging ? 'opacity-50' : ''}`}>
+        <div 
+          className={`relative flex items-center gap-2 mb-2 transition-all duration-200 ${
+            isDropTarget ? 'transform scale-[1.02]' : ''
+          }`}
+          onMouseEnter={() => setHoveredNodeId(node.id)}
+          onMouseLeave={() => setHoveredNodeId(null)}
+          draggable
+          onDragStart={(e) => handleDragStart(e, node)}
+          onDragOver={(e) => handleDragOver(e, node.id)}
+          onDragLeave={handleDragLeave}
+          onDrop={(e) => handleDrop(e, node.id)}
+          onDragEnd={handleDragEnd}
+        >
+          <div 
+            className={`
+              flex-1 flex items-center gap-3 px-4 py-3 rounded-xl border-2 transition-all duration-200 cursor-pointer
+              ${config.bgClass} ${config.borderClass}
+              ${isHovered ? 'shadow-lg ring-2 ring-blue-100' : 'shadow-sm'}
+              ${isDropTarget ? 'ring-4 ring-blue-300 border-blue-400 bg-blue-50' : ''}
+              ${node.type === 'group' ? 'border-dashed' : ''}
+            `}
+          >
+            <div 
+              className="cursor-grab active:cursor-grabbing p-1 -ml-2 text-slate-400 hover:text-slate-600"
+              title="Drag to reorder"
+            >
+              <GripVertical size={16} />
+            </div>
+
             <button
               onClick={() => toggleExpand(node.id)}
-              className="w-6 h-6 flex items-center justify-center rounded hover:bg-white/50"
+              className="w-6 h-6 flex items-center justify-center rounded-lg hover:bg-white/70 transition-colors"
             >
               {hasChildren ? (
-                isExpanded ? <ChevronDown size={16} /> : <ChevronRight size={16} />
+                isExpanded ? (
+                  <ChevronDown size={18} className="text-slate-600" />
+                ) : (
+                  <ChevronRight size={18} className="text-slate-600" />
+                )
               ) : (
-                <div className="w-4 h-4 rounded-full border-2 border-slate-300" />
+                <div className="w-2 h-2 rounded-full bg-slate-300" />
               )}
             </button>
+
+            <div className={`p-1.5 rounded-lg ${config.badgeClass} border`}>
+              <Icon size={14} />
+            </div>
 
             {editingId === node.id ? (
               <div className="flex items-center gap-2 flex-1">
                 <input
+                  ref={editInputRef}
                   type="text"
                   value={editName}
                   onChange={(e) => setEditName(e.target.value)}
-                  className="flex-1 px-2 py-1 border rounded text-sm"
-                  autoFocus
+                  className="flex-1 px-3 py-1.5 border-2 border-blue-300 rounded-lg text-sm font-medium focus:outline-none focus:ring-2 focus:ring-blue-400"
                   onKeyDown={(e) => {
                     if (e.key === 'Enter') saveEdit(node.id);
                     if (e.key === 'Escape') cancelEdit();
                   }}
+                  onBlur={() => saveEdit(node.id)}
                 />
-                <button onClick={() => saveEdit(node.id)} className="p-1 text-green-600 hover:bg-green-50 rounded">
-                  <Check size={16} />
-                </button>
-                <button onClick={cancelEdit} className="p-1 text-red-600 hover:bg-red-50 rounded">
-                  <X size={16} />
-                </button>
+                {isSaving && (
+                  <span className="text-xs text-blue-500 animate-pulse">Saving...</span>
+                )}
               </div>
             ) : (
-              <>
-                <span className="font-semibold text-slate-800 flex-1">{node.name}</span>
-                {node.productCount > 0 && (
-                  <span className="flex items-center gap-1 text-xs text-slate-500 bg-white px-2 py-0.5 rounded-full">
-                    <Package size={12} /> {node.productCount}
-                  </span>
+              <div 
+                className="flex items-center gap-3 flex-1 min-w-0"
+                onClick={() => startEdit(node)}
+              >
+                <span className={`${config.textClass} truncate cursor-text hover:underline decoration-dotted`}>
+                  {node.name}
+                </span>
+                {isSaving && (
+                  <span className="text-xs text-green-500 animate-pulse">Saved!</span>
                 )}
-                <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                  <button
-                    onClick={() => handleAddClick(node.id, node.level)}
-                    className="p-1.5 text-blue-600 hover:bg-blue-50 rounded"
-                    title="Add child"
-                  >
-                    <Plus size={14} />
-                  </button>
-                  <button
-                    onClick={() => startEdit(node)}
-                    className="p-1.5 text-amber-600 hover:bg-amber-50 rounded"
-                    title="Edit"
-                  >
-                    <Edit2 size={14} />
-                  </button>
-                  <button
-                    onClick={() => onDeleteNode(node.id)}
-                    className="p-1.5 text-red-600 hover:bg-red-50 rounded"
-                    title="Delete"
-                  >
-                    <Trash2 size={14} />
-                  </button>
-                </div>
-              </>
+              </div>
             )}
+
+            <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider border ${config.badgeClass}`}>
+              {config.label}
+            </span>
+
+            {node.productCount > 0 && (
+              <span className="flex items-center gap-1.5 text-xs text-slate-500 bg-white/80 px-2.5 py-1 rounded-full border border-slate-200">
+                <Package size={12} /> 
+                <span className="font-semibold">{node.productCount}</span>
+              </span>
+            )}
+
+            <div className={`flex items-center gap-0.5 transition-all duration-200 ${isHovered && !editingId ? 'opacity-100' : 'opacity-0'}`}>
+              <button
+                onClick={(e) => { e.stopPropagation(); handleAddClick(node.id, node.level); }}
+                className="p-2 text-blue-600 hover:bg-blue-100 rounded-lg transition-colors"
+                title="Add child"
+              >
+                <Plus size={16} />
+              </button>
+              <button
+                onClick={(e) => { e.stopPropagation(); startEdit(node); }}
+                className="p-2 text-amber-600 hover:bg-amber-100 rounded-lg transition-colors"
+                title="Rename"
+              >
+                <Edit2 size={16} />
+              </button>
+              <button
+                onClick={(e) => { e.stopPropagation(); handleDeleteClick(node); }}
+                className="p-2 text-red-600 hover:bg-red-100 rounded-lg transition-colors"
+                title="Delete"
+              >
+                <Trash2 size={16} />
+              </button>
+            </div>
           </div>
         </div>
 
         {isExpanded && hasChildren && (
-          <div className="ml-8 pl-6 border-l-2 border-slate-200">
-            {node.children.map((child, idx) => renderTreeNode(child, idx === node.children.length - 1))}
+          <div className={`ml-6 pl-6 border-l-2 ${getDepthLineOpacity(node.level)}`}>
+            {node.children.map((child, idx) => renderTreeNode(child, idx === node.children.length - 1, [...ancestors, node.id]))}
           </div>
         )}
       </div>
@@ -212,73 +469,112 @@ const TaxonomyBuilder: React.FC<TaxonomyBuilderProps> = ({
 
   return (
     <div className="h-full flex flex-col bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
-      <div className="p-4 border-b border-slate-200 flex items-center justify-between bg-gradient-to-r from-slate-50 to-white">
-        <div className="flex items-center gap-3">
-          <div className="w-10 h-10 bg-blue-100 rounded-lg flex items-center justify-center">
-            <FolderTree className="text-blue-600" size={20} />
-          </div>
-          <div>
-            <h2 className="font-bold text-lg text-slate-800">Taxonomy Builder</h2>
-            <p className="text-sm text-slate-500">Build your product hierarchy with unlimited levels</p>
-          </div>
-        </div>
-        <button
-          onClick={() => handleAddClick(null, 0)}
-          className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors font-medium text-sm"
-        >
-          <Plus size={16} />
-          Add Sector
-        </button>
-      </div>
-
-      <div className="flex gap-2 p-3 bg-slate-50 border-b border-slate-200 overflow-x-auto">
-        {LEVEL_LABELS.map((label, idx) => (
-          <div key={idx} className={`px-3 py-1.5 rounded-full text-xs font-medium whitespace-nowrap ${LEVEL_COLORS[idx]} ${LEVEL_BORDERS[idx]} border`}>
-            {label}
-          </div>
-        ))}
-        <div className="px-3 py-1.5 rounded-full text-xs font-medium whitespace-nowrap bg-purple-50 border-purple-300 border">
-          Level 4+ - Custom
-        </div>
-      </div>
-
-      <div className="flex-1 overflow-auto p-6">
-        <div className="group flex items-start gap-2 mb-4">
-          <div className="flex items-center min-w-[120px] px-2 py-1 rounded text-xs font-medium bg-slate-100 border-slate-300 border">
-            Root
-          </div>
-          <div className="flex-1 flex items-center gap-2 p-3 rounded-lg border-2 bg-slate-50 border-slate-300">
-            <div className="w-6 h-6 flex items-center justify-center">
-              <ChevronDown size={16} className="text-slate-400" />
+      <div className="p-4 border-b border-slate-200 bg-gradient-to-r from-slate-50 to-white">
+        <div className="flex items-center justify-between mb-4">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 bg-gradient-to-br from-blue-500 to-blue-600 rounded-xl flex items-center justify-center shadow-lg shadow-blue-200">
+              <FolderTree className="text-white" size={20} />
             </div>
-            <span className="font-bold text-slate-800">ALL PRODUCTS</span>
-            <span className="flex items-center gap-1 text-xs text-slate-500 bg-white px-2 py-0.5 rounded-full ml-auto">
-              <Package size={12} /> {totalProducts} total
-            </span>
+            <div>
+              <h2 className="font-bold text-lg text-slate-800">Taxonomy Builder</h2>
+              <p className="text-sm text-slate-500">Build your product hierarchy with unlimited levels</p>
+            </div>
           </div>
+          <button
+            onClick={() => handleAddClick(null, 0)}
+            className="flex items-center gap-2 px-4 py-2.5 bg-gradient-to-r from-blue-600 to-blue-700 text-white rounded-xl hover:from-blue-700 hover:to-blue-800 transition-all shadow-lg shadow-blue-200 font-medium text-sm"
+          >
+            <Plus size={18} />
+            Add Sector
+          </button>
         </div>
 
-        <div className="ml-8 pl-6 border-l-2 border-slate-200">
-          {tree.length === 0 ? (
-            <div className="text-center py-12 text-slate-400">
-              <FolderTree size={48} className="mx-auto mb-4 opacity-50" />
-              <p className="text-lg font-medium">No taxonomy defined yet</p>
-              <p className="text-sm">Click "Add Sector" to create your first category</p>
-            </div>
-          ) : (
-            tree.map((node, idx) => (
-              <div key={node.id} className="group">
-                {renderTreeNode(node, idx === tree.length - 1)}
-              </div>
-            ))
+        <div className="relative">
+          <Search size={18} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+          <input
+            type="text"
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            placeholder="Search categories... (type to filter)"
+            className="w-full pl-10 pr-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all"
+          />
+          {searchQuery && (
+            <button
+              onClick={() => setSearchQuery('')}
+              className="absolute right-3 top-1/2 -translate-y-1/2 p-1 hover:bg-slate-200 rounded-lg"
+            >
+              <X size={14} className="text-slate-400" />
+            </button>
           )}
         </div>
       </div>
 
+      <div className="flex gap-2 p-3 bg-slate-50 border-b border-slate-200 overflow-x-auto">
+        {Object.entries(LEVEL_CONFIG).map(([key, config]) => {
+          const Icon = config.icon;
+          return (
+            <div key={key} className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium whitespace-nowrap ${config.badgeClass} border`}>
+              <Icon size={12} />
+              {config.label}
+            </div>
+          );
+        })}
+      </div>
+
+      <div 
+        className="flex-1 overflow-auto p-6"
+        onDragOver={(e) => { e.preventDefault(); setDropTargetId('root'); }}
+        onDragLeave={() => setDropTargetId(null)}
+        onDrop={(e) => handleDrop(e, null)}
+      >
+        <div 
+          className={`flex items-center gap-3 p-4 mb-4 rounded-xl border-2 transition-all ${
+            dropTargetId === 'root' ? 'bg-blue-50 border-blue-300 ring-4 ring-blue-100' : 'bg-slate-50 border-slate-200'
+          }`}
+        >
+          <div className="w-8 h-8 bg-slate-200 rounded-lg flex items-center justify-center">
+            <ChevronDown size={18} className="text-slate-500" />
+          </div>
+          <span className="font-bold text-slate-800 text-lg">ALL PRODUCTS</span>
+          <span className="flex items-center gap-1.5 text-sm text-slate-500 bg-white px-3 py-1 rounded-full border border-slate-200 ml-auto">
+            <Package size={14} /> 
+            <span className="font-semibold">{totalProducts}</span> total
+          </span>
+        </div>
+
+        <div className="ml-4 pl-6 border-l-2 border-slate-300">
+          {filteredTree.length === 0 ? (
+            <div className="text-center py-12 text-slate-400">
+              <FolderTree size={48} className="mx-auto mb-4 opacity-50" />
+              {searchQuery ? (
+                <>
+                  <p className="text-lg font-medium">No matching categories</p>
+                  <p className="text-sm">Try a different search term</p>
+                </>
+              ) : (
+                <>
+                  <p className="text-lg font-medium">No taxonomy defined yet</p>
+                  <p className="text-sm">Click "Add Sector" to create your first category</p>
+                </>
+              )}
+            </div>
+          ) : (
+            filteredTree.map((node, idx) => renderTreeNode(node, idx === filteredTree.length - 1))
+          )}
+        </div>
+      </div>
+
+      {dragState && (
+        <div className="fixed bottom-4 left-1/2 -translate-x-1/2 bg-blue-600 text-white px-4 py-2 rounded-xl shadow-xl flex items-center gap-2 z-50">
+          <GripVertical size={16} />
+          <span className="font-medium">Moving: {dragState.nodeName}</span>
+        </div>
+      )}
+
       {showAddModal && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
-          <div className="bg-white rounded-xl shadow-xl p-6 w-96">
-            <h3 className="text-lg font-bold text-slate-800 mb-4">
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-2xl shadow-2xl p-6 w-full max-w-md">
+            <h3 className="text-xl font-bold text-slate-800 mb-4">
               Add New {newNodeType === 'sector' ? 'Sector' : newNodeType === 'category' ? 'Category' : newNodeType === 'subcategory' ? 'Sub-Category' : 'Level'}
             </h3>
             <div className="space-y-4">
@@ -289,7 +585,7 @@ const TaxonomyBuilder: React.FC<TaxonomyBuilderProps> = ({
                   value={newNodeName}
                   onChange={(e) => setNewNodeName(e.target.value)}
                   placeholder={`Enter ${newNodeType} name...`}
-                  className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                  className="w-full px-4 py-3 border border-slate-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all"
                   autoFocus
                   onKeyDown={(e) => {
                     if (e.key === 'Enter') handleAddConfirm();
@@ -302,28 +598,117 @@ const TaxonomyBuilder: React.FC<TaxonomyBuilderProps> = ({
                 <select
                   value={newNodeType}
                   onChange={(e) => setNewNodeType(e.target.value as any)}
-                  className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                  className="w-full px-4 py-3 border border-slate-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                 >
-                  <option value="sector">Sector</option>
-                  <option value="category">Category</option>
-                  <option value="subcategory">Sub-Category</option>
-                  <option value="group">Group</option>
+                  <option key="sector" value="sector">Sector</option>
+                  <option key="category" value="category">Category</option>
+                  <option key="subcategory" value="subcategory">Sub-Category</option>
+                  <option key="group" value="group">Group / Custom</option>
                 </select>
               </div>
               <div className="flex gap-3 pt-2">
                 <button
                   onClick={() => setShowAddModal(false)}
-                  className="flex-1 px-4 py-2 border border-slate-300 text-slate-700 rounded-lg hover:bg-slate-50"
+                  className="flex-1 px-4 py-3 border border-slate-300 text-slate-700 rounded-xl hover:bg-slate-50 font-medium transition-colors"
                 >
                   Cancel
                 </button>
                 <button
                   onClick={handleAddConfirm}
-                  className="flex-1 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
+                  className="flex-1 px-4 py-3 bg-blue-600 text-white rounded-xl hover:bg-blue-700 font-medium transition-colors"
                 >
                   Add
                 </button>
               </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {showDeleteConfirm && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-2xl shadow-2xl p-6 w-full max-w-md">
+            <div className="flex items-center gap-3 mb-4">
+              <div className="w-12 h-12 rounded-full bg-red-100 flex items-center justify-center">
+                <AlertTriangle className="w-6 h-6 text-red-600" />
+              </div>
+              <div>
+                <h3 className="text-lg font-bold text-slate-800">Delete Category</h3>
+                <p className="text-sm text-slate-500">This action cannot be undone</p>
+              </div>
+            </div>
+            <p className="text-slate-600 mb-2">
+              Are you sure you want to delete <span className="font-semibold">{showDeleteConfirm.name}</span>?
+            </p>
+            {showDeleteConfirm.productCount > 0 && (
+              <div className="flex items-center gap-2 p-3 bg-amber-50 border border-amber-200 rounded-xl mb-4">
+                <Package size={16} className="text-amber-600" />
+                <span className="text-sm text-amber-800">
+                  <strong>{showDeleteConfirm.productCount}</strong> products will be affected
+                </span>
+              </div>
+            )}
+            {showDeleteConfirm.children.length > 0 && (
+              <div className="flex items-center gap-2 p-3 bg-amber-50 border border-amber-200 rounded-xl mb-4">
+                <Layers size={16} className="text-amber-600" />
+                <span className="text-sm text-amber-800">
+                  <strong>{showDeleteConfirm.children.length}</strong> child categories will also be deleted
+                </span>
+              </div>
+            )}
+            <div className="flex justify-end gap-3 mt-6">
+              <button
+                onClick={() => setShowDeleteConfirm(null)}
+                className="px-4 py-2 text-slate-600 hover:bg-slate-100 rounded-xl font-medium transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={confirmDelete}
+                className="px-4 py-2 bg-red-600 text-white rounded-xl font-medium hover:bg-red-700 transition-colors"
+              >
+                Delete Category
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {showMoveConfirm && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-2xl shadow-2xl p-6 w-full max-w-md">
+            <div className="flex items-center gap-3 mb-4">
+              <div className="w-12 h-12 rounded-full bg-blue-100 flex items-center justify-center">
+                <GripVertical className="w-6 h-6 text-blue-600" />
+              </div>
+              <div>
+                <h3 className="text-lg font-bold text-slate-800">Move Category</h3>
+                <p className="text-sm text-slate-500">Confirm category relocation</p>
+              </div>
+            </div>
+            <p className="text-slate-600 mb-4">
+              Move <span className="font-semibold text-slate-800">{showMoveConfirm.nodeName}</span> to{' '}
+              <span className="font-semibold text-blue-600">{showMoveConfirm.targetName}</span>?
+            </p>
+            <div className="flex items-center gap-2 p-3 bg-blue-50 border border-blue-200 rounded-xl mb-4">
+              <Layers size={16} className="text-blue-600" />
+              <span className="text-sm text-blue-800">
+                All child categories will also be moved
+              </span>
+            </div>
+            <div className="flex justify-end gap-3 mt-6">
+              <button
+                onClick={() => setShowMoveConfirm(null)}
+                className="px-4 py-2 text-slate-600 hover:bg-slate-100 rounded-xl font-medium transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={confirmMove}
+                className="px-4 py-2 bg-blue-600 text-white rounded-xl font-medium hover:bg-blue-700 transition-colors"
+              >
+                Move Category
+              </button>
             </div>
           </div>
         </div>

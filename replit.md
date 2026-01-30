@@ -128,6 +128,17 @@ DATABASE_URL=postgresql://user:password@host:5432/database
 - `DELETE /api/supplier-products/:supplierProductId` - Delete a supplier product
 
 ## Recent Changes
+- 2026-01-30: Enhanced Taxonomy Builder with comprehensive UX improvements
+  - Visual hierarchy: Sector (bold + Building icon), Category (emerald bg), Sub-Category (border-only), Custom (dashed border)
+  - Depth indicators with left-side vertical guide lines that fade with depth
+  - Node level badges (Sector, Category, Sub, Custom chips)
+  - Contextual action bar on hover (Add child, Rename, Delete)
+  - Click-to-edit inline editing with Enter/Esc, auto-focus, auto-select, saving indicator
+  - Enhanced drag & drop with ghost preview, valid drop target highlighting
+  - Drag validation prevents drops on self or descendants
+  - Move confirmation dialog before relocating categories
+  - Delete confirmation with product/children impact warnings
+  - Global search box for instant node filtering with auto-expand
 - 2026-01-30: Added full product management in heatmap drill-down modal
   - Edit, Duplicate, and Delete buttons on each product row (appear on hover)
   - Edit opens full ProductForm modal with pre-filled data
