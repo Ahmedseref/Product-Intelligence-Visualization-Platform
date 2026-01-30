@@ -428,15 +428,15 @@ const ProductForm: React.FC<ProductFormProps> = ({ onSubmit, onCancel, currentUs
               </div>
 
               <div className="space-y-1">
-                <label className="text-xs font-bold text-slate-500 uppercase tracking-wider">Product Name (Manufacturer Name)</label>
+                <label className="text-xs font-bold text-slate-500 uppercase tracking-wider">Brand Name</label>
                 <input
                   type="text"
                   className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-sm focus:ring-2 focus:ring-blue-500 outline-none transition-all"
-                  placeholder="e.g. Akfix silicone sealant 100E, Sikaseal acetoxy sealant..."
+                  placeholder="e.g. Akfix, Sika, 3M, Bosch..."
                   value={formData.manufacturer}
                   onChange={e => setFormData({...formData, manufacturer: e.target.value})}
                 />
-                <p className="text-[10px] text-slate-400 mt-1">The specific product name from the manufacturer/supplier (different suppliers may have different names for the same product type)</p>
+                <p className="text-[10px] text-slate-400 mt-1">The brand or manufacturer name for this product</p>
               </div>
 
               <div className="space-y-4">
@@ -803,28 +803,11 @@ const ProductForm: React.FC<ProductFormProps> = ({ onSubmit, onCancel, currentUs
           </div>
 
           <div className="space-y-6">
-            <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm space-y-6">
-              <h3 className="text-sm font-bold text-slate-800 uppercase tracking-widest">Image Asset</h3>
-              <div className="aspect-video w-full rounded-xl overflow-hidden border border-slate-200 bg-slate-50 flex items-center justify-center relative group">
-                {formData.imageUrl ? (
-                  <img src={formData.imageUrl} alt="Preview" className="w-full h-full object-cover" />
-                ) : (
-                  <div className="text-slate-300">No Asset</div>
-                )}
-                <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
-                  <button type="button" className="p-2 bg-white rounded-full text-blue-600 shadow-lg">
-                    {ICONS.Edit}
-                  </button>
-                </div>
-              </div>
-              <button type="button" className="w-full py-2 bg-slate-100 text-slate-600 rounded-xl text-sm font-bold hover:bg-slate-200 transition-all">Upload New Image</button>
-            </div>
-
             <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm space-y-4">
               <h3 className="text-sm font-bold text-slate-800 uppercase tracking-widest">Manufacturing</h3>
               <div className="space-y-4">
                 <div className="space-y-1">
-                  <label className="text-xs font-bold text-slate-500 uppercase tracking-wider">Manufacturer</label>
+                  <label className="text-xs font-bold text-slate-500 uppercase tracking-wider">Brand Name</label>
                   <input 
                     type="text"
                     className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-2 text-sm outline-none"
