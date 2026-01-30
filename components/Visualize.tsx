@@ -1,12 +1,11 @@
-
 import React, { useState, useMemo } from 'react';
 import { Product, ChartType, AggregationMethod, Supplier, SupplierProduct, TreeNode, CustomField } from '../types';
-import { 
-  BarChart, Bar, LineChart, Line, AreaChart, Area, PieChart, Pie, ScatterChart, Scatter, 
-  XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, Cell 
-} from 'recharts';
+import { ResponsiveBar } from '@nivo/bar';
+import { ResponsivePie } from '@nivo/pie';
+import { ResponsiveLine } from '@nivo/line';
 import { ICONS } from '../constants';
-import ProductHeatmap from './ProductHeatmap';
+import ProductUsageHeatmap from './visualizations/ProductUsageHeatmap';
+import NivoChartWrapper, { nivoTheme, CHART_COLORS } from './charts/NivoChartWrapper';
 import { BarChart3, Grid3X3 } from 'lucide-react';
 
 interface VisualizeProps {
@@ -16,8 +15,6 @@ interface VisualizeProps {
   treeNodes?: TreeNode[];
   customFields?: CustomField[];
 }
-
-const COLORS = ['#3b82f6', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6', '#6366f1', '#ec4899'];
 
 const Visualize: React.FC<VisualizeProps> = ({ products, suppliers = [], supplierProducts = [], treeNodes = [], customFields = [] }) => {
   const [activeTab, setActiveTab] = useState<'charts' | 'heatmap'>('charts');
@@ -48,64 +45,165 @@ const Visualize: React.FC<VisualizeProps> = ({ products, suppliers = [], supplie
     });
   }, [products, xAxis, yAxis, agg]);
 
+  const barData = useMemo(() => {
+    return chartData.map(d => ({
+      id: d.name,
+      label: d.name,
+      value: d.value
+    }));
+  }, [chartData]);
+
+  const pieData = useMemo(() => {
+    return chartData.map((d, i) => ({
+      id: d.name,
+      label: d.name,
+      value: d.value,
+      color: CHART_COLORS.categorical[i % CHART_COLORS.categorical.length]
+    }));
+  }, [chartData]);
+
+  const lineData = useMemo(() => {
+    return [{
+      id: `${agg.toUpperCase()} of ${yAxis}`,
+      color: '#3b82f6',
+      data: chartData.map(d => ({
+        x: d.name,
+        y: d.value
+      }))
+    }];
+  }, [chartData, agg, yAxis]);
+
   const renderChart = () => {
-    const commonProps = {
-      data: chartData,
-      margin: { top: 20, right: 30, left: 20, bottom: 20 }
-    };
+    if (chartData.length === 0) {
+      return (
+        <div className="h-full flex items-center justify-center text-slate-400">
+          No data available. Add products to see visualizations.
+        </div>
+      );
+    }
 
     switch (chartType) {
       case 'bar':
         return (
-          <BarChart {...commonProps}>
-            <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
-            <XAxis dataKey="name" stroke="#64748b" fontSize={12} tickLine={false} axisLine={false} />
-            <YAxis stroke="#64748b" fontSize={12} tickLine={false} axisLine={false} />
-            <Tooltip contentStyle={{ borderRadius: '12px', border: 'none', boxShadow: '0 8px 24px rgba(0,0,0,0.1)' }} />
-            <Legend />
-            <Bar dataKey="value" name={`${agg.toUpperCase()} of ${yAxis}`} fill="#3b82f6" radius={[6, 6, 0, 0]} />
-          </BarChart>
+          <ResponsiveBar
+            data={barData}
+            keys={['value']}
+            indexBy="id"
+            margin={{ top: 20, right: 30, bottom: 60, left: 60 }}
+            padding={0.3}
+            valueScale={{ type: 'linear' }}
+            indexScale={{ type: 'band', round: true }}
+            colors={CHART_COLORS.primary}
+            borderRadius={6}
+            borderColor={{ from: 'color', modifiers: [['darker', 1.6]] }}
+            axisTop={null}
+            axisRight={null}
+            axisBottom={{
+              tickSize: 5,
+              tickPadding: 5,
+              tickRotation: -30,
+              legend: xAxis,
+              legendPosition: 'middle',
+              legendOffset: 50,
+              truncateTickAt: 15
+            }}
+            axisLeft={{
+              tickSize: 5,
+              tickPadding: 5,
+              tickRotation: 0,
+              legend: `${agg.toUpperCase()} of ${yAxis}`,
+              legendPosition: 'middle',
+              legendOffset: -50
+            }}
+            labelSkipWidth={12}
+            labelSkipHeight={12}
+            labelTextColor={{ from: 'color', modifiers: [['darker', 2]] }}
+            animate={true}
+            motionConfig="gentle"
+            theme={nivoTheme}
+          />
         );
       case 'line':
-        return (
-          <LineChart {...commonProps}>
-            <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
-            <XAxis dataKey="name" stroke="#64748b" fontSize={12} tickLine={false} axisLine={false} />
-            <YAxis stroke="#64748b" fontSize={12} tickLine={false} axisLine={false} />
-            <Tooltip contentStyle={{ borderRadius: '12px', border: 'none', boxShadow: '0 8px 24px rgba(0,0,0,0.1)' }} />
-            <Legend />
-            <Line type="monotone" dataKey="value" name={`${agg.toUpperCase()} of ${yAxis}`} stroke="#3b82f6" strokeWidth={3} dot={{ r: 6, fill: '#3b82f6', strokeWidth: 2, stroke: '#fff' }} />
-          </LineChart>
-        );
       case 'area':
         return (
-          <AreaChart {...commonProps}>
-            <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
-            <XAxis dataKey="name" stroke="#64748b" fontSize={12} tickLine={false} axisLine={false} />
-            <YAxis stroke="#64748b" fontSize={12} tickLine={false} axisLine={false} />
-            <Tooltip />
-            <Area type="monotone" dataKey="value" stroke="#3b82f6" fill="#3b82f6" fillOpacity={0.2} />
-          </AreaChart>
+          <ResponsiveLine
+            data={lineData}
+            margin={{ top: 20, right: 30, bottom: 60, left: 60 }}
+            xScale={{ type: 'point' }}
+            yScale={{ type: 'linear', min: 'auto', max: 'auto', stacked: false, reverse: false }}
+            curve="monotoneX"
+            axisTop={null}
+            axisRight={null}
+            axisBottom={{
+              tickSize: 5,
+              tickPadding: 5,
+              tickRotation: -30,
+              legend: xAxis,
+              legendOffset: 50,
+              legendPosition: 'middle',
+              truncateTickAt: 15
+            }}
+            axisLeft={{
+              tickSize: 5,
+              tickPadding: 5,
+              tickRotation: 0,
+              legend: `${agg.toUpperCase()} of ${yAxis}`,
+              legendOffset: -50,
+              legendPosition: 'middle'
+            }}
+            colors={CHART_COLORS.primary}
+            lineWidth={3}
+            pointSize={10}
+            pointColor={{ theme: 'background' }}
+            pointBorderWidth={2}
+            pointBorderColor={{ from: 'serieColor' }}
+            enableArea={chartType === 'area'}
+            areaOpacity={0.2}
+            useMesh={true}
+            animate={true}
+            motionConfig="gentle"
+            theme={nivoTheme}
+          />
         );
       case 'pie':
         return (
-          <PieChart>
-            <Pie
-              data={chartData}
-              cx="50%"
-              cy="50%"
-              innerRadius={80}
-              outerRadius={120}
-              paddingAngle={5}
-              dataKey="value"
-            >
-              {chartData.map((entry, index) => (
-                <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
-              ))}
-            </Pie>
-            <Tooltip />
-            <Legend />
-          </PieChart>
+          <ResponsivePie
+            data={pieData}
+            margin={{ top: 40, right: 80, bottom: 80, left: 80 }}
+            innerRadius={0.5}
+            padAngle={2}
+            cornerRadius={4}
+            activeOuterRadiusOffset={8}
+            colors={CHART_COLORS.categorical}
+            borderWidth={1}
+            borderColor={{ from: 'color', modifiers: [['darker', 0.2]] }}
+            arcLinkLabelsSkipAngle={10}
+            arcLinkLabelsTextColor="#334155"
+            arcLinkLabelsThickness={2}
+            arcLinkLabelsColor={{ from: 'color' }}
+            arcLabelsSkipAngle={10}
+            arcLabelsTextColor={{ from: 'color', modifiers: [['darker', 2]] }}
+            legends={[
+              {
+                anchor: 'bottom',
+                direction: 'row',
+                justify: false,
+                translateX: 0,
+                translateY: 56,
+                itemsSpacing: 0,
+                itemWidth: 100,
+                itemHeight: 18,
+                itemTextColor: '#64748b',
+                itemDirection: 'left-to-right',
+                itemOpacity: 1,
+                symbolSize: 12,
+                symbolShape: 'circle'
+              }
+            ]}
+            animate={true}
+            motionConfig="gentle"
+            theme={nivoTheme}
+          />
         );
       default:
         return null;
@@ -143,7 +241,7 @@ const Visualize: React.FC<VisualizeProps> = ({ products, suppliers = [], supplie
       </div>
 
       {activeTab === 'heatmap' && (
-        <ProductHeatmap
+        <ProductUsageHeatmap
           products={products}
           treeNodes={treeNodes}
           suppliers={suppliers}
@@ -153,7 +251,6 @@ const Visualize: React.FC<VisualizeProps> = ({ products, suppliers = [], supplie
 
       {activeTab === 'charts' && (
       <div className="grid grid-cols-1 md:grid-cols-4 gap-6 flex-1 overflow-hidden">
-        {/* Controls */}
         <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm space-y-8 flex flex-col">
           <div>
             <h3 className="text-sm font-bold text-slate-900 mb-4 flex items-center gap-2">
@@ -227,24 +324,16 @@ const Visualize: React.FC<VisualizeProps> = ({ products, suppliers = [], supplie
           </div>
         </div>
 
-        {/* Display */}
         <div className="md:col-span-3 bg-white p-6 rounded-2xl border border-slate-200 shadow-sm flex flex-col">
           <div className="flex items-center justify-between mb-8">
             <div>
               <h2 className="text-xl font-bold text-slate-800">Visual Insights</h2>
               <p className="text-sm text-slate-400">Analyzing <span className="text-blue-600 font-bold">{agg.toUpperCase()} {yAxis}</span> grouped by <span className="text-blue-600 font-bold">{xAxis}</span></p>
             </div>
-            <div className="flex gap-2">
-              <button className="p-2 text-slate-400 hover:text-slate-600 hover:bg-slate-50 rounded-lg">
-                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"></path></svg>
-              </button>
-            </div>
           </div>
 
           <div className="flex-1 w-full min-h-[400px]">
-            <ResponsiveContainer width="100%" height="100%">
-              {renderChart() || <div className="h-full flex items-center justify-center text-slate-300">Select parameters to generate chart</div>}
-            </ResponsiveContainer>
+            {renderChart()}
           </div>
         </div>
       </div>

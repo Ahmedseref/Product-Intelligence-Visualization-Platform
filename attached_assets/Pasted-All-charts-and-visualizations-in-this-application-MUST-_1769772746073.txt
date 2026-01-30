@@ -1,0 +1,173 @@
+All charts and visualizations in this application MUST be implemented using the Nivo
+visualization library (SVG/Canvas), NOT Recharts or table-based grids.
+
+Your task is to:
+1) Refactor existing visualization components
+2) Implement a professional, interactive Product Usage Density Heatmap using Nivo Heatmap
+3) Establish a reusable visualization standard for the entire app
+
+-------------------------------------------------
+1) GLOBAL VISUALIZATION STANDARD
+-------------------------------------------------
+
+- Use Nivo (@nivo/heatmap, @nivo/bar, @nivo/line, etc.)
+- Charts must:
+  - Be responsive
+  - Support light & dark themes
+  - Use consistent color palettes
+  - Support tooltips and click interactions
+- Remove or deprecate Recharts usage from Visualize.tsx and Dashboard charts
+
+Create a reusable wrapper:
+- components/charts/NivoChartWrapper.tsx
+Responsibilities:
+- Theme handling (light/dark)
+- Common margins, fonts, tooltip styles
+- Legend styling
+- Empty / loading states
+
+-------------------------------------------------
+2) PRODUCT USAGE DENSITY HEATMAP (CORE FEATURE)
+-------------------------------------------------
+
+Create:
+components/visualizations/ProductUsageHeatmap.tsx
+
+Use:
+@Nivo/heatmap (ResponsiveHeatMap)
+
+Axes:
+- X-axis → Usage Areas (Application Sectors)
+- Y-axis → Product Categories / Subcategories / Groups
+  (based on selected taxonomy level)
+
+Each heatmap cell value represents:
+- Number of products matching:
+  (taxonomy node × usage area)
+
+Color Scale:
+- Sequential gradient
+- Auto-normalized using max value
+- Zero values visually muted
+
+-------------------------------------------------
+3) INTERACTIONS (CRITICAL)
+-------------------------------------------------
+
+### Hover Tooltip
+On hover, show a custom tooltip containing:
+- Category name
+- Usage area
+- Total products
+- Unique suppliers count
+- Unique manufacturers count
+- Avg / Min / Max price
+- Top 3 certifications (if any)
+
+Tooltip must be:
+- Styled with Tailwind
+- Fast and non-blocking
+
+### Click Interaction
+On cell click:
+- Open a side drawer or modal
+- Show Product Inventory filtered by:
+  - Category
+  - Usage Area
+- Allow:
+  - Export CSV
+  - Generate PI Report
+
+-------------------------------------------------
+4) FILTER PANEL INTEGRATION
+-------------------------------------------------
+
+Heatmap must react to existing filters:
+- Category Level (Sector / Category / Sub-category / Group)
+- Selected Categories (multi-select)
+- Usage Areas (multi-select)
+- Supplier
+- Manufacturer
+- Price range
+- Custom fields
+
+Use debouncing to avoid excessive API calls.
+
+-------------------------------------------------
+5) BACKEND AGGREGATION ENDPOINT
+-------------------------------------------------
+
+Create / extend endpoint:
+GET /api/analytics/product-usage-heatmap
+
+Backend must:
+- Aggregate products using Drizzle ORM
+- Group by:
+  - taxonomy node
+  - usage area
+- Return:
+  - count
+  - distinct suppliers
+  - distinct manufacturers
+  - price stats
+  - product IDs
+
+Return data formatted directly for Nivo Heatmap:
+[
+  {
+    id: "Paint",
+    data: [
+      { x: "Commercial", y: 12, meta: { suppliers: 4, avgPrice: 18.5 } },
+      { x: "Industrial", y: 7, meta: {...} }
+    ]
+  }
+]
+
+-------------------------------------------------
+6) DASHBOARD & VISUALIZE PAGE REFACTOR
+-------------------------------------------------
+
+- Replace existing charts with:
+  - Nivo Bar (category distribution)
+  - Nivo Pie (supplier share)
+  - Nivo Line (price trends)
+- Ensure visual consistency across:
+  - Dashboard
+  - Visualize page
+  - Heatmap page
+
+-------------------------------------------------
+7) PERFORMANCE & UX
+-------------------------------------------------
+
+- Memoize heatmap data
+- Use Nivo Canvas version if dataset is large
+- Show skeleton loader while fetching
+- Handle empty states gracefully
+- Add legend and scale explanation
+
+-------------------------------------------------
+8) CODE QUALITY EXPECTATIONS
+-------------------------------------------------
+
+- Type-safe data models
+- Reusable chart components
+- Clean separation between:
+  - Data fetching
+  - Transformation
+  - Rendering
+- Comments explaining aggregation logic
+
+-------------------------------------------------
+9) DELIVERABLES
+-------------------------------------------------
+
+- ProductUsageHeatmap.tsx (Nivo)
+- Heatmap tooltip component
+- Backend aggregation logic
+- Updated Visualize.tsx
+- Updated Dashboard charts
+- Example mock API response
+
+Follow enterprise SaaS UX standards and ensure the heatmap looks
+polished, modern, and insight-driven.
