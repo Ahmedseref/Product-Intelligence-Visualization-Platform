@@ -405,6 +405,91 @@ const MassImportWizard: React.FC<MassImportWizardProps> = ({ onImport, onCancel,
     return products;
   };
 
+  const generatePasteProducts = (): Product[] => {
+    const nameLines = (pasteData['name'] || '').split('\n').filter(line => line.trim());
+    if (nameLines.length === 0) return [];
+
+    const products: Product[] = [];
+    const supplier = suppliers.find(s => s.id === pasteAssignment.supplierId);
+    const nodeId = pasteAssignment.selectedSubcategory || pasteAssignment.selectedCategory || pasteAssignment.selectedSector;
+    const node = treeNodes.find(n => n.id === nodeId);
+    
+    let sectorName = '';
+    let categoryName = '';
+    
+    if (node?.type === 'sector') {
+      sectorName = node.name;
+      categoryName = '';
+    } else if (node) {
+      categoryName = node.name;
+      let parent = node;
+      while (parent) {
+        if (parent.type === 'sector') {
+          sectorName = parent.name;
+          break;
+        }
+        parent = treeNodes.find(n => n.id === parent?.parentId);
+      }
+    }
+
+    nameLines.forEach((name, index) => {
+      const getFieldValue = (key: string): string => {
+        const lines = (pasteData[key] || '').split('\n');
+        return (lines[index] || '').trim();
+      };
+
+      const technicalSpecs: TechnicalSpec[] = techSpecColumns
+        .filter(col => col.name.trim())
+        .map(col => {
+          const lines = col.data.split('\n');
+          return {
+            id: `${col.id}-${index}`,
+            name: col.name.trim(),
+            value: (lines[index] || '').trim(),
+            unit: col.unit.trim(),
+          };
+        });
+
+      const customFields: { fieldId: string; value: string }[] = [];
+      if (pasteAssignment.usageAreas.length > 0) {
+        customFields.push({ fieldId: 'usage_areas', value: pasteAssignment.usageAreas.join(', ') });
+      }
+
+      const product: Product = {
+        id: `PRD-${Date.now()}-${index}`,
+        name: name.trim(),
+        supplier: supplier?.name || '',
+        supplierId: pasteAssignment.supplierId,
+        nodeId,
+        category: categoryName,
+        sector: sectorName,
+        manufacturer: getFieldValue('manufacturer'),
+        manufacturingLocation: '',
+        description: getFieldValue('description'),
+        imageUrl: '',
+        price: parseFloat(getFieldValue('price')) || 0,
+        currency: getFieldValue('currency') || 'USD',
+        unit: getFieldValue('unit') || 'piece',
+        moq: parseInt(getFieldValue('moq')) || 1,
+        leadTime: parseInt(getFieldValue('leadTime')) || 30,
+        packagingType: getFieldValue('packagingType'),
+        certifications: [],
+        shelfLife: getFieldValue('shelfLife'),
+        storageConditions: getFieldValue('storageConditions'),
+        customFields,
+        technicalSpecs,
+        dateAdded: new Date().toISOString(),
+        lastUpdated: new Date().toISOString(),
+        createdBy: 'Import',
+        history: [],
+      };
+
+      products.push(product);
+    });
+
+    return products;
+  };
+
   const handleImport = () => {
     const products = importMode === 'paste' ? generatePasteProducts() : generateProducts();
     if (products.length > 0) {
@@ -482,92 +567,6 @@ const MassImportWizard: React.FC<MassImportWizardProps> = ({ onImport, onCancel,
 
   const canProceedPasteStep2 = (): boolean => {
     return pasteAssignment.supplierId !== '' && pasteAssignment.selectedSector !== '';
-  };
-
-  const generatePasteProducts = (): Product[] => {
-    const nameLines = (pasteData['name'] || '').split('\n').filter(line => line.trim());
-    if (nameLines.length === 0) return [];
-
-    const products: Product[] = [];
-    const supplier = suppliers.find(s => s.id === pasteAssignment.supplierId);
-    const nodeId = pasteAssignment.selectedSubcategory || pasteAssignment.selectedCategory || pasteAssignment.selectedSector;
-    const node = treeNodes.find(n => n.id === nodeId);
-    
-    let sectorName = '';
-    let categoryName = '';
-    let current = node;
-    
-    if (node?.type === 'sector') {
-      sectorName = node.name;
-      categoryName = '';
-    } else if (node) {
-      categoryName = node.name;
-      let parent = node;
-      while (parent) {
-        if (parent.type === 'sector') {
-          sectorName = parent.name;
-          break;
-        }
-        parent = treeNodes.find(n => n.id === parent?.parentId);
-      }
-    }
-
-    nameLines.forEach((name, index) => {
-      const getFieldValue = (key: string): string => {
-        const lines = (pasteData[key] || '').split('\n');
-        return (lines[index] || '').trim();
-      };
-
-      const technicalSpecs: TechnicalSpec[] = techSpecColumns
-        .filter(col => col.name.trim())
-        .map(col => {
-          const lines = col.data.split('\n');
-          return {
-            id: `${col.id}-${index}`,
-            name: col.name.trim(),
-            value: (lines[index] || '').trim(),
-            unit: col.unit.trim(),
-          };
-        });
-
-      const customFields: { fieldId: string; value: string }[] = [];
-      if (pasteAssignment.usageAreas.length > 0) {
-        customFields.push({ fieldId: 'usage_areas', value: pasteAssignment.usageAreas.join(', ') });
-      }
-
-      const product: Product = {
-        id: `PRD-${Date.now()}-${index}`,
-        name: name.trim(),
-        supplier: supplier?.name || '',
-        supplierId: pasteAssignment.supplierId,
-        nodeId,
-        category: categoryName,
-        sector: sectorName,
-        manufacturer: getFieldValue('manufacturer'),
-        manufacturingLocation: '',
-        description: getFieldValue('description'),
-        imageUrl: '',
-        price: parseFloat(getFieldValue('price')) || 0,
-        currency: getFieldValue('currency') || 'USD',
-        unit: getFieldValue('unit') || 'piece',
-        moq: parseInt(getFieldValue('moq')) || 1,
-        leadTime: parseInt(getFieldValue('leadTime')) || 30,
-        packagingType: getFieldValue('packagingType'),
-        certifications: [],
-        shelfLife: getFieldValue('shelfLife'),
-        storageConditions: getFieldValue('storageConditions'),
-        customFields,
-        technicalSpecs,
-        dateAdded: new Date().toISOString(),
-        lastUpdated: new Date().toISOString(),
-        createdBy: 'Import',
-        history: [],
-      };
-
-      products.push(product);
-    });
-
-    return products;
   };
 
   const toggleUsageArea = (area: string) => {
