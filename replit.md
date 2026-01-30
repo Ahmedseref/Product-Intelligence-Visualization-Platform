@@ -128,6 +128,13 @@ DATABASE_URL=postgresql://user:password@host:5432/database
 - `DELETE /api/supplier-products/:supplierProductId` - Delete a supplier product
 
 ## Recent Changes
+- 2026-01-30: Enhanced Taxonomy Builder with colors, expand/collapse, and export
+  - Unique colors for sectors: 10-color palette (blue, purple, rose, amber, teal, indigo, cyan, orange, pink, lime)
+  - New sectors automatically get next available color, stored in metadata.colorIndex
+  - Expand All / Collapse All buttons in header for quick tree navigation
+  - Export to Image feature with html2canvas for presentations
+  - Export options: Sectors only, With Categories, With Sub-Categories, Full tree
+  - Auto-expands to selected level, captures full tree, restores previous state after export
 - 2026-01-30: Enhanced Taxonomy Builder with comprehensive UX improvements
   - Visual hierarchy: Sector (bold + Building icon), Category (emerald bg), Sub-Category (border-only), Custom (dashed border)
   - Depth indicators with left-side vertical guide lines that fade with depth

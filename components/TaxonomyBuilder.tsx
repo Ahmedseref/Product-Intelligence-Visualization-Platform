@@ -2,7 +2,8 @@ import React, { useState, useMemo, useCallback, useRef, useEffect } from 'react'
 import { TreeNode, Product } from '../types';
 import { 
   ChevronRight, ChevronDown, Plus, Edit2, Trash2, Package, FolderTree, X, Check, 
-  Search, GripVertical, Building2, Layers, Grid3X3, Tag, AlertTriangle
+  Search, GripVertical, Building2, Layers, Grid3X3, Tag, AlertTriangle,
+  ChevronsUpDown, ChevronsDownUp, Camera, Download
 } from 'lucide-react';
 
 interface TaxonomyBuilderProps {
@@ -30,6 +31,19 @@ interface DropTarget {
   nodeId: string;
   parentId: string | null;
 }
+
+const SECTOR_COLORS = [
+  { bg: 'bg-blue-50', border: 'border-blue-400', badge: 'bg-blue-100 text-blue-700 border-blue-200', text: 'text-blue-900', accent: '#3b82f6' },
+  { bg: 'bg-purple-50', border: 'border-purple-400', badge: 'bg-purple-100 text-purple-700 border-purple-200', text: 'text-purple-900', accent: '#8b5cf6' },
+  { bg: 'bg-rose-50', border: 'border-rose-400', badge: 'bg-rose-100 text-rose-700 border-rose-200', text: 'text-rose-900', accent: '#f43f5e' },
+  { bg: 'bg-amber-50', border: 'border-amber-400', badge: 'bg-amber-100 text-amber-700 border-amber-200', text: 'text-amber-900', accent: '#f59e0b' },
+  { bg: 'bg-teal-50', border: 'border-teal-400', badge: 'bg-teal-100 text-teal-700 border-teal-200', text: 'text-teal-900', accent: '#14b8a6' },
+  { bg: 'bg-indigo-50', border: 'border-indigo-400', badge: 'bg-indigo-100 text-indigo-700 border-indigo-200', text: 'text-indigo-900', accent: '#6366f1' },
+  { bg: 'bg-cyan-50', border: 'border-cyan-400', badge: 'bg-cyan-100 text-cyan-700 border-cyan-200', text: 'text-cyan-900', accent: '#06b6d4' },
+  { bg: 'bg-orange-50', border: 'border-orange-400', badge: 'bg-orange-100 text-orange-700 border-orange-200', text: 'text-orange-900', accent: '#f97316' },
+  { bg: 'bg-pink-50', border: 'border-pink-400', badge: 'bg-pink-100 text-pink-700 border-pink-200', text: 'text-pink-900', accent: '#ec4899' },
+  { bg: 'bg-lime-50', border: 'border-lime-400', badge: 'bg-lime-100 text-lime-700 border-lime-200', text: 'text-lime-900', accent: '#84cc16' },
+];
 
 const LEVEL_CONFIG = {
   sector: {
@@ -95,8 +109,12 @@ const TaxonomyBuilder: React.FC<TaxonomyBuilderProps> = ({
     position: 'inside' | 'before' | 'after';
   } | null>(null);
   const [editCancelled, setEditCancelled] = useState(false);
+  const [showExportModal, setShowExportModal] = useState(false);
+  const [exportLevel, setExportLevel] = useState<'sectors' | 'categories' | 'subcategories' | 'all'>('all');
+  const [isExporting, setIsExporting] = useState(false);
   
   const editInputRef = useRef<HTMLInputElement>(null);
+  const treeContainerRef = useRef<HTMLDivElement>(null);
 
   const buildTree = useCallback((nodes: TreeNode[], parentId: string | null, level: number): TreeNodeWithLevel[] => {
     return nodes
@@ -179,6 +197,65 @@ const TaxonomyBuilder: React.FC<TaxonomyBuilderProps> = ({
     });
   };
 
+  const getSectorColorIndex = useCallback((node: TreeNodeWithLevel): number => {
+    if (node.metadata?.colorIndex !== undefined) {
+      return node.metadata.colorIndex as number;
+    }
+    const sectors = tree.filter(n => n.type === 'sector');
+    const sectorIndex = sectors.findIndex(s => s.id === node.id);
+    return sectorIndex % SECTOR_COLORS.length;
+  }, [tree]);
+
+  const getSectorColor = useCallback((node: TreeNodeWithLevel): typeof SECTOR_COLORS[0] | null => {
+    if (node.type !== 'sector') return null;
+    const colorIndex = getSectorColorIndex(node);
+    return SECTOR_COLORS[colorIndex];
+  }, [getSectorColorIndex]);
+
+  const getNextColorIndex = useCallback((): number => {
+    const sectors = tree.filter(n => n.type === 'sector');
+    const usedIndices = sectors.map((s, idx) => {
+      if (s.metadata?.colorIndex !== undefined) {
+        return s.metadata.colorIndex as number;
+      }
+      return idx % SECTOR_COLORS.length;
+    });
+    for (let i = 0; i < SECTOR_COLORS.length; i++) {
+      if (!usedIndices.includes(i)) return i;
+    }
+    return sectors.length % SECTOR_COLORS.length;
+  }, [tree]);
+
+  const expandAll = () => {
+    const allIds = new Set<string>(['root']);
+    const collectIds = (nodes: TreeNodeWithLevel[]) => {
+      nodes.forEach(n => {
+        allIds.add(n.id);
+        collectIds(n.children);
+      });
+    };
+    collectIds(tree);
+    setExpandedNodes(allIds);
+  };
+
+  const collapseAll = () => {
+    setExpandedNodes(new Set(['root']));
+  };
+
+  const expandToLevel = (maxLevel: number) => {
+    const ids = new Set<string>(['root']);
+    const collectIds = (nodes: TreeNodeWithLevel[]) => {
+      nodes.forEach(n => {
+        if (n.level <= maxLevel) {
+          ids.add(n.id);
+          collectIds(n.children);
+        }
+      });
+    };
+    collectIds(tree);
+    setExpandedNodes(ids);
+  };
+
   const handleAddClick = (parentId: string | null, level: number) => {
     setAddParentId(parentId);
     setNewNodeName('');
@@ -196,6 +273,7 @@ const TaxonomyBuilder: React.FC<TaxonomyBuilderProps> = ({
       name: newNodeName.trim(),
       type: newNodeType,
       parentId: addParentId,
+      metadata: newNodeType === 'sector' ? { colorIndex: getNextColorIndex() } : undefined,
     };
     onAddNode(newNode);
     setShowAddModal(false);
@@ -203,6 +281,53 @@ const TaxonomyBuilder: React.FC<TaxonomyBuilderProps> = ({
     if (addParentId) {
       setExpandedNodes(prev => new Set([...prev, addParentId]));
     }
+  };
+
+  const exportToImage = async () => {
+    if (!treeContainerRef.current) return;
+    setIsExporting(true);
+    
+    const previousExpandedNodes = new Set(expandedNodes);
+    
+    const levelMap = { sectors: 1, categories: 2, subcategories: 3, all: 999 };
+    const maxLevel = levelMap[exportLevel];
+    expandToLevel(maxLevel);
+    
+    await new Promise(resolve => setTimeout(resolve, 300));
+    
+    try {
+      const container = treeContainerRef.current;
+      const originalOverflow = container.style.overflow;
+      const originalHeight = container.style.height;
+      
+      container.style.overflow = 'visible';
+      container.style.height = 'auto';
+      
+      const html2canvas = (await import('html2canvas')).default;
+      const canvas = await html2canvas(container, {
+        backgroundColor: '#ffffff',
+        scale: 2,
+        logging: false,
+        useCORS: true,
+        windowHeight: container.scrollHeight,
+        height: container.scrollHeight,
+      });
+      
+      container.style.overflow = originalOverflow;
+      container.style.height = originalHeight;
+      
+      const link = document.createElement('a');
+      link.download = `taxonomy-${exportLevel}-${new Date().toISOString().split('T')[0]}.png`;
+      link.href = canvas.toDataURL('image/png');
+      link.click();
+    } catch (error) {
+      console.error('Export failed:', error);
+      alert('Export failed. Please try again.');
+    }
+    
+    setExpandedNodes(previousExpandedNodes);
+    setIsExporting(false);
+    setShowExportModal(false);
   };
 
   const startEdit = (node: TreeNode) => {
@@ -446,7 +571,12 @@ const TaxonomyBuilder: React.FC<TaxonomyBuilderProps> = ({
     const isDropInside = dropTarget?.type === 'inside' && dropTarget?.nodeId === node.id;
     const isDropBefore = dropTarget?.type === 'before' && dropTarget?.nodeId === node.id;
     const isDropAfter = dropTarget?.type === 'after' && dropTarget?.nodeId === node.id;
-    const isAnyDropTarget = isDropInside || isDropBefore || isDropAfter;
+    
+    const sectorColor = getSectorColor(node);
+    const bgClass = sectorColor ? sectorColor.bg : config.bgClass;
+    const borderClass = sectorColor ? sectorColor.border : config.borderClass;
+    const badgeClass = sectorColor ? sectorColor.badge : config.badgeClass;
+    const textClass = sectorColor ? sectorColor.text : config.textClass;
 
     return (
       <div key={node.id} className={`relative ${isDragging ? 'opacity-50' : ''}`}>
@@ -469,7 +599,7 @@ const TaxonomyBuilder: React.FC<TaxonomyBuilderProps> = ({
           <div 
             className={`
               flex-1 flex items-center gap-3 px-4 py-3 rounded-xl border-2 transition-all duration-200 cursor-pointer
-              ${config.bgClass} ${config.borderClass}
+              ${bgClass} ${borderClass}
               ${isHovered ? 'shadow-lg ring-2 ring-blue-100' : 'shadow-sm'}
               ${isDropInside ? 'ring-4 ring-blue-400 border-blue-500 bg-blue-100 shadow-lg' : ''}
               ${node.type === 'group' ? 'border-dashed' : ''}
@@ -497,7 +627,7 @@ const TaxonomyBuilder: React.FC<TaxonomyBuilderProps> = ({
               )}
             </button>
 
-            <div className={`p-1.5 rounded-lg ${config.badgeClass} border`}>
+            <div className={`p-1.5 rounded-lg ${badgeClass} border`}>
               <Icon size={14} />
             </div>
 
@@ -524,7 +654,7 @@ const TaxonomyBuilder: React.FC<TaxonomyBuilderProps> = ({
                 className="flex items-center gap-3 flex-1 min-w-0"
                 onClick={() => startEdit(node)}
               >
-                <span className={`${config.textClass} truncate cursor-text hover:underline decoration-dotted`}>
+                <span className={`${textClass} font-bold truncate cursor-text hover:underline decoration-dotted`}>
                   {node.name}
                 </span>
                 {isSaving && (
@@ -533,7 +663,7 @@ const TaxonomyBuilder: React.FC<TaxonomyBuilderProps> = ({
               </div>
             )}
 
-            <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider border ${config.badgeClass}`}>
+            <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider border ${badgeClass}`}>
               {config.label}
             </span>
 
@@ -596,13 +726,39 @@ const TaxonomyBuilder: React.FC<TaxonomyBuilderProps> = ({
               <p className="text-sm text-slate-500">Build your product hierarchy with unlimited levels</p>
             </div>
           </div>
-          <button
-            onClick={() => handleAddClick(null, 0)}
-            className="flex items-center gap-2 px-4 py-2.5 bg-gradient-to-r from-blue-600 to-blue-700 text-white rounded-xl hover:from-blue-700 hover:to-blue-800 transition-all shadow-lg shadow-blue-200 font-medium text-sm"
-          >
-            <Plus size={18} />
-            Add Sector
-          </button>
+          <div className="flex items-center gap-2">
+            <div className="flex items-center border border-slate-200 rounded-lg overflow-hidden">
+              <button
+                onClick={expandAll}
+                className="flex items-center gap-1.5 px-3 py-2 text-sm text-slate-600 hover:bg-slate-100 transition-colors"
+                title="Expand All"
+              >
+                <ChevronsDownUp size={16} />
+              </button>
+              <div className="w-px h-6 bg-slate-200" />
+              <button
+                onClick={collapseAll}
+                className="flex items-center gap-1.5 px-3 py-2 text-sm text-slate-600 hover:bg-slate-100 transition-colors"
+                title="Collapse All"
+              >
+                <ChevronsUpDown size={16} />
+              </button>
+            </div>
+            <button
+              onClick={() => setShowExportModal(true)}
+              className="flex items-center gap-2 px-3 py-2 text-slate-600 hover:bg-slate-100 border border-slate-200 rounded-lg transition-colors"
+              title="Export as Image"
+            >
+              <Camera size={16} />
+            </button>
+            <button
+              onClick={() => handleAddClick(null, 0)}
+              className="flex items-center gap-2 px-4 py-2.5 bg-gradient-to-r from-blue-600 to-blue-700 text-white rounded-xl hover:from-blue-700 hover:to-blue-800 transition-all shadow-lg shadow-blue-200 font-medium text-sm"
+            >
+              <Plus size={18} />
+              Add Sector
+            </button>
+          </div>
         </div>
 
         <div className="relative">
@@ -638,6 +794,7 @@ const TaxonomyBuilder: React.FC<TaxonomyBuilderProps> = ({
       </div>
 
       <div 
+        ref={treeContainerRef}
         className="flex-1 overflow-auto p-6"
         onDragOver={handleRootDragOver}
         onDragLeave={() => setDropTarget(null)}
@@ -830,6 +987,80 @@ const TaxonomyBuilder: React.FC<TaxonomyBuilderProps> = ({
                 className="px-4 py-2 bg-blue-600 text-white rounded-xl font-medium hover:bg-blue-700 transition-colors"
               >
                 Move
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {showExportModal && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-2xl shadow-2xl p-6 w-full max-w-md">
+            <div className="flex items-center gap-3 mb-4">
+              <div className="w-12 h-12 rounded-full bg-emerald-100 flex items-center justify-center">
+                <Camera className="w-6 h-6 text-emerald-600" />
+              </div>
+              <div>
+                <h3 className="text-lg font-bold text-slate-800">Export Taxonomy</h3>
+                <p className="text-sm text-slate-500">Download as image for presentations</p>
+              </div>
+            </div>
+            
+            <div className="space-y-3 mb-6">
+              <label className="text-sm font-medium text-slate-700">Select detail level:</label>
+              {[
+                { value: 'sectors', label: 'Sectors only', desc: 'Top level categories' },
+                { value: 'categories', label: 'With Categories', desc: 'Sectors + Categories' },
+                { value: 'subcategories', label: 'With Sub-Categories', desc: 'Sectors + Categories + Sub-Categories' },
+                { value: 'all', label: 'Full tree', desc: 'All levels expanded' },
+              ].map((option) => (
+                <label
+                  key={option.value}
+                  className={`flex items-center gap-3 p-3 rounded-xl border-2 cursor-pointer transition-all ${
+                    exportLevel === option.value 
+                      ? 'border-emerald-400 bg-emerald-50' 
+                      : 'border-slate-200 hover:border-slate-300'
+                  }`}
+                >
+                  <input
+                    type="radio"
+                    name="exportLevel"
+                    value={option.value}
+                    checked={exportLevel === option.value}
+                    onChange={(e) => setExportLevel(e.target.value as typeof exportLevel)}
+                    className="w-4 h-4 text-emerald-600"
+                  />
+                  <div>
+                    <span className="font-medium text-slate-800">{option.label}</span>
+                    <p className="text-xs text-slate-500">{option.desc}</p>
+                  </div>
+                </label>
+              ))}
+            </div>
+
+            <div className="flex justify-end gap-3">
+              <button
+                onClick={() => setShowExportModal(false)}
+                className="px-4 py-2 text-slate-600 hover:bg-slate-100 rounded-xl font-medium transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={exportToImage}
+                disabled={isExporting}
+                className="flex items-center gap-2 px-4 py-2 bg-emerald-600 text-white rounded-xl font-medium hover:bg-emerald-700 transition-colors disabled:opacity-50"
+              >
+                {isExporting ? (
+                  <>
+                    <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                    Exporting...
+                  </>
+                ) : (
+                  <>
+                    <Download size={16} />
+                    Download PNG
+                  </>
+                )}
               </button>
             </div>
           </div>
