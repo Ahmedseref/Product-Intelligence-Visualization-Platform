@@ -496,4 +496,103 @@ export function registerRoutes(app: Express): void {
       res.status(500).json({ error: "Failed to delete attachment" });
     }
   });
+
+  app.get("/api/analytics/product-usage-heatmap", async (req, res) => {
+    try {
+      const { level = 'category', categories, usageAreas, suppliers, manufacturers, minPrice, maxPrice } = req.query;
+      
+      const products = await storage.getProducts();
+      const treeNodes = await storage.getTreeNodes();
+      
+      const DEFAULT_USAGE_AREAS = [
+        'Industrial', 'Commercial', 'Residential', 'Infrastructure',
+        'Food & Beverage', 'Healthcare', 'Parking', 'Sports'
+      ];
+
+      const categoriesByLevel = treeNodes.filter((n: any) => n.type === level);
+      const filteredCategories = categories 
+        ? categoriesByLevel.filter((c: any) => (categories as string).split(',').includes(c.nodeId))
+        : categoriesByLevel;
+      
+      const targetUsageAreas = usageAreas 
+        ? (usageAreas as string).split(',')
+        : DEFAULT_USAGE_AREAS;
+
+      const filteredProducts = products.filter((p: any) => {
+        if (suppliers && !(suppliers as string).split(',').includes(p.supplier)) return false;
+        if (manufacturers && !(manufacturers as string).split(',').includes(p.manufacturer)) return false;
+        if (minPrice && p.price < parseFloat(minPrice as string)) return false;
+        if (maxPrice && p.price > parseFloat(maxPrice as string)) return false;
+        return true;
+      });
+
+      const getProductCategory = (product: any): any => {
+        const findCategoryAtLevel = (nodeId: string): any => {
+          const node = treeNodes.find((n: any) => n.nodeId === nodeId);
+          if (!node) return undefined;
+          if (node.type === level) return node;
+          if (node.parentId) return findCategoryAtLevel(node.parentId);
+          return undefined;
+        };
+        if (product.nodeId) {
+          const node = treeNodes.find((n: any) => n.nodeId === product.nodeId);
+          if (node) return findCategoryAtLevel(node.nodeId);
+        }
+        if (product.category) {
+          const cat = treeNodes.find((n: any) => n.nodeId === product.category || n.name === product.category);
+          if (cat) return findCategoryAtLevel(cat.nodeId);
+        }
+        return undefined;
+      };
+
+      const getProductUsageAreas = (product: any): string[] => {
+        const usageField = product.customFields?.find((cf: any) => 
+          cf.fieldId?.toLowerCase().includes('usage') || 
+          cf.fieldId?.toLowerCase().includes('application')
+        );
+        if (usageField?.value) {
+          return String(usageField.value).split(',').map((v: string) => v.trim());
+        }
+        return DEFAULT_USAGE_AREAS.slice(0, 2);
+      };
+
+      const heatmapData = filteredCategories.map((cat: any) => {
+        const dataPoints = targetUsageAreas.map(area => {
+          const matchingProducts = filteredProducts.filter((p: any) => {
+            const productCat = getProductCategory(p);
+            if (!productCat || productCat.nodeId !== cat.nodeId) return false;
+            return getProductUsageAreas(p).includes(area);
+          });
+
+          const prices = matchingProducts.map((p: any) => p.price).filter((p: number) => p > 0);
+          const suppliersSet = new Set(matchingProducts.map((p: any) => p.supplier));
+          const manufacturersSet = new Set(matchingProducts.map((p: any) => p.manufacturer).filter(Boolean));
+
+          return {
+            x: area,
+            y: matchingProducts.length,
+            meta: {
+              productIds: matchingProducts.map((p: any) => p.id),
+              suppliers: suppliersSet.size,
+              manufacturers: manufacturersSet.size,
+              avgPrice: prices.length > 0 ? prices.reduce((a: number, b: number) => a + b, 0) / prices.length : 0,
+              minPrice: prices.length > 0 ? Math.min(...prices) : 0,
+              maxPrice: prices.length > 0 ? Math.max(...prices) : 0
+            }
+          };
+        });
+
+        return {
+          id: cat.name,
+          categoryId: cat.nodeId,
+          data: dataPoints
+        };
+      });
+
+      res.json(heatmapData);
+    } catch (error) {
+      console.error("Error generating heatmap data:", error);
+      res.status(500).json({ error: "Failed to generate heatmap data" });
+    }
+  });
 }

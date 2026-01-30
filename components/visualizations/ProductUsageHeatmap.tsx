@@ -29,6 +29,7 @@ interface HeatmapDataPoint {
 interface HeatmapSeriesData {
   id: string;
   categoryId: string;
+  categoryName: string;
   data: HeatmapDataPoint[];
 }
 
@@ -187,8 +188,9 @@ const ProductUsageHeatmap: React.FC<ProductUsageHeatmapProps> = ({
       });
 
       return {
-        id: cat.name,
+        id: cat.id,
         categoryId: cat.id,
+        categoryName: cat.name,
         data: dataPoints
       };
     });
@@ -209,7 +211,7 @@ const ProductUsageHeatmap: React.FC<ProductUsageHeatmapProps> = ({
     const dataPoint = series?.data.find(d => d.x === cell.data.x);
     if (dataPoint && dataPoint.meta.products.length > 0) {
       setDrillDown({
-        category: cell.serieId,
+        category: series?.categoryName || cell.serieId,
         usageArea: cell.data.x,
         products: dataPoint.meta.products
       });
@@ -259,7 +261,7 @@ const ProductUsageHeatmap: React.FC<ProductUsageHeatmapProps> = ({
             style={{ backgroundColor: cell.color }}
           />
           <div>
-            <div className="font-bold text-slate-800">{cell.serieId}</div>
+            <div className="font-bold text-slate-800">{series?.categoryName || cell.serieId}</div>
             <div className="text-xs text-slate-500">{cell.data.x}</div>
           </div>
         </div>

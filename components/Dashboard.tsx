@@ -1,17 +1,14 @@
-
 import React, { useMemo } from 'react';
 import { Product } from '../types';
-import { 
-  BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, 
-  PieChart, Pie, Cell, LineChart, Line, AreaChart, Area 
-} from 'recharts';
+import { ResponsiveBar } from '@nivo/bar';
+import { ResponsivePie } from '@nivo/pie';
+import { ResponsiveLine } from '@nivo/line';
+import { nivoTheme, CHART_COLORS } from './charts/NivoChartWrapper';
 import { ICONS } from '../constants';
 
 interface DashboardProps {
   products: Product[];
 }
-
-const COLORS = ['#3b82f6', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6', '#6366f1'];
 
 const Dashboard: React.FC<DashboardProps> = ({ products }) => {
   const stats = useMemo(() => {
@@ -19,18 +16,25 @@ const Dashboard: React.FC<DashboardProps> = ({ products }) => {
     const avgLeadTime = products.reduce((acc, p) => acc + p.leadTime, 0) / (products.length || 1);
     const suppliers = new Set(products.map(p => p.supplier)).size;
     
-    // Group by category
     const catData = products.reduce((acc: any[], p) => {
-      const existing = acc.find(item => item.name === p.category);
+      const existing = acc.find(item => item.id === p.category);
       if (existing) existing.value += 1;
-      else acc.push({ name: p.category, value: 1 });
+      else acc.push({ id: p.category || 'Uncategorized', label: p.category || 'Uncategorized', value: 1 });
       return acc;
     }, []);
 
-    // Price distribution data (mocking spread for line)
-    const priceRange = products.map(p => ({ name: p.name.substring(0, 10), price: p.price }));
+    const priceRange = products.map(p => ({ 
+      x: p.name.substring(0, 12), 
+      y: p.price 
+    }));
 
-    return { totalValue, avgLeadTime, suppliers, catData, priceRange };
+    const lineData = [{
+      id: 'price',
+      color: '#3b82f6',
+      data: priceRange.slice(0, 10)
+    }];
+
+    return { totalValue, avgLeadTime, suppliers, catData, lineData };
   }, [products]);
 
   const kpis = [
@@ -42,7 +46,6 @@ const Dashboard: React.FC<DashboardProps> = ({ products }) => {
 
   return (
     <div className="space-y-6">
-      {/* KPI Cards */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
         {kpis.map((kpi, idx) => (
           <div key={idx} className="bg-white p-6 rounded-xl border border-slate-200 shadow-sm hover:shadow-md transition-shadow">
@@ -59,42 +62,55 @@ const Dashboard: React.FC<DashboardProps> = ({ products }) => {
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        {/* Category Breakdown */}
-        <div className="lg:col-span-1 bg-white p-6 rounded-xl border border-slate-200 shadow-sm h-[400px]">
-          <h3 className="text-lg font-bold text-slate-800 mb-6 flex items-center gap-2">
+        <div className="lg:col-span-1 bg-white p-6 rounded-xl border border-slate-200 shadow-sm">
+          <h3 className="text-lg font-bold text-slate-800 mb-4 flex items-center gap-2">
             {ICONS.Visualize} Category Distribution
           </h3>
-          <ResponsiveContainer width="100%" height="80%">
-            <PieChart>
-              <Pie
+          <div style={{ height: 280 }}>
+            {stats.catData.length > 0 ? (
+              <ResponsivePie
                 data={stats.catData}
-                cx="50%"
-                cy="50%"
-                innerRadius={60}
-                outerRadius={80}
-                paddingAngle={5}
-                dataKey="value"
-              >
-                {stats.catData.map((entry, index) => (
-                  <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
-                ))}
-              </Pie>
-              <Tooltip />
-            </PieChart>
-          </ResponsiveContainer>
-          <div className="mt-4 flex flex-wrap gap-x-4 gap-y-2 justify-center">
-             {stats.catData.map((item, index) => (
-                <div key={index} className="flex items-center gap-2 text-xs font-medium text-slate-600">
-                  <div className="w-2 h-2 rounded-full" style={{ backgroundColor: COLORS[index % COLORS.length] }}></div>
-                  {item.name}
-                </div>
-             ))}
+                margin={{ top: 20, right: 20, bottom: 40, left: 20 }}
+                innerRadius={0.6}
+                padAngle={2}
+                cornerRadius={4}
+                activeOuterRadiusOffset={8}
+                colors={CHART_COLORS.categorical}
+                borderWidth={1}
+                borderColor={{ from: 'color', modifiers: [['darker', 0.2]] }}
+                enableArcLinkLabels={false}
+                arcLabelsSkipAngle={20}
+                arcLabelsTextColor={{ from: 'color', modifiers: [['darker', 2.5]] }}
+                legends={[
+                  {
+                    anchor: 'bottom',
+                    direction: 'row',
+                    justify: false,
+                    translateY: 36,
+                    itemsSpacing: 4,
+                    itemWidth: 80,
+                    itemHeight: 14,
+                    itemTextColor: '#64748b',
+                    itemDirection: 'left-to-right',
+                    itemOpacity: 1,
+                    symbolSize: 10,
+                    symbolShape: 'circle'
+                  }
+                ]}
+                animate={true}
+                motionConfig="gentle"
+                theme={nivoTheme}
+              />
+            ) : (
+              <div className="h-full flex items-center justify-center text-slate-400">
+                No category data available
+              </div>
+            )}
           </div>
         </div>
 
-        {/* Pricing Trends */}
-        <div className="lg:col-span-2 bg-white p-6 rounded-xl border border-slate-200 shadow-sm h-[400px]">
-          <div className="flex items-center justify-between mb-6">
+        <div className="lg:col-span-2 bg-white p-6 rounded-xl border border-slate-200 shadow-sm">
+          <div className="flex items-center justify-between mb-4">
             <h3 className="text-lg font-bold text-slate-800 flex items-center gap-2">
               {ICONS.Price} Price Distribution
             </h3>
@@ -103,27 +119,50 @@ const Dashboard: React.FC<DashboardProps> = ({ products }) => {
               <option>Last Quarter</option>
             </select>
           </div>
-          <ResponsiveContainer width="100%" height="85%">
-            <AreaChart data={stats.priceRange}>
-              <defs>
-                <linearGradient id="colorPrice" x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="5%" stopColor="#3b82f6" stopOpacity={0.1}/>
-                  <stop offset="95%" stopColor="#3b82f6" stopOpacity={0}/>
-                </linearGradient>
-              </defs>
-              <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
-              <XAxis dataKey="name" stroke="#94a3b8" fontSize={10} tickLine={false} axisLine={false} />
-              <YAxis stroke="#94a3b8" fontSize={10} tickLine={false} axisLine={false} tickFormatter={(val) => `$${val}`} />
-              <Tooltip 
-                contentStyle={{ borderRadius: '8px', border: 'none', boxShadow: '0 4px 12px rgba(0,0,0,0.1)' }}
+          <div style={{ height: 280 }}>
+            {stats.lineData[0].data.length > 0 ? (
+              <ResponsiveLine
+                data={stats.lineData}
+                margin={{ top: 20, right: 20, bottom: 50, left: 50 }}
+                xScale={{ type: 'point' }}
+                yScale={{ type: 'linear', min: 'auto', max: 'auto', stacked: false, reverse: false }}
+                curve="monotoneX"
+                axisTop={null}
+                axisRight={null}
+                axisBottom={{
+                  tickSize: 5,
+                  tickPadding: 5,
+                  tickRotation: -30,
+                  truncateTickAt: 10
+                }}
+                axisLeft={{
+                  tickSize: 5,
+                  tickPadding: 5,
+                  tickRotation: 0,
+                  format: (value) => `$${value}`
+                }}
+                colors={['#3b82f6']}
+                lineWidth={3}
+                pointSize={8}
+                pointColor={{ theme: 'background' }}
+                pointBorderWidth={2}
+                pointBorderColor={{ from: 'serieColor' }}
+                enableArea={true}
+                areaOpacity={0.15}
+                useMesh={true}
+                animate={true}
+                motionConfig="gentle"
+                theme={nivoTheme}
               />
-              <Area type="monotone" dataKey="price" stroke="#3b82f6" strokeWidth={2} fillOpacity={1} fill="url(#colorPrice)" />
-            </AreaChart>
-          </ResponsiveContainer>
+            ) : (
+              <div className="h-full flex items-center justify-center text-slate-400">
+                No price data available
+              </div>
+            )}
+          </div>
         </div>
       </div>
 
-      {/* Recent Activity Mock */}
       <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
         <div className="p-4 border-b border-slate-100 bg-slate-50/50 flex items-center justify-between">
           <h3 className="font-bold text-slate-800 text-sm uppercase tracking-wider">Recent Changes</h3>

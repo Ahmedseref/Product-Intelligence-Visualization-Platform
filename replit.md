@@ -9,7 +9,7 @@ A fully functional product intelligence platform with an expandable product taxo
 - **React** with TypeScript
 - **Vite** for development and bundling
 - **Tailwind CSS** (via CDN) for styling
-- **Recharts** for data visualization
+- **Nivo** for data visualization (bar, line, pie, heatmap charts)
 - **Lucide React** for icons
 
 ### Backend (Port 3001)
@@ -128,6 +128,15 @@ DATABASE_URL=postgresql://user:password@host:5432/database
 - `DELETE /api/supplier-products/:supplierProductId` - Delete a supplier product
 
 ## Recent Changes
+- 2026-01-30: Migrated all visualizations to Nivo library
+  - Replaced Recharts with Nivo for consistent, professional charts
+  - Created NivoChartWrapper component for standardized theming, loading, and empty states
+  - Dashboard now uses Nivo Pie and Line charts
+  - Visualize Analytics Charts now uses Nivo Bar, Line, and Pie charts
+  - Product Usage Heatmap migrated to Nivo ResponsiveHeatMap
+  - Added backend aggregation endpoint: GET /api/analytics/product-usage-heatmap
+  - Custom tooltips with hover interactions and click drill-down
+  - Consistent color palettes and theme across all visualizations
 - 2026-01-29: Added Product Usage Density Matrix (Interactive Heatmap)
   - SVG-based heatmap grid showing product distribution across categories and usage areas
   - Multi-select filter panel for categories, usage areas, suppliers, brands, and price ranges
