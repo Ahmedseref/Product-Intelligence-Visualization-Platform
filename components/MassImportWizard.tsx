@@ -20,14 +20,8 @@ const USAGE_AREAS = [
 
 const PASTE_FIELDS = [
   { key: 'name', label: 'Product Name', required: true, placeholder: 'Paste product names here (one per line)' },
-  { key: 'manufacturer', label: 'Brand Name', required: false, placeholder: 'Paste brand names here' },
   { key: 'description', label: 'Description', required: false, placeholder: 'Paste descriptions here' },
   { key: 'price', label: 'Price', required: false, placeholder: 'Paste prices here' },
-  { key: 'currency', label: 'Currency', required: false, placeholder: 'USD, EUR, etc.' },
-  { key: 'unit', label: 'Unit', required: false, placeholder: 'piece, kg, m, etc.' },
-  { key: 'moq', label: 'MOQ', required: false, placeholder: 'Minimum order quantities' },
-  { key: 'leadTime', label: 'Lead Time (days)', required: false, placeholder: 'Lead times in days' },
-  { key: 'packagingType', label: 'Packaging Type', required: false, placeholder: 'Box, Pallet, etc.' },
   { key: 'hsCode', label: 'HS Code', required: false, placeholder: 'HS codes' },
   { key: 'shelfLife', label: 'Shelf Life', required: false, placeholder: 'Shelf life info' },
   { key: 'storageConditions', label: 'Storage Conditions', required: false, placeholder: 'Storage requirements' },
@@ -89,6 +83,12 @@ const MassImportWizard: React.FC<MassImportWizardProps> = ({ onImport, onCancel,
         selectedSubcategory: '',
         supplierId: '',
         usageAreas: [],
+        brandName: '',
+        currency: 'USD',
+        unit: 'piece',
+        moq: '1',
+        leadTime: '30',
+        packagingType: '',
       });
     } else {
       setCurrentStep(1);
@@ -123,6 +123,12 @@ const MassImportWizard: React.FC<MassImportWizardProps> = ({ onImport, onCancel,
     selectedSubcategory: '',
     supplierId: '',
     usageAreas: [] as string[],
+    brandName: '',
+    currency: 'USD',
+    unit: 'piece',
+    moq: '1',
+    leadTime: '30',
+    packagingType: '',
   });
 
   const sectors = useMemo(() => treeNodes.filter(n => n.type === 'sector' && !n.parentId), [treeNodes]);
@@ -463,16 +469,16 @@ const MassImportWizard: React.FC<MassImportWizardProps> = ({ onImport, onCancel,
         nodeId,
         category: categoryName,
         sector: sectorName,
-        manufacturer: getFieldValue('manufacturer'),
+        manufacturer: pasteAssignment.brandName,
         manufacturingLocation: '',
         description: getFieldValue('description'),
         imageUrl: '',
         price: parseFloat(getFieldValue('price')) || 0,
-        currency: getFieldValue('currency') || 'USD',
-        unit: getFieldValue('unit') || 'piece',
-        moq: parseInt(getFieldValue('moq')) || 1,
-        leadTime: parseInt(getFieldValue('leadTime')) || 30,
-        packagingType: getFieldValue('packagingType'),
+        currency: pasteAssignment.currency || 'USD',
+        unit: pasteAssignment.unit || 'piece',
+        moq: parseInt(pasteAssignment.moq) || 1,
+        leadTime: parseInt(pasteAssignment.leadTime) || 30,
+        packagingType: pasteAssignment.packagingType,
         certifications: [],
         shelfLife: getFieldValue('shelfLife'),
         storageConditions: getFieldValue('storageConditions'),
@@ -1108,6 +1114,100 @@ const MassImportWizard: React.FC<MassImportWizardProps> = ({ onImport, onCancel,
                 </button>
               );
             })}
+          </div>
+        </div>
+
+        <div className="border-t border-slate-200 pt-6">
+          <h4 className="text-sm font-bold text-slate-700 mb-4">Product Details</h4>
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+            <div className="space-y-2">
+              <label className="text-sm font-medium text-slate-600">Brand Name</label>
+              <input
+                type="text"
+                value={pasteAssignment.brandName}
+                onChange={e => setPasteAssignment(prev => ({ ...prev, brandName: e.target.value }))}
+                placeholder="Enter brand name"
+                className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:ring-2 focus:ring-blue-500 outline-none"
+              />
+            </div>
+
+            <div className="space-y-2">
+              <label className="text-sm font-medium text-slate-600">Currency</label>
+              <select
+                value={pasteAssignment.currency}
+                onChange={e => setPasteAssignment(prev => ({ ...prev, currency: e.target.value }))}
+                className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:ring-2 focus:ring-blue-500 outline-none"
+              >
+                <option value="USD">USD - US Dollar</option>
+                <option value="EUR">EUR - Euro</option>
+                <option value="GBP">GBP - British Pound</option>
+                <option value="JPY">JPY - Japanese Yen</option>
+                <option value="CNY">CNY - Chinese Yuan</option>
+                <option value="INR">INR - Indian Rupee</option>
+                <option value="AUD">AUD - Australian Dollar</option>
+                <option value="CAD">CAD - Canadian Dollar</option>
+              </select>
+            </div>
+
+            <div className="space-y-2">
+              <label className="text-sm font-medium text-slate-600">Unit</label>
+              <select
+                value={pasteAssignment.unit}
+                onChange={e => setPasteAssignment(prev => ({ ...prev, unit: e.target.value }))}
+                className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:ring-2 focus:ring-blue-500 outline-none"
+              >
+                <option value="piece">Piece</option>
+                <option value="kg">Kilogram (kg)</option>
+                <option value="g">Gram (g)</option>
+                <option value="lb">Pound (lb)</option>
+                <option value="oz">Ounce (oz)</option>
+                <option value="m">Meter (m)</option>
+                <option value="cm">Centimeter (cm)</option>
+                <option value="ft">Foot (ft)</option>
+                <option value="in">Inch (in)</option>
+                <option value="l">Liter (l)</option>
+                <option value="ml">Milliliter (ml)</option>
+                <option value="gal">Gallon (gal)</option>
+                <option value="box">Box</option>
+                <option value="case">Case</option>
+                <option value="pallet">Pallet</option>
+              </select>
+            </div>
+
+            <div className="space-y-2">
+              <label className="text-sm font-medium text-slate-600">MOQ (Minimum Order Quantity)</label>
+              <input
+                type="number"
+                value={pasteAssignment.moq}
+                onChange={e => setPasteAssignment(prev => ({ ...prev, moq: e.target.value }))}
+                min="1"
+                placeholder="1"
+                className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:ring-2 focus:ring-blue-500 outline-none"
+              />
+            </div>
+
+            <div className="space-y-2">
+              <label className="text-sm font-medium text-slate-600">Lead Time (days)</label>
+              <input
+                type="number"
+                value={pasteAssignment.leadTime}
+                onChange={e => setPasteAssignment(prev => ({ ...prev, leadTime: e.target.value }))}
+                min="0"
+                placeholder="30"
+                className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:ring-2 focus:ring-blue-500 outline-none"
+              />
+            </div>
+
+            <div className="space-y-2">
+              <label className="text-sm font-medium text-slate-600">Packaging Type</label>
+              <input
+                type="text"
+                value={pasteAssignment.packagingType}
+                onChange={e => setPasteAssignment(prev => ({ ...prev, packagingType: e.target.value }))}
+                placeholder="Box, Pallet, etc."
+                className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:ring-2 focus:ring-blue-500 outline-none"
+              />
+            </div>
           </div>
         </div>
       </div>
