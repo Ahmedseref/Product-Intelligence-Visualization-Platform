@@ -354,10 +354,10 @@ const ProductUsageHeatmap: React.FC<ProductUsageHeatmapProps> = ({
               onChange={e => setCategoryLevel(e.target.value as any)}
               className="px-3 py-1.5 bg-white border border-slate-200 rounded-lg text-sm font-medium text-slate-700 focus:outline-none focus:ring-2 focus:ring-blue-500"
             >
-              <option value="sector">Sector</option>
-              <option value="category">Category</option>
-              <option value="subcategory">Sub-Category</option>
-              <option value="group">Group</option>
+              <option key="sector" value="sector">Sector</option>
+              <option key="category" value="category">Category</option>
+              <option key="subcategory" value="subcategory">Sub-Category</option>
+              <option key="group" value="group">Group</option>
             </select>
           </div>
         </div>
@@ -432,7 +432,7 @@ const ProductUsageHeatmap: React.FC<ProductUsageHeatmapProps> = ({
                 onChange={e => setSelectedSuppliers(e.target.value ? [e.target.value] : [])}
                 className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
               >
-                <option value="">All Suppliers</option>
+                <option key="all-suppliers" value="">All Suppliers</option>
                 {suppliers.map(s => (
                   <option key={s.supplierId} value={s.name}>{s.name}</option>
                 ))}
@@ -444,7 +444,7 @@ const ProductUsageHeatmap: React.FC<ProductUsageHeatmapProps> = ({
                 onChange={e => setSelectedManufacturers(e.target.value ? [e.target.value] : [])}
                 className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
               >
-                <option value="">All Manufacturers</option>
+                <option key="all-manufacturers" value="">All Manufacturers</option>
                 {allManufacturers.map(m => (
                   <option key={m} value={m}>{m}</option>
                 ))}
