@@ -1,5 +1,5 @@
 import React, { useState, useMemo } from 'react';
-import { Product, ChartType, AggregationMethod, Supplier, SupplierProduct, TreeNode, CustomField } from '../types';
+import { Product, ChartType, AggregationMethod, Supplier, SupplierProduct, TreeNode, CustomField, User } from '../types';
 import { ResponsiveBar } from '@nivo/bar';
 import { ResponsivePie } from '@nivo/pie';
 import { ResponsiveLine } from '@nivo/line';
@@ -14,9 +14,25 @@ interface VisualizeProps {
   supplierProducts: SupplierProduct[];
   treeNodes?: TreeNode[];
   customFields?: CustomField[];
+  currentUser?: User;
+  onProductUpdate?: (product: Product) => void;
+  onProductDelete?: (productId: string) => void;
+  onAddFieldDefinition?: (field: CustomField) => void;
+  onAddTreeNode?: (node: TreeNode) => void;
 }
 
-const Visualize: React.FC<VisualizeProps> = ({ products, suppliers = [], supplierProducts = [], treeNodes = [], customFields = [] }) => {
+const Visualize: React.FC<VisualizeProps> = ({ 
+  products, 
+  suppliers = [], 
+  supplierProducts = [], 
+  treeNodes = [], 
+  customFields = [],
+  currentUser,
+  onProductUpdate,
+  onProductDelete,
+  onAddFieldDefinition,
+  onAddTreeNode
+}) => {
   const [activeTab, setActiveTab] = useState<'charts' | 'heatmap'>('charts');
   const [chartType, setChartType] = useState<ChartType>('bar');
   const [xAxis, setXAxis] = useState<string>('supplier');
@@ -246,6 +262,11 @@ const Visualize: React.FC<VisualizeProps> = ({ products, suppliers = [], supplie
           treeNodes={treeNodes}
           suppliers={suppliers}
           customFields={customFields}
+          currentUser={currentUser}
+          onProductUpdate={onProductUpdate}
+          onProductDelete={onProductDelete}
+          onAddFieldDefinition={onAddFieldDefinition}
+          onAddTreeNode={onAddTreeNode}
         />
       )}
 

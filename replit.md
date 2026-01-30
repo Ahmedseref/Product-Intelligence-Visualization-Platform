@@ -128,6 +128,12 @@ DATABASE_URL=postgresql://user:password@host:5432/database
 - `DELETE /api/supplier-products/:supplierProductId` - Delete a supplier product
 
 ## Recent Changes
+- 2026-01-30: Added full product management in heatmap drill-down modal
+  - Edit, Duplicate, and Delete buttons on each product row (appear on hover)
+  - Edit opens full ProductForm modal with pre-filled data
+  - Duplicate creates copy with "(Copy)" suffix, opens ProductForm for modifications
+  - Delete shows confirmation dialog before removing product
+  - Real-time updates to drill-down list after actions
 - 2026-01-30: Migrated all visualizations to Nivo library
   - Replaced Recharts with Nivo for consistent, professional charts
   - Created NivoChartWrapper component for standardized theming, loading, and empty states

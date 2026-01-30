@@ -605,6 +605,11 @@ const App: React.FC = () => {
                 supplierProducts={supplierProducts}
                 treeNodes={treeNodes}
                 customFields={customFieldConfigs}
+                currentUser={currentUser}
+                onProductUpdate={updateProduct}
+                onProductDelete={deleteProduct}
+                onAddFieldDefinition={addCustomFieldDefinition}
+                onAddTreeNode={addTreeNode}
               />
             )}
             {viewMode === 'add-product' && (
