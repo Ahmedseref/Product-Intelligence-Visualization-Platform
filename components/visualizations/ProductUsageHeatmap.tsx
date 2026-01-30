@@ -206,7 +206,7 @@ const ProductUsageHeatmap: React.FC<ProductUsageHeatmapProps> = ({
       });
 
       return {
-        id: cat.id,
+        id: cat.name,
         categoryId: cat.id,
         categoryName: cat.name,
         data: dataPoints
@@ -225,7 +225,7 @@ const ProductUsageHeatmap: React.FC<ProductUsageHeatmapProps> = ({
   }, [heatmapData]);
 
   const handleCellClick = useCallback((cell: any) => {
-    const series = heatmapData.find(s => s.id === cell.serieId);
+    const series = heatmapData.find(s => s.id === cell.serieId || s.categoryName === cell.serieId);
     const dataPoint = series?.data.find(d => d.x === cell.data.x);
     if (dataPoint && dataPoint.meta.products.length > 0) {
       setDrillDown({
@@ -325,7 +325,7 @@ const ProductUsageHeatmap: React.FC<ProductUsageHeatmapProps> = ({
   }, [editingProduct, duplicatingProduct, onProductUpdate, drillDown]);
 
   const CustomTooltip = ({ cell }: { cell: any }) => {
-    const series = heatmapData.find(s => s.id === cell.serieId);
+    const series = heatmapData.find(s => s.id === cell.serieId || s.categoryName === cell.serieId);
     const dataPoint = series?.data.find(d => d.x === cell.data.x);
     if (!dataPoint) return null;
 
