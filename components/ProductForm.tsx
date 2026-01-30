@@ -1,7 +1,18 @@
 import React, { useState, useMemo } from 'react';
 import { Product, User, CustomField, TreeNode, TechnicalSpec, Supplier } from '../types';
 import { CURRENCIES, UNITS, ICONS } from '../constants';
-import { Plus, Trash2, X } from 'lucide-react';
+import { Plus, Trash2, X, Check } from 'lucide-react';
+
+const USAGE_AREAS = [
+  'Commercial',
+  'Food & Beverage',
+  'Healthcare',
+  'Industrial',
+  'Infrastructure',
+  'Parking',
+  'Residential',
+  'Sports'
+];
 
 interface ProductFormProps {
   onSubmit: (p: Product) => void;
@@ -49,6 +60,17 @@ const ProductForm: React.FC<ProductFormProps> = ({ onSubmit, onCancel, currentUs
   const [newSpecUnit, setNewSpecUnit] = useState('');
   const [editingSpec, setEditingSpec] = useState<{ specId: string; field: 'name' | 'value' | 'unit' } | null>(null);
   const [editSpecValue, setEditSpecValue] = useState('');
+  
+  const getInitialUsageAreas = (): string[] => {
+    if (initialProduct?.customFields) {
+      const usageField = initialProduct.customFields.find(cf => cf.fieldId === 'usage_areas');
+      if (usageField?.value) {
+        return String(usageField.value).split(',').map(v => v.trim()).filter(Boolean);
+      }
+    }
+    return [];
+  };
+  const [selectedUsageAreas, setSelectedUsageAreas] = useState<string[]>(getInitialUsageAreas());
   
   const [formData, setFormData] = useState<Partial<Product>>(isEditMode ? {
     ...initialProduct,
@@ -252,11 +274,17 @@ const ProductForm: React.FC<ProductFormProps> = ({ onSubmit, onCancel, currentUs
       current = treeNodes.find(n => n.id === current?.parentId);
     }
 
+    const existingCustomFields = (formData.customFields || []).filter(cf => cf.fieldId !== 'usage_areas');
+    const updatedCustomFields = selectedUsageAreas.length > 0 
+      ? [...existingCustomFields, { fieldId: 'usage_areas', value: selectedUsageAreas.join(', ') }]
+      : existingCustomFields;
+
     const submission = {
       ...formData,
       sector,
       category: node?.name || 'Uncategorized',
-      technicalSpecs
+      technicalSpecs,
+      customFields: updatedCustomFields
     };
 
     onSubmit(submission as Product);
@@ -482,6 +510,42 @@ const ProductForm: React.FC<ProductFormProps> = ({ onSubmit, onCancel, currentUs
                   value={formData.description}
                   onChange={e => setFormData({...formData, description: e.target.value})}
                 />
+              </div>
+
+              <div className="space-y-2">
+                <label className="text-xs font-bold text-slate-500 uppercase tracking-wider">Usage Areas</label>
+                <p className="text-[10px] text-slate-400">Select the industries or applications where this product is used</p>
+                <div className="flex flex-wrap gap-2">
+                  {USAGE_AREAS.map(area => {
+                    const isSelected = selectedUsageAreas.includes(area);
+                    return (
+                      <button
+                        key={area}
+                        type="button"
+                        onClick={() => {
+                          if (isSelected) {
+                            setSelectedUsageAreas(prev => prev.filter(a => a !== area));
+                          } else {
+                            setSelectedUsageAreas(prev => [...prev, area]);
+                          }
+                        }}
+                        className={`px-3 py-1.5 rounded-full text-xs font-medium transition-all flex items-center gap-1.5 ${
+                          isSelected 
+                            ? 'bg-blue-600 text-white' 
+                            : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+                        }`}
+                      >
+                        {isSelected && <Check className="w-3 h-3" />}
+                        {area}
+                      </button>
+                    );
+                  })}
+                </div>
+                {selectedUsageAreas.length > 0 && (
+                  <p className="text-xs text-blue-600 mt-2">
+                    Selected: {selectedUsageAreas.join(', ')}
+                  </p>
+                )}
               </div>
             </div>
 

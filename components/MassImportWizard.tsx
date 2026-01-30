@@ -33,6 +33,7 @@ const PRODUCT_FIELDS = [
   { key: 'manufacturer', label: 'Manufacturer Name', required: false },
   { key: 'manufacturingLocation', label: 'Manufacturing Location', required: false },
   { key: 'description', label: 'Description', required: false },
+  { key: 'usageAreas', label: 'Usage Areas (comma-separated)', required: false },
   { key: 'price', label: 'Price', required: false },
   { key: 'currency', label: 'Currency', required: false },
   { key: 'unit', label: 'Unit', required: false },
@@ -314,6 +315,17 @@ const MassImportWizard: React.FC<MassImportWizardProps> = ({ onImport, onCancel,
           }
           product.sector = current?.name || '';
         }
+      }
+      
+      if ((product as any).usageAreas) {
+        const usageAreasValue = String((product as any).usageAreas).trim();
+        if (usageAreasValue) {
+          product.customFields = [
+            ...(product.customFields || []),
+            { fieldId: 'usage_areas', value: usageAreasValue }
+          ];
+        }
+        delete (product as any).usageAreas;
       }
       
       products.push(product as Product);
