@@ -74,7 +74,7 @@ const ProductUsageHeatmap: React.FC<ProductUsageHeatmapProps> = ({
   const [selectedSuppliers, setSelectedSuppliers] = useState<string[]>([]);
   const [selectedManufacturers, setSelectedManufacturers] = useState<string[]>([]);
   const [priceRange, setPriceRange] = useState<{ min: string; max: string }>({ min: '', max: '' });
-  const [categoryLevel, setCategoryLevel] = useState<'sector' | 'category' | 'subcategory' | 'group'>('category');
+  const [categoryLevel, setCategoryLevel] = useState<'sector' | 'category' | 'subcategory' | 'group' | 'leaf'>('category');
   const [showFilters, setShowFilters] = useState(true);
   const [drillDown, setDrillDown] = useState<DrillDownData | null>(null);
   const containerRef = useRef<HTMLDivElement>(null);
@@ -110,8 +110,12 @@ const ProductUsageHeatmap: React.FC<ProductUsageHeatmapProps> = ({
   }, [products]);
 
   const categoriesByLevel = useMemo(() => {
+    if (categoryLevel === 'leaf') {
+      const nodeIdsWithProducts = new Set(products.map(p => p.nodeId).filter(Boolean));
+      return treeNodes.filter(n => nodeIdsWithProducts.has(n.id));
+    }
     return treeNodes.filter(n => n.type === categoryLevel);
-  }, [treeNodes, categoryLevel]);
+  }, [treeNodes, categoryLevel, products]);
 
   const getProductUsageAreas = useCallback((product: Product): string[] => {
     const usageField = product.customFields?.find(cf => 
@@ -126,6 +130,13 @@ const ProductUsageHeatmap: React.FC<ProductUsageHeatmapProps> = ({
   }, []);
 
   const getProductCategory = useCallback((product: Product): TreeNode | undefined => {
+    if (categoryLevel === 'leaf') {
+      if (product.nodeId) {
+        return treeNodes.find(n => n.id === product.nodeId);
+      }
+      return undefined;
+    }
+    
     const findCategoryAtLevel = (nodeId: string): TreeNode | undefined => {
       const node = treeNodes.find(n => n.id === nodeId);
       if (!node) return undefined;
@@ -434,10 +445,11 @@ const ProductUsageHeatmap: React.FC<ProductUsageHeatmapProps> = ({
               onChange={e => setCategoryLevel(e.target.value as any)}
               className="px-3 py-1.5 bg-white border border-slate-200 rounded-lg text-sm font-medium text-slate-700 focus:outline-none focus:ring-2 focus:ring-blue-500"
             >
-              <option key="sector" value="sector">Sector</option>
-              <option key="category" value="category">Category</option>
-              <option key="subcategory" value="subcategory">Sub-Category</option>
-              <option key="group" value="group">Group</option>
+              <option value="sector">Sector</option>
+              <option value="category">Category</option>
+              <option value="subcategory">Sub-Category</option>
+              <option value="group">Group</option>
+              <option value="leaf">Leaf Level (Product Nodes)</option>
             </select>
           </div>
         </div>
