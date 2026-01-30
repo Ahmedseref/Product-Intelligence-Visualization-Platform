@@ -25,6 +25,12 @@ interface DragState {
   level: number;
 }
 
+interface DropTarget {
+  type: 'inside' | 'before' | 'after';
+  nodeId: string;
+  parentId: string | null;
+}
+
 const LEVEL_CONFIG = {
   sector: {
     label: 'Sector',
@@ -78,9 +84,16 @@ const TaxonomyBuilder: React.FC<TaxonomyBuilderProps> = ({
   const [hoveredNodeId, setHoveredNodeId] = useState<string | null>(null);
   const [savingId, setSavingId] = useState<string | null>(null);
   const [dragState, setDragState] = useState<DragState | null>(null);
-  const [dropTargetId, setDropTargetId] = useState<string | null>(null);
+  const [dropTarget, setDropTarget] = useState<DropTarget | null>(null);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState<TreeNodeWithLevel | null>(null);
-  const [showMoveConfirm, setShowMoveConfirm] = useState<{ nodeId: string; nodeName: string; targetId: string | null; targetName: string } | null>(null);
+  const [showMoveConfirm, setShowMoveConfirm] = useState<{ 
+    nodeId: string; 
+    nodeName: string; 
+    targetId: string | null; 
+    targetName: string;
+    newType: string;
+    position: 'inside' | 'before' | 'after';
+  } | null>(null);
   const [editCancelled, setEditCancelled] = useState(false);
   
   const editInputRef = useRef<HTMLInputElement>(null);
@@ -277,37 +290,129 @@ const TaxonomyBuilder: React.FC<TaxonomyBuilderProps> = ({
     return true;
   }, [dragState, isDescendantOf]);
 
-  const handleDragOver = (e: React.DragEvent, targetId: string) => {
+  const getTypeForDepth = (depth: number): 'sector' | 'category' | 'subcategory' | 'group' => {
+    if (depth === 1) return 'sector';
+    if (depth === 2) return 'category';
+    if (depth === 3) return 'subcategory';
+    return 'group';
+  };
+
+  const getTypeLabelForDepth = (depth: number): string => {
+    if (depth === 1) return 'Sector';
+    if (depth === 2) return 'Category';
+    if (depth === 3) return 'Sub-Category';
+    return 'Custom Level';
+  };
+
+  const handleDragOver = (e: React.DragEvent, nodeId: string, parentId: string | null) => {
     e.preventDefault();
-    if (dragState && isValidDropTarget(targetId)) {
-      setDropTargetId(targetId);
+    e.stopPropagation();
+    
+    if (!dragState || !isValidDropTarget(nodeId)) {
+      setDropTarget(null);
+      return;
+    }
+
+    const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
+    const y = e.clientY - rect.top;
+    const height = rect.height;
+    
+    if (y < height * 0.25) {
+      setDropTarget({ type: 'before', nodeId, parentId });
+    } else if (y > height * 0.75) {
+      setDropTarget({ type: 'after', nodeId, parentId });
     } else {
-      setDropTargetId(null);
+      setDropTarget({ type: 'inside', nodeId, parentId });
     }
   };
 
-  const handleDragLeave = () => {
-    setDropTargetId(null);
+  const handleRootDragOver = (e: React.DragEvent) => {
+    e.preventDefault();
+    if (dragState && isValidDropTarget(null)) {
+      setDropTarget({ type: 'after', nodeId: 'root', parentId: null });
+    }
   };
 
-  const handleDrop = (e: React.DragEvent, targetId: string | null) => {
+  const handleDragLeave = (e: React.DragEvent) => {
+    const relatedTarget = e.relatedTarget as HTMLElement;
+    if (!relatedTarget || !e.currentTarget.contains(relatedTarget)) {
+      setDropTarget(null);
+    }
+  };
+
+  const handleDrop = (e: React.DragEvent, targetNodeId: string, targetParentId: string | null, targetLevel: number) => {
     e.preventDefault();
-    if (dragState && isValidDropTarget(targetId)) {
-      const targetNode = targetId ? getNodeById(targetId) : null;
+    e.stopPropagation();
+    
+    if (!dragState || !dropTarget) {
+      setDragState(null);
+      setDropTarget(null);
+      return;
+    }
+
+    let newParentId: string | null;
+    let newDepth: number;
+    let targetName: string;
+    
+    if (dropTarget.type === 'inside') {
+      newParentId = targetNodeId;
+      newDepth = targetLevel + 1;
+      const targetNode = getNodeById(targetNodeId);
+      targetName = `inside "${targetNode?.name || 'Unknown'}"`;
+    } else {
+      newParentId = targetParentId;
+      newDepth = targetLevel;
+      if (targetParentId) {
+        const parentNode = getNodeById(targetParentId);
+        targetName = `under "${parentNode?.name || 'Unknown'}"`;
+      } else {
+        targetName = 'to root level';
+      }
+    }
+
+    if (!isValidDropTarget(newParentId === targetNodeId ? targetNodeId : newParentId)) {
+      setDragState(null);
+      setDropTarget(null);
+      return;
+    }
+
+    const newType = getTypeForDepth(newDepth);
+    
+    setShowMoveConfirm({
+      nodeId: dragState.nodeId,
+      nodeName: dragState.nodeName,
+      targetId: newParentId,
+      targetName,
+      newType,
+      position: dropTarget.type
+    });
+    
+    setDragState(null);
+    setDropTarget(null);
+  };
+
+  const handleRootDrop = (e: React.DragEvent) => {
+    e.preventDefault();
+    if (dragState && isValidDropTarget(null)) {
       setShowMoveConfirm({
         nodeId: dragState.nodeId,
         nodeName: dragState.nodeName,
-        targetId,
-        targetName: targetNode?.name || 'Root'
+        targetId: null,
+        targetName: 'root level',
+        newType: 'sector',
+        position: 'after'
       });
     }
     setDragState(null);
-    setDropTargetId(null);
+    setDropTarget(null);
   };
 
   const confirmMove = () => {
     if (showMoveConfirm) {
-      onUpdateNode(showMoveConfirm.nodeId, { parentId: showMoveConfirm.targetId });
+      onUpdateNode(showMoveConfirm.nodeId, { 
+        parentId: showMoveConfirm.targetId,
+        type: showMoveConfirm.newType as 'sector' | 'category' | 'subcategory' | 'group'
+      });
       if (showMoveConfirm.targetId) {
         setExpandedNodes(prev => new Set([...prev, showMoveConfirm.targetId!]));
       }
@@ -317,7 +422,7 @@ const TaxonomyBuilder: React.FC<TaxonomyBuilderProps> = ({
 
   const handleDragEnd = () => {
     setDragState(null);
-    setDropTargetId(null);
+    setDropTarget(null);
   };
 
   const getNodeConfig = (type: string) => {
@@ -329,29 +434,36 @@ const TaxonomyBuilder: React.FC<TaxonomyBuilderProps> = ({
     return opacities[Math.min(level - 1, opacities.length - 1)];
   };
 
-  const renderTreeNode = (node: TreeNodeWithLevel, isLast: boolean, ancestors: string[] = []): React.ReactNode => {
+  const renderTreeNode = (node: TreeNodeWithLevel, isLast: boolean, ancestors: string[] = [], parentId: string | null = null): React.ReactNode => {
     const isExpanded = expandedNodes.has(node.id);
     const hasChildren = node.children.length > 0;
     const config = getNodeConfig(node.type);
     const Icon = config.icon;
     const isHovered = hoveredNodeId === node.id;
-    const isDropTarget = dropTargetId === node.id;
     const isDragging = dragState?.nodeId === node.id;
     const isSaving = savingId === node.id;
+    
+    const isDropInside = dropTarget?.type === 'inside' && dropTarget?.nodeId === node.id;
+    const isDropBefore = dropTarget?.type === 'before' && dropTarget?.nodeId === node.id;
+    const isDropAfter = dropTarget?.type === 'after' && dropTarget?.nodeId === node.id;
+    const isAnyDropTarget = isDropInside || isDropBefore || isDropAfter;
 
     return (
       <div key={node.id} className={`relative ${isDragging ? 'opacity-50' : ''}`}>
+        {isDropBefore && (
+          <div className="absolute left-0 right-0 -top-1 h-1 bg-blue-500 rounded-full z-10" />
+        )}
         <div 
           className={`relative flex items-center gap-2 mb-2 transition-all duration-200 ${
-            isDropTarget ? 'transform scale-[1.02]' : ''
+            isDropInside ? 'transform scale-[1.02]' : ''
           }`}
           onMouseEnter={() => setHoveredNodeId(node.id)}
           onMouseLeave={() => setHoveredNodeId(null)}
           draggable
           onDragStart={(e) => handleDragStart(e, node)}
-          onDragOver={(e) => handleDragOver(e, node.id)}
+          onDragOver={(e) => handleDragOver(e, node.id, parentId)}
           onDragLeave={handleDragLeave}
-          onDrop={(e) => handleDrop(e, node.id)}
+          onDrop={(e) => handleDrop(e, node.id, parentId, node.level)}
           onDragEnd={handleDragEnd}
         >
           <div 
@@ -359,7 +471,7 @@ const TaxonomyBuilder: React.FC<TaxonomyBuilderProps> = ({
               flex-1 flex items-center gap-3 px-4 py-3 rounded-xl border-2 transition-all duration-200 cursor-pointer
               ${config.bgClass} ${config.borderClass}
               ${isHovered ? 'shadow-lg ring-2 ring-blue-100' : 'shadow-sm'}
-              ${isDropTarget ? 'ring-4 ring-blue-300 border-blue-400 bg-blue-50' : ''}
+              ${isDropInside ? 'ring-4 ring-blue-400 border-blue-500 bg-blue-100 shadow-lg' : ''}
               ${node.type === 'group' ? 'border-dashed' : ''}
             `}
           >
@@ -458,9 +570,13 @@ const TaxonomyBuilder: React.FC<TaxonomyBuilderProps> = ({
           </div>
         </div>
 
+        {isDropAfter && (
+          <div className="absolute left-0 right-0 -bottom-1 h-1 bg-blue-500 rounded-full z-10" />
+        )}
+
         {isExpanded && hasChildren && (
           <div className={`ml-6 pl-6 border-l-2 ${getDepthLineOpacity(node.level)}`}>
-            {node.children.map((child, idx) => renderTreeNode(child, idx === node.children.length - 1, [...ancestors, node.id]))}
+            {node.children.map((child, idx) => renderTreeNode(child, idx === node.children.length - 1, [...ancestors, node.id], node.id))}
           </div>
         )}
       </div>
@@ -523,13 +639,13 @@ const TaxonomyBuilder: React.FC<TaxonomyBuilderProps> = ({
 
       <div 
         className="flex-1 overflow-auto p-6"
-        onDragOver={(e) => { e.preventDefault(); setDropTargetId('root'); }}
-        onDragLeave={() => setDropTargetId(null)}
-        onDrop={(e) => handleDrop(e, null)}
+        onDragOver={handleRootDragOver}
+        onDragLeave={() => setDropTarget(null)}
+        onDrop={handleRootDrop}
       >
         <div 
           className={`flex items-center gap-3 p-4 mb-4 rounded-xl border-2 transition-all ${
-            dropTargetId === 'root' ? 'bg-blue-50 border-blue-300 ring-4 ring-blue-100' : 'bg-slate-50 border-slate-200'
+            dropTarget?.nodeId === 'root' ? 'bg-blue-50 border-blue-300 ring-4 ring-blue-100' : 'bg-slate-50 border-slate-200'
           }`}
         >
           <div className="w-8 h-8 bg-slate-200 rounded-lg flex items-center justify-center">
@@ -687,13 +803,19 @@ const TaxonomyBuilder: React.FC<TaxonomyBuilderProps> = ({
               </div>
             </div>
             <p className="text-slate-600 mb-4">
-              Move <span className="font-semibold text-slate-800">{showMoveConfirm.nodeName}</span> to{' '}
+              Move <span className="font-semibold text-slate-800">"{showMoveConfirm.nodeName}"</span>{' '}
               <span className="font-semibold text-blue-600">{showMoveConfirm.targetName}</span>?
             </p>
+            <div className="flex items-center gap-2 p-3 bg-emerald-50 border border-emerald-200 rounded-xl mb-3">
+              <Tag size={16} className="text-emerald-600" />
+              <span className="text-sm text-emerald-800">
+                Will become a <strong>{LEVEL_CONFIG[showMoveConfirm.newType as keyof typeof LEVEL_CONFIG]?.label || 'Custom'}</strong>
+              </span>
+            </div>
             <div className="flex items-center gap-2 p-3 bg-blue-50 border border-blue-200 rounded-xl mb-4">
               <Layers size={16} className="text-blue-600" />
               <span className="text-sm text-blue-800">
-                All child categories will also be moved
+                All child categories will also be moved and re-typed
               </span>
             </div>
             <div className="flex justify-end gap-3 mt-6">
@@ -707,7 +829,7 @@ const TaxonomyBuilder: React.FC<TaxonomyBuilderProps> = ({
                 onClick={confirmMove}
                 className="px-4 py-2 bg-blue-600 text-white rounded-xl font-medium hover:bg-blue-700 transition-colors"
               >
-                Move Category
+                Move
               </button>
             </div>
           </div>
