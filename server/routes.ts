@@ -595,4 +595,28 @@ export function registerRoutes(app: Express): void {
       res.status(500).json({ error: "Failed to generate heatmap data" });
     }
   });
+
+  app.get("/api/settings/usage-areas", async (req, res) => {
+    try {
+      const usageAreas = await storage.getUsageAreas();
+      res.json(usageAreas);
+    } catch (error) {
+      console.error("Error fetching usage areas:", error);
+      res.status(500).json({ error: "Failed to fetch usage areas" });
+    }
+  });
+
+  app.put("/api/settings/usage-areas", async (req, res) => {
+    try {
+      const { areas } = req.body;
+      if (!Array.isArray(areas)) {
+        return res.status(400).json({ error: "Areas must be an array" });
+      }
+      const updatedAreas = await storage.setUsageAreas(areas);
+      res.json(updatedAreas);
+    } catch (error) {
+      console.error("Error updating usage areas:", error);
+      res.status(500).json({ error: "Failed to update usage areas" });
+    }
+  });
 }

@@ -51,7 +51,14 @@ const Sidebar: React.FC<SidebarProps> = ({ currentView, setView, user }) => {
             {ICONS.Users}
             Team Management
           </button>
-          <button className="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium hover:bg-slate-800 hover:text-white transition-all">
+          <button 
+            onClick={() => setView('settings')}
+            className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-all ${
+              currentView === 'settings'
+                ? 'bg-blue-600 text-white shadow-lg shadow-blue-900/20'
+                : 'hover:bg-slate-800 hover:text-white'
+            }`}
+          >
             {ICONS.Settings}
             Settings
           </button>

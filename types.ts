@@ -124,7 +124,7 @@ export interface ChartConfig {
   aggregation: AggregationMethod;
 }
 
-export type ViewMode = 'dashboard' | 'inventory' | 'visualize' | 'add-product' | 'taxonomy-manager' | 'suppliers';
+export type ViewMode = 'dashboard' | 'inventory' | 'visualize' | 'add-product' | 'taxonomy-manager' | 'suppliers' | 'settings';
 export type UserRole = 'Admin' | 'Editor' | 'Viewer';
 
 export interface User {

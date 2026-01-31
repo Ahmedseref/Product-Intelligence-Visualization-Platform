@@ -12,6 +12,7 @@ interface ProductUsageHeatmapProps {
   suppliers: Supplier[];
   customFields: CustomField[];
   currentUser?: User;
+  usageAreas?: string[];
   onCellClick?: (categoryId: string, usageArea: string, products: Product[]) => void;
   onProductUpdate?: (product: Product) => void;
   onProductDelete?: (productId: string) => void;
@@ -63,12 +64,14 @@ const ProductUsageHeatmap: React.FC<ProductUsageHeatmapProps> = ({
   suppliers,
   customFields,
   currentUser,
+  usageAreas: propUsageAreas = [],
   onCellClick,
   onProductUpdate,
   onProductDelete,
   onAddFieldDefinition,
   onAddTreeNode
 }) => {
+  const USAGE_AREAS = propUsageAreas.length > 0 ? propUsageAreas : DEFAULT_USAGE_AREAS;
   const [selectedCategories, setSelectedCategories] = useState<string[]>([]);
   const [selectedUsageAreas, setSelectedUsageAreas] = useState<string[]>([]);
   const [selectedSuppliers, setSelectedSuppliers] = useState<string[]>([]);
@@ -86,7 +89,7 @@ const ProductUsageHeatmap: React.FC<ProductUsageHeatmapProps> = ({
   const [isDeleting, setIsDeleting] = useState(false);
 
   const allUsageAreas = useMemo(() => {
-    const areas = new Set<string>(DEFAULT_USAGE_AREAS);
+    const areas = new Set<string>(USAGE_AREAS);
     products.forEach(p => {
       const usageField = p.customFields?.find(cf => 
         cf.fieldId.toLowerCase().includes('usage') || 
@@ -99,7 +102,7 @@ const ProductUsageHeatmap: React.FC<ProductUsageHeatmapProps> = ({
       }
     });
     return Array.from(areas).sort();
-  }, [products]);
+  }, [products, USAGE_AREAS]);
 
   const allManufacturers = useMemo(() => {
     const manufacturers = new Set<string>();
@@ -126,8 +129,8 @@ const ProductUsageHeatmap: React.FC<ProductUsageHeatmapProps> = ({
     if (usageField?.value) {
       return String(usageField.value).split(',').map(v => v.trim());
     }
-    return DEFAULT_USAGE_AREAS.slice(0, 2);
-  }, []);
+    return USAGE_AREAS.slice(0, 2);
+  }, [USAGE_AREAS]);
 
   const getProductCategory = useCallback((product: Product): TreeNode | undefined => {
     if (categoryLevel === 'leaf') {

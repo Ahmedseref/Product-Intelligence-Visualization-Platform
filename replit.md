@@ -27,10 +27,12 @@ I prefer detailed explanations and thorough code comments. I value iterative dev
     - Product management with detailed forms, including custom fields and technical specifications.
     - Interactive product usage density heatmap.
     - Dashboard with analytics and visualizations.
-    - Mass product import wizard (CSV, XLS, XLSX).
+    - Mass product import wizard (CSV, XLS, XLSX) with file upload and paste-from-Excel modes.
     - Global floating notes widget.
     - Advanced product inventory table with dynamic columns, filtering, and export.
     - Real-time database synchronization.
+    - **Settings page with dynamic Usage Areas management** (add/edit/delete) stored in database.
+    - Usage Areas are used system-wide in ProductForm, MassImportWizard, and ProductUsageHeatmap.
 
 ### System Design Choices
 - Monorepo structure with `client/` and `server/` directories.

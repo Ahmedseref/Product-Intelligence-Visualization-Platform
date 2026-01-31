@@ -3,7 +3,7 @@ import { Product, User, CustomField, TreeNode, TechnicalSpec, Supplier } from '.
 import { CURRENCIES, UNITS, ICONS } from '../constants';
 import { Plus, Trash2, X, Check } from 'lucide-react';
 
-const USAGE_AREAS = [
+const DEFAULT_USAGE_AREAS = [
   'Commercial',
   'Food & Beverage',
   'Healthcare',
@@ -21,14 +21,16 @@ interface ProductFormProps {
   customFields: CustomField[];
   treeNodes: TreeNode[];
   suppliers: Supplier[];
+  usageAreas?: string[];
   onAddFieldDefinition: (field: CustomField) => void;
   onAddTreeNode: (node: TreeNode) => void;
   initialProduct?: Product;
   mode?: 'create' | 'edit';
 }
 
-const ProductForm: React.FC<ProductFormProps> = ({ onSubmit, onCancel, currentUser, customFields, treeNodes, suppliers = [], onAddFieldDefinition, onAddTreeNode, initialProduct, mode = 'create' }) => {
+const ProductForm: React.FC<ProductFormProps> = ({ onSubmit, onCancel, currentUser, customFields, treeNodes, suppliers = [], usageAreas = DEFAULT_USAGE_AREAS, onAddFieldDefinition, onAddTreeNode, initialProduct, mode = 'create' }) => {
   const isEditMode = mode === 'edit' && initialProduct;
+  const USAGE_AREAS = usageAreas.length > 0 ? usageAreas : DEFAULT_USAGE_AREAS;
   
   const [showNewFieldModal, setShowNewFieldModal] = useState(false);
   const [newFieldDef, setNewFieldDef] = useState<Partial<CustomField>>({ label: '', type: 'text' });

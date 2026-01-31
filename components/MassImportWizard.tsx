@@ -7,7 +7,7 @@ import { CURRENCIES, UNITS } from '../constants';
 
 type ImportMode = 'file' | 'paste';
 
-const USAGE_AREAS = [
+const DEFAULT_USAGE_AREAS = [
   'Commercial',
   'Food & Beverage',
   'Healthcare',
@@ -32,6 +32,7 @@ interface MassImportWizardProps {
   onCancel: () => void;
   treeNodes: TreeNode[];
   suppliers: Supplier[];
+  usageAreas?: string[];
 }
 
 type WizardStep = 1 | 2 | 3 | 4;
@@ -67,7 +68,8 @@ const PRODUCT_FIELDS = [
   { key: 'storageConditions', label: 'Storage Conditions', required: false },
 ];
 
-const MassImportWizard: React.FC<MassImportWizardProps> = ({ onImport, onCancel, treeNodes, suppliers }) => {
+const MassImportWizard: React.FC<MassImportWizardProps> = ({ onImport, onCancel, treeNodes, suppliers, usageAreas = DEFAULT_USAGE_AREAS }) => {
+  const USAGE_AREAS = usageAreas.length > 0 ? usageAreas : DEFAULT_USAGE_AREAS;
   const [importMode, setImportMode] = useState<ImportMode>('file');
   const [currentStep, setCurrentStep] = useState<WizardStep>(1);
   

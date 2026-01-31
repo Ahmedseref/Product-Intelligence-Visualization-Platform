@@ -1,6 +1,6 @@
 import { 
   treeNodes, products, customFieldDefinitions,
-  suppliers, supplierProducts, attachments,
+  suppliers, supplierProducts, attachments, appSettings,
   type TreeNode, type InsertTreeNode,
   type Product, type InsertProduct,
   type CustomFieldDefinition, type InsertCustomFieldDefinition,
@@ -204,6 +204,35 @@ export class DatabaseStorage implements IStorage {
   async deleteAttachment(attachmentId: string): Promise<boolean> {
     const result = await db.delete(attachments).where(eq(attachments.attachmentId, attachmentId)).returning();
     return result.length > 0;
+  }
+
+  async getUsageAreas(): Promise<string[]> {
+    const [setting] = await db.select().from(appSettings).where(eq(appSettings.key, 'usage_areas'));
+    if (setting && Array.isArray(setting.value)) {
+      return setting.value as string[];
+    }
+    const defaultAreas = [
+      'Commercial',
+      'Food & Beverage',
+      'Healthcare',
+      'Industrial',
+      'Infrastructure',
+      'Parking',
+      'Residential',
+      'Sports'
+    ];
+    await db.insert(appSettings).values({ key: 'usage_areas', value: defaultAreas }).onConflictDoNothing();
+    return defaultAreas;
+  }
+
+  async setUsageAreas(areas: string[]): Promise<string[]> {
+    const [existing] = await db.select().from(appSettings).where(eq(appSettings.key, 'usage_areas'));
+    if (existing) {
+      await db.update(appSettings).set({ value: areas, updatedAt: new Date() }).where(eq(appSettings.key, 'usage_areas'));
+    } else {
+      await db.insert(appSettings).values({ key: 'usage_areas', value: areas });
+    }
+    return areas;
   }
 }
 

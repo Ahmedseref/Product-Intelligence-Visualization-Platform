@@ -12,6 +12,7 @@ import TaxonomyBuilder from './components/TaxonomyBuilder';
 import SupplierManager from './components/SupplierManager';
 import MassImportWizard from './components/MassImportWizard';
 import FloatingNotesWidget from './components/FloatingNotesWidget';
+import Settings from './components/Settings';
 import { api } from './client/api';
 
 const App: React.FC = () => {
@@ -28,6 +29,7 @@ const App: React.FC = () => {
   const [error, setError] = useState<string | null>(null);
   const [isDbConnected, setIsDbConnected] = useState(false);
   const [addProductMode, setAddProductMode] = useState<'single' | 'mass'>('single');
+  const [usageAreas, setUsageAreas] = useState<string[]>([]);
 
   const syncWithDatabase = useCallback(async () => {
     const retryFetch = async <T,>(fn: () => Promise<T>, attempts: number, delay: number): Promise<T> => {
@@ -135,6 +137,14 @@ const App: React.FC = () => {
         updatedAt: sp.updatedAt || new Date().toISOString(),
         history: (sp.history as any[]) || [],
       })));
+
+      try {
+        const areasData = await api.getUsageAreas();
+        setUsageAreas(areasData);
+      } catch (e) {
+        console.log('Failed to fetch usage areas, using defaults');
+        setUsageAreas(['Commercial', 'Food & Beverage', 'Healthcare', 'Industrial', 'Infrastructure', 'Parking', 'Residential', 'Sports']);
+      }
 
       setIsDbConnected(true);
       setError(null);
@@ -606,6 +616,7 @@ const App: React.FC = () => {
                 treeNodes={treeNodes}
                 customFields={customFieldConfigs}
                 currentUser={currentUser}
+                usageAreas={usageAreas}
                 onProductUpdate={updateProduct}
                 onProductDelete={deleteProduct}
                 onAddFieldDefinition={addCustomFieldDefinition}
@@ -648,6 +659,7 @@ const App: React.FC = () => {
                     customFields={customFieldConfigs}
                     treeNodes={treeNodes}
                     suppliers={suppliers}
+                    usageAreas={usageAreas}
                     onAddFieldDefinition={addCustomFieldDefinition}
                     onAddTreeNode={addTreeNode}
                   />
@@ -657,6 +669,7 @@ const App: React.FC = () => {
                     onCancel={() => { setViewMode('inventory'); setAddProductMode('single'); }}
                     treeNodes={treeNodes}
                     suppliers={suppliers}
+                    usageAreas={usageAreas}
                   />
                 )}
               </div>
@@ -676,6 +689,19 @@ const App: React.FC = () => {
                 onAddSupplier={addSupplier}
                 onUpdateSupplier={updateSupplier}
                 onDeleteSupplier={deleteSupplier}
+              />
+            )}
+            {viewMode === 'settings' && (
+              <Settings
+                usageAreas={usageAreas}
+                onUpdateUsageAreas={async (areas: string[]) => {
+                  try {
+                    const updated = await api.updateUsageAreas(areas);
+                    setUsageAreas(updated);
+                  } catch (e) {
+                    console.error('Failed to update usage areas:', e);
+                  }
+                }}
               />
             )}
           </main>

@@ -267,4 +267,20 @@ export const api = {
     });
     if (!res.ok) throw new Error('Failed to delete supplier product');
   },
+
+  async getUsageAreas(): Promise<string[]> {
+    const res = await fetch(`${API_BASE}/settings/usage-areas`);
+    if (!res.ok) throw new Error('Failed to fetch usage areas');
+    return res.json();
+  },
+
+  async updateUsageAreas(areas: string[]): Promise<string[]> {
+    const res = await fetch(`${API_BASE}/settings/usage-areas`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ areas }),
+    });
+    if (!res.ok) throw new Error('Failed to update usage areas');
+    return res.json();
+  },
 };

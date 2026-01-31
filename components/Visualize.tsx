@@ -15,6 +15,7 @@ interface VisualizeProps {
   treeNodes?: TreeNode[];
   customFields?: CustomField[];
   currentUser?: User;
+  usageAreas?: string[];
   onProductUpdate?: (product: Product) => void;
   onProductDelete?: (productId: string) => void;
   onAddFieldDefinition?: (field: CustomField) => void;
@@ -28,6 +29,7 @@ const Visualize: React.FC<VisualizeProps> = ({
   treeNodes = [], 
   customFields = [],
   currentUser,
+  usageAreas = [],
   onProductUpdate,
   onProductDelete,
   onAddFieldDefinition,
@@ -263,6 +265,7 @@ const Visualize: React.FC<VisualizeProps> = ({
           suppliers={suppliers}
           customFields={customFields}
           currentUser={currentUser}
+          usageAreas={usageAreas}
           onProductUpdate={onProductUpdate}
           onProductDelete={onProductDelete}
           onAddFieldDefinition={onAddFieldDefinition}
