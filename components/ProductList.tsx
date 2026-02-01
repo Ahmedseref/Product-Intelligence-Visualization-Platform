@@ -161,6 +161,39 @@ const ProductList: React.FC<ProductListProps> = ({
     setResizingColumn(columnKey);
   };
 
+  const autoFitColumn = (columnKey: ColumnKey) => {
+    const col = ALL_COLUMNS.find(c => c.key === columnKey);
+    const headerWidth = col ? (col.label.length * 9) + 50 : 100;
+    
+    const getContentWidth = (field: keyof Product, charWidth = 8) => {
+      const maxContent = products.reduce((max, p) => {
+        const val = p[field];
+        const len = typeof val === 'string' ? val.length : String(val ?? '').length;
+        return Math.max(max, len);
+      }, 0);
+      return (maxContent * charWidth) + 40;
+    };
+
+    const widthMap: Record<ColumnKey, number> = {
+      id: Math.min(250, Math.max(headerWidth, getContentWidth('id', 7))),
+      name: Math.min(400, Math.max(headerWidth, getContentWidth('name'))),
+      supplier: Math.min(220, Math.max(headerWidth, getContentWidth('supplier'))),
+      sector: Math.min(180, Math.max(headerWidth, getContentWidth('sector'))),
+      category: Math.min(180, Math.max(headerWidth, getContentWidth('category'))),
+      subCategory: Math.max(headerWidth, 100),
+      price: Math.max(headerWidth, 85),
+      currency: Math.max(headerWidth, 75),
+      unit: Math.max(headerWidth, 70),
+      moq: Math.max(headerWidth, 70),
+      leadTime: Math.max(headerWidth, 95),
+      manufacturer: Math.min(200, Math.max(headerWidth, getContentWidth('manufacturer'))),
+      location: Math.min(200, Math.max(headerWidth, getContentWidth('manufacturingLocation'))),
+      description: Math.min(280, Math.max(headerWidth, getContentWidth('description', 6)))
+    };
+    
+    setColumnWidths(prev => ({ ...prev, [columnKey]: widthMap[columnKey] }));
+  };
+
   const handleSort = (field: ColumnKey) => {
     if (sortField === field) {
       setSortOrder(sortOrder === 'asc' ? 'desc' : 'asc');
@@ -1053,9 +1086,11 @@ const ProductList: React.FC<ProductListProps> = ({
                       <span>{col.label} {col.sortable && sortField === col.key && (sortOrder === 'asc' ? '↑' : '↓')}</span>
                     </div>
                     <div
-                      className="absolute right-0 top-0 h-full w-1 cursor-col-resize hover:bg-blue-400 active:bg-blue-500 transition-colors"
+                      className="absolute right-0 top-0 h-full w-1.5 cursor-col-resize hover:bg-blue-400 active:bg-blue-500 transition-colors"
                       onMouseDown={(e) => startColumnResize(e, col.key)}
                       onClick={(e) => e.stopPropagation()}
+                      onDoubleClick={(e) => { e.stopPropagation(); autoFitColumn(col.key); }}
+                      title="Drag to resize, double-click to auto-fit"
                     />
                   </th>
                 ))}
@@ -1179,10 +1214,10 @@ const ProductList: React.FC<ProductListProps> = ({
                       <td className="px-3 py-3 text-sm text-slate-500 truncate overflow-hidden text-ellipsis" style={{ width: columnWidths.description, minWidth: columnWidths.description, maxWidth: columnWidths.description }} title={p.description}>{p.description || '-'}</td>
                     )}
                     <td className="px-3 py-3 text-right sticky right-0 bg-white group-hover:bg-blue-50/30 z-10">
-                    <div className="flex items-center justify-end gap-1" onClick={e => e.stopPropagation()}>
+                    <div className="flex items-center justify-end gap-0.5" onClick={e => e.stopPropagation()}>
                       <button 
                         onClick={() => currentUser ? setEditingProduct(p) : startEditing(p, 'name', p.name)}
-                        className="p-1.5 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-all"
+                        className="p-1 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded transition-all"
                         title="Edit product"
                       >
                         {ICONS.Edit}
@@ -1190,22 +1225,15 @@ const ProductList: React.FC<ProductListProps> = ({
                       {onCreate && (
                         <button 
                           onClick={() => duplicateProduct(p)}
-                          className="p-1.5 text-slate-400 hover:text-emerald-600 hover:bg-emerald-50 rounded-lg transition-all"
+                          className="p-1 text-slate-400 hover:text-emerald-600 hover:bg-emerald-50 rounded transition-all"
                           title="Duplicate product"
                         >
-                          <Copy size={16} />
+                          <Copy size={14} />
                         </button>
                       )}
                       <button 
-                        onClick={() => setSelectedProduct(p)}
-                        className="p-1.5 text-slate-400 hover:text-slate-600 hover:bg-slate-100 rounded-lg transition-all"
-                        title="View details"
-                      >
-                        {ICONS.Details}
-                      </button>
-                      <button 
                         onClick={() => onDelete(p.id)}
-                        className="p-1.5 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-all"
+                        className="p-1 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded transition-all"
                         title="Delete product"
                       >
                         {ICONS.Trash}
