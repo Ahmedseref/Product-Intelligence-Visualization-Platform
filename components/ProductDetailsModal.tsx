@@ -15,6 +15,42 @@ const ProductDetailsModal: React.FC<ProductDetailsModalProps> = ({ product, onCl
   const [activeTab, setActiveTab] = useState<'details' | 'history' | 'custom'>('details');
   const [isEditingCustom, setIsEditingCustom] = useState(false);
   const [editedCustomFields, setEditedCustomFields] = useState<CustomFieldValue[]>(product.customFields || []);
+  
+  const [editingField, setEditingField] = useState<string | null>(null);
+  const [editPrice, setEditPrice] = useState(product.price);
+  const [editMoq, setEditMoq] = useState(product.moq);
+  const [editLeadTime, setEditLeadTime] = useState(product.leadTime);
+
+  const saveFieldEdit = (field: 'price' | 'moq' | 'leadTime') => {
+    const oldValue = product[field];
+    const newValue = field === 'price' ? editPrice : field === 'moq' ? editMoq : editLeadTime;
+    
+    if (oldValue === newValue) {
+      setEditingField(null);
+      return;
+    }
+    
+    const historyEntry = {
+      id: `HIST-${Date.now()}`,
+      timestamp: new Date().toISOString(),
+      userId: 'U-01',
+      userName: 'Admin User',
+      changes: {
+        [field]: { old: oldValue, new: newValue }
+      },
+      snapshot: {}
+    };
+    
+    const updatedProduct = {
+      ...product,
+      [field]: newValue,
+      lastUpdated: new Date().toISOString(),
+      history: [historyEntry, ...(product.history || [])]
+    };
+    
+    onUpdate(updatedProduct);
+    setEditingField(null);
+  };
 
   const handleSaveCustomFields = () => {
     const updatedProduct = {
@@ -32,7 +68,7 @@ const ProductDetailsModal: React.FC<ProductDetailsModalProps> = ({ product, onCl
           },
           snapshot: {}
         },
-        ...product.history
+        ...(product.history || [])
       ]
     };
     onUpdate(updatedProduct);
@@ -141,13 +177,55 @@ const ProductDetailsModal: React.FC<ProductDetailsModalProps> = ({ product, onCl
                     {ICONS.Price} Commercial Terms
                   </h3>
                   <div className="grid grid-cols-2 gap-4">
-                    <div className="p-3 rounded-xl bg-blue-50/50 border border-blue-100">
-                      <p className="text-[10px] font-bold text-blue-500 uppercase">Unit Price</p>
-                      <p className="text-lg font-bold text-blue-900">{product.currency} {product.price}</p>
+                    <div 
+                      className="p-3 rounded-xl bg-blue-50/50 border border-blue-100 cursor-pointer hover:border-blue-300 transition-all group"
+                      onClick={() => { setEditingField('price'); setEditPrice(product.price); }}
+                    >
+                      <p className="text-[10px] font-bold text-blue-500 uppercase flex items-center gap-1">
+                        Unit Price
+                        <svg className="w-3 h-3 opacity-0 group-hover:opacity-100 transition-opacity" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path></svg>
+                      </p>
+                      {editingField === 'price' ? (
+                        <div className="flex items-center gap-2" onClick={(e) => e.stopPropagation()}>
+                          <span className="text-lg font-bold text-blue-900">{product.currency}</span>
+                          <input
+                            type="number"
+                            value={editPrice}
+                            onChange={(e) => setEditPrice(parseFloat(e.target.value) || 0)}
+                            onKeyDown={(e) => { if (e.key === 'Enter') saveFieldEdit('price'); if (e.key === 'Escape') setEditingField(null); }}
+                            onBlur={() => saveFieldEdit('price')}
+                            autoFocus
+                            className="w-20 text-lg font-bold text-blue-900 bg-white border border-blue-300 rounded px-2 py-0.5 outline-none focus:ring-2 focus:ring-blue-500"
+                          />
+                        </div>
+                      ) : (
+                        <p className="text-lg font-bold text-blue-900">{product.currency} {product.price}</p>
+                      )}
                     </div>
-                    <div className="p-3 rounded-xl bg-slate-50 border border-slate-100">
-                      <p className="text-[10px] font-bold text-slate-400 uppercase">Min Order</p>
-                      <p className="text-lg font-bold text-slate-800">{product.moq} {product.unit}</p>
+                    <div 
+                      className="p-3 rounded-xl bg-slate-50 border border-slate-100 cursor-pointer hover:border-slate-300 transition-all group"
+                      onClick={() => { setEditingField('moq'); setEditMoq(product.moq); }}
+                    >
+                      <p className="text-[10px] font-bold text-slate-400 uppercase flex items-center gap-1">
+                        Min Order
+                        <svg className="w-3 h-3 opacity-0 group-hover:opacity-100 transition-opacity" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path></svg>
+                      </p>
+                      {editingField === 'moq' ? (
+                        <div className="flex items-center gap-2" onClick={(e) => e.stopPropagation()}>
+                          <input
+                            type="number"
+                            value={editMoq}
+                            onChange={(e) => setEditMoq(parseInt(e.target.value) || 1)}
+                            onKeyDown={(e) => { if (e.key === 'Enter') saveFieldEdit('moq'); if (e.key === 'Escape') setEditingField(null); }}
+                            onBlur={() => saveFieldEdit('moq')}
+                            autoFocus
+                            className="w-16 text-lg font-bold text-slate-800 bg-white border border-slate-300 rounded px-2 py-0.5 outline-none focus:ring-2 focus:ring-blue-500"
+                          />
+                          <span className="text-lg font-bold text-slate-800">{product.unit}</span>
+                        </div>
+                      ) : (
+                        <p className="text-lg font-bold text-slate-800">{product.moq} {product.unit}</p>
+                      )}
                     </div>
                   </div>
                 </section>
@@ -159,9 +237,30 @@ const ProductDetailsModal: React.FC<ProductDetailsModalProps> = ({ product, onCl
                     {ICONS.Logistics} Fulfillment
                   </h3>
                   <div className="space-y-3">
-                    <div className="flex justify-between border-b border-slate-50 pb-2">
-                      <span className="text-sm text-slate-500">Average Lead Time</span>
-                      <span className={`text-sm font-bold ${product.leadTime > 60 ? 'text-red-600' : 'text-slate-800'}`}>{product.leadTime} Days</span>
+                    <div 
+                      className="flex justify-between border-b border-slate-50 pb-2 cursor-pointer hover:bg-slate-50 rounded px-2 -mx-2 transition-all group"
+                      onClick={() => { setEditingField('leadTime'); setEditLeadTime(product.leadTime); }}
+                    >
+                      <span className="text-sm text-slate-500 flex items-center gap-1">
+                        Average Lead Time
+                        <svg className="w-3 h-3 opacity-0 group-hover:opacity-100 transition-opacity text-slate-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path></svg>
+                      </span>
+                      {editingField === 'leadTime' ? (
+                        <div className="flex items-center gap-1" onClick={(e) => e.stopPropagation()}>
+                          <input
+                            type="number"
+                            value={editLeadTime}
+                            onChange={(e) => setEditLeadTime(parseInt(e.target.value) || 0)}
+                            onKeyDown={(e) => { if (e.key === 'Enter') saveFieldEdit('leadTime'); if (e.key === 'Escape') setEditingField(null); }}
+                            onBlur={() => saveFieldEdit('leadTime')}
+                            autoFocus
+                            className="w-12 text-sm font-bold text-slate-800 bg-white border border-slate-300 rounded px-2 py-0.5 outline-none focus:ring-2 focus:ring-blue-500"
+                          />
+                          <span className="text-sm font-bold text-slate-800">Days</span>
+                        </div>
+                      ) : (
+                        <span className={`text-sm font-bold ${product.leadTime > 60 ? 'text-red-600' : 'text-slate-800'}`}>{product.leadTime} Days</span>
+                      )}
                     </div>
                     <div className="flex justify-between border-b border-slate-50 pb-2">
                       <span className="text-sm text-slate-500">Packaging</span>

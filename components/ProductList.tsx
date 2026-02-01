@@ -272,30 +272,58 @@ const ProductList: React.FC<ProductListProps> = ({
     
     const updatedProduct = { ...product };
     const field = editingCell.field;
+    let oldValue: any = null;
+    let newValue: any = null;
     
     switch (field) {
       case 'name':
+        oldValue = product.name;
+        newValue = editValue;
         updatedProduct.name = editValue;
         break;
       case 'supplier':
         const selectedSupplier = suppliers.find(s => s.id === editValue);
         if (selectedSupplier) {
+          oldValue = product.supplier;
+          newValue = selectedSupplier.name;
           updatedProduct.supplier = selectedSupplier.name;
           updatedProduct.supplierId = selectedSupplier.id;
         }
         break;
       case 'price':
-        updatedProduct.price = parseFloat(editValue) || 0;
+        oldValue = product.price;
+        newValue = parseFloat(editValue) || 0;
+        updatedProduct.price = newValue;
         break;
       case 'moq':
-        updatedProduct.moq = parseInt(editValue) || 1;
+        oldValue = product.moq;
+        newValue = parseInt(editValue) || 1;
+        updatedProduct.moq = newValue;
         break;
       case 'leadTime':
-        updatedProduct.leadTime = parseInt(editValue) || 0;
+        oldValue = product.leadTime;
+        newValue = parseInt(editValue) || 0;
+        updatedProduct.leadTime = newValue;
         break;
       case 'manufacturer':
+        oldValue = product.manufacturer;
+        newValue = editValue;
         updatedProduct.manufacturer = editValue;
         break;
+    }
+    
+    if (oldValue !== newValue && oldValue !== null) {
+      const historyEntry = {
+        id: `HIST-${Date.now()}`,
+        timestamp: new Date().toISOString(),
+        userId: currentUser?.id || 'U-01',
+        userName: currentUser?.name || 'Admin User',
+        changes: {
+          [field]: { old: oldValue, new: newValue }
+        },
+        snapshot: {}
+      };
+      updatedProduct.history = [historyEntry, ...(updatedProduct.history || [])];
     }
     
     updatedProduct.lastUpdated = new Date().toISOString();
