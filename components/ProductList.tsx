@@ -16,6 +16,7 @@ interface ProductListProps {
   currentUser?: User;
   onAddFieldDefinition?: (field: CustomField) => void;
   onAddTreeNode?: (node: TreeNode) => void;
+  usageAreas?: string[];
 }
 
 interface EditingCell {
@@ -64,7 +65,7 @@ const ALL_COLUMNS: ColumnConfig[] = [
 
 const ProductList: React.FC<ProductListProps> = ({ 
   products, onUpdate, onDelete, onCreate, customFields, treeNodes,
-  suppliers = [], currentUser, onAddFieldDefinition, onAddTreeNode 
+  suppliers = [], currentUser, onAddFieldDefinition, onAddTreeNode, usageAreas = []
 }) => {
   const [selectedProduct, setSelectedProduct] = useState<Product | null>(null);
   const [editingProduct, setEditingProduct] = useState<Product | null>(null);
@@ -1383,6 +1384,7 @@ const ProductList: React.FC<ProductListProps> = ({
               customFields={customFields}
               treeNodes={treeNodes}
               suppliers={suppliers}
+              usageAreas={usageAreas}
               onAddFieldDefinition={onAddFieldDefinition}
               onAddTreeNode={onAddTreeNode}
             />

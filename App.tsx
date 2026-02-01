@@ -655,6 +655,7 @@ const App: React.FC = () => {
                 currentUser={currentUser}
                 onAddFieldDefinition={addCustomFieldDefinition}
                 onAddTreeNode={addTreeNode}
+                usageAreas={usageAreas}
               />
             )}
             {viewMode === 'visualize' && (
