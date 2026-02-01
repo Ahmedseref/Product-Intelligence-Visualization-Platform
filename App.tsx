@@ -30,6 +30,10 @@ const App: React.FC = () => {
   const [isDbConnected, setIsDbConnected] = useState(false);
   const [addProductMode, setAddProductMode] = useState<'single' | 'mass'>('single');
   const [usageAreas, setUsageAreas] = useState<string[]>([]);
+  const [taxonomyPanelWidth, setTaxonomyPanelWidth] = useState(288);
+  const [isResizingPanel, setIsResizingPanel] = useState(false);
+  const panelResizeRef = React.useRef<HTMLDivElement>(null);
+  const resizeStartRef = React.useRef<{ startX: number; startWidth: number } | null>(null);
 
   const syncWithDatabase = useCallback(async () => {
     const retryFetch = async <T,>(fn: () => Promise<T>, attempts: number, delay: number): Promise<T> => {
@@ -160,6 +164,40 @@ const App: React.FC = () => {
     }, 2000);
     return () => clearTimeout(timer);
   }, [syncWithDatabase]);
+
+  useEffect(() => {
+    const handleMouseMove = (e: MouseEvent) => {
+      if (!isResizingPanel || !resizeStartRef.current) return;
+      const deltaX = e.clientX - resizeStartRef.current.startX;
+      const newWidth = Math.max(150, Math.min(500, resizeStartRef.current.startWidth + deltaX));
+      setTaxonomyPanelWidth(newWidth);
+    };
+
+    const handleMouseUp = () => {
+      setIsResizingPanel(false);
+      resizeStartRef.current = null;
+      document.body.style.cursor = '';
+      document.body.style.userSelect = '';
+    };
+
+    if (isResizingPanel) {
+      document.body.style.cursor = 'col-resize';
+      document.body.style.userSelect = 'none';
+      document.addEventListener('mousemove', handleMouseMove);
+      document.addEventListener('mouseup', handleMouseUp);
+    }
+
+    return () => {
+      document.removeEventListener('mousemove', handleMouseMove);
+      document.removeEventListener('mouseup', handleMouseUp);
+    };
+  }, [isResizingPanel]);
+
+  const startPanelResize = (e: React.MouseEvent) => {
+    e.preventDefault();
+    resizeStartRef.current = { startX: e.clientX, startWidth: taxonomyPanelWidth };
+    setIsResizingPanel(true);
+  };
 
   const addProduct = async (newProduct: Product) => {
     try {
@@ -574,8 +612,11 @@ const App: React.FC = () => {
 
         <div className="flex-1 flex overflow-hidden">
           {(viewMode === 'inventory' || viewMode === 'dashboard') && (
-            <aside className="w-72 border-r border-slate-200 bg-white hidden xl:block flex-shrink-0">
-              <div className="p-4 h-full">
+            <aside 
+              className="border-r border-slate-200 bg-white hidden xl:flex flex-shrink-0 relative"
+              style={{ width: taxonomyPanelWidth }}
+            >
+              <div className="p-4 h-full flex-1 overflow-auto">
                 <ProductTree 
                   nodes={treeNodes} 
                   selectedNodeId={selectedNodeId} 
@@ -586,6 +627,14 @@ const App: React.FC = () => {
                   onDeleteNode={deleteTreeNode}
                   onMoveNode={moveTreeNode}
                 />
+              </div>
+              <div
+                ref={panelResizeRef}
+                onMouseDown={startPanelResize}
+                className="absolute right-0 top-0 h-full w-1.5 cursor-col-resize hover:bg-blue-400 active:bg-blue-500 transition-colors group flex items-center justify-center"
+                style={{ marginRight: -3 }}
+              >
+                <div className="w-0.5 h-8 bg-slate-300 group-hover:bg-blue-400 rounded-full" />
               </div>
             </aside>
           )}
