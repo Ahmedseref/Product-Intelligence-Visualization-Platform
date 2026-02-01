@@ -7,17 +7,6 @@ import { CURRENCIES, UNITS } from '../constants';
 
 type ImportMode = 'file' | 'paste';
 
-const DEFAULT_USAGE_AREAS = [
-  'Commercial',
-  'Food & Beverage',
-  'Healthcare',
-  'Industrial',
-  'Infrastructure',
-  'Parking',
-  'Residential',
-  'Sports'
-];
-
 const PASTE_FIELDS = [
   { key: 'name', label: 'Product Name', required: true, placeholder: 'Paste product names here (one per line)' },
   { key: 'description', label: 'Description', required: false, placeholder: 'Paste descriptions here' },
@@ -68,8 +57,8 @@ const PRODUCT_FIELDS = [
   { key: 'storageConditions', label: 'Storage Conditions', required: false },
 ];
 
-const MassImportWizard: React.FC<MassImportWizardProps> = ({ onImport, onCancel, treeNodes, suppliers, usageAreas = DEFAULT_USAGE_AREAS }) => {
-  const USAGE_AREAS = usageAreas.length > 0 ? usageAreas : DEFAULT_USAGE_AREAS;
+const MassImportWizard: React.FC<MassImportWizardProps> = ({ onImport, onCancel, treeNodes, suppliers, usageAreas = [] }) => {
+  const USAGE_AREAS = usageAreas;
   const [importMode, setImportMode] = useState<ImportMode>('file');
   const [currentStep, setCurrentStep] = useState<WizardStep>(1);
   

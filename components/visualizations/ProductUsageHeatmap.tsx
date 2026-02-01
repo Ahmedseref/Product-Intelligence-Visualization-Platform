@@ -2,7 +2,7 @@ import React, { useState, useMemo, useCallback, useRef } from 'react';
 import { ResponsiveHeatMap } from '@nivo/heatmap';
 import { Product, TreeNode, Supplier, CustomField, User } from '../../types';
 import NivoChartWrapper, { nivoTheme, CHART_COLORS } from '../charts/NivoChartWrapper';
-import { Filter, X, Download, ChevronDown, ChevronUp, Layers, Edit2, Copy, Trash2 } from 'lucide-react';
+import { Filter, X, Download, ChevronDown, ChevronUp, Layers, Edit2, Copy, Trash2, Tag, Check } from 'lucide-react';
 import ProductForm from '../ProductForm';
 import { api } from '../../client/api';
 
@@ -47,17 +47,6 @@ interface DrillDownData {
   products: Product[];
 }
 
-const DEFAULT_USAGE_AREAS = [
-  'Industrial',
-  'Commercial',
-  'Residential',
-  'Infrastructure',
-  'Food & Beverage',
-  'Healthcare',
-  'Parking',
-  'Sports'
-];
-
 const ProductUsageHeatmap: React.FC<ProductUsageHeatmapProps> = ({
   products,
   treeNodes,
@@ -71,7 +60,7 @@ const ProductUsageHeatmap: React.FC<ProductUsageHeatmapProps> = ({
   onAddFieldDefinition,
   onAddTreeNode
 }) => {
-  const USAGE_AREAS = propUsageAreas.length > 0 ? propUsageAreas : DEFAULT_USAGE_AREAS;
+  const USAGE_AREAS = propUsageAreas;
   const [selectedCategories, setSelectedCategories] = useState<string[]>([]);
   const [selectedUsageAreas, setSelectedUsageAreas] = useState<string[]>([]);
   const [selectedSuppliers, setSelectedSuppliers] = useState<string[]>([]);
@@ -87,6 +76,7 @@ const ProductUsageHeatmap: React.FC<ProductUsageHeatmapProps> = ({
   const [duplicatingProduct, setDuplicatingProduct] = useState<Product | null>(null);
   const [deletingProduct, setDeletingProduct] = useState<Product | null>(null);
   const [isDeleting, setIsDeleting] = useState(false);
+  const [editingUsageProductId, setEditingUsageProductId] = useState<string | null>(null);
 
   const allUsageAreas = useMemo(() => {
     return [...USAGE_AREAS].sort();
@@ -115,9 +105,9 @@ const ProductUsageHeatmap: React.FC<ProductUsageHeatmapProps> = ({
       cf.fieldId.toLowerCase().includes('industry')
     );
     if (usageField?.value) {
-      return String(usageField.value).split(',').map(v => v.trim());
+      return String(usageField.value).split(',').map(v => v.trim()).filter(v => USAGE_AREAS.includes(v));
     }
-    return USAGE_AREAS.slice(0, 2);
+    return [];
   }, [USAGE_AREAS]);
 
   const getProductCategory = useCallback((product: Product): TreeNode | undefined => {
@@ -280,6 +270,40 @@ const ProductUsageHeatmap: React.FC<ProductUsageHeatmapProps> = ({
     };
     setDuplicatingProduct(duplicated);
   }, []);
+
+  const handleToggleUsageArea = useCallback(async (product: Product, area: string) => {
+    if (!onProductUpdate) return;
+    const currentAreas = getProductUsageAreas(product);
+    const newAreas = currentAreas.includes(area)
+      ? currentAreas.filter(a => a !== area)
+      : [...currentAreas, area];
+    
+    const updatedCustomFields = (product.customFields || []).filter(
+      cf => !cf.fieldId.toLowerCase().includes('usage') && 
+            !cf.fieldId.toLowerCase().includes('application') &&
+            !cf.fieldId.toLowerCase().includes('industry')
+    );
+    updatedCustomFields.push({ fieldId: 'usage_areas', value: newAreas.join(', ') });
+    
+    const updatedProduct: Product = {
+      ...product,
+      customFields: updatedCustomFields,
+      lastUpdated: new Date().toISOString()
+    };
+    
+    try {
+      await api.updateProduct(product.id, { customFields: updatedCustomFields } as any);
+      onProductUpdate(updatedProduct);
+      if (drillDown) {
+        setDrillDown({
+          ...drillDown,
+          products: drillDown.products.map(p => p.id === product.id ? updatedProduct : p)
+        });
+      }
+    } catch (error) {
+      console.error('Failed to update usage areas:', error);
+    }
+  }, [onProductUpdate, getProductUsageAreas, drillDown]);
 
   const handleDeleteProduct = useCallback(async () => {
     if (!deletingProduct || !onProductDelete) return;
@@ -661,50 +685,102 @@ const ProductUsageHeatmap: React.FC<ProductUsageHeatmapProps> = ({
                     <th className="px-4 py-3 text-left text-xs font-bold text-slate-500 uppercase">ID</th>
                     <th className="px-4 py-3 text-left text-xs font-bold text-slate-500 uppercase">Product Name</th>
                     <th className="px-4 py-3 text-left text-xs font-bold text-slate-500 uppercase">Supplier</th>
+                    <th className="px-4 py-3 text-left text-xs font-bold text-slate-500 uppercase">Usage Areas</th>
                     <th className="px-4 py-3 text-left text-xs font-bold text-slate-500 uppercase">Price</th>
-                    <th className="px-4 py-3 text-left text-xs font-bold text-slate-500 uppercase">MOQ</th>
-                    <th className="px-4 py-3 text-left text-xs font-bold text-slate-500 uppercase">Lead Time</th>
                     <th className="px-4 py-3 text-right text-xs font-bold text-slate-500 uppercase">Actions</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100">
-                  {drillDown.products.map((product, idx) => (
-                    <tr key={product.id} className="hover:bg-slate-50 group">
-                      <td className="px-4 py-3 text-sm text-slate-600 font-mono">{product.id}</td>
-                      <td className="px-4 py-3 text-sm font-medium text-slate-800">{product.name}</td>
-                      <td className="px-4 py-3 text-sm text-slate-600">{product.supplier}</td>
-                      <td className="px-4 py-3 text-sm text-slate-600">
-                        {product.currency} {product.price.toFixed(2)}
-                      </td>
-                      <td className="px-4 py-3 text-sm text-slate-600">{product.moq}</td>
-                      <td className="px-4 py-3 text-sm text-slate-600">{product.leadTime} days</td>
-                      <td className="px-4 py-3 text-right">
-                        <div className="flex items-center justify-end gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                          <button
-                            onClick={() => handleEditProduct(product)}
-                            className="p-1.5 text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
-                            title="Edit product"
-                          >
-                            <Edit2 className="w-4 h-4" />
-                          </button>
-                          <button
-                            onClick={() => handleDuplicateProduct(product)}
-                            className="p-1.5 text-green-600 hover:bg-green-50 rounded-lg transition-colors"
-                            title="Duplicate product"
-                          >
-                            <Copy className="w-4 h-4" />
-                          </button>
-                          <button
-                            onClick={() => setDeletingProduct(product)}
-                            className="p-1.5 text-red-600 hover:bg-red-50 rounded-lg transition-colors"
-                            title="Delete product"
-                          >
-                            <Trash2 className="w-4 h-4" />
-                          </button>
-                        </div>
-                      </td>
-                    </tr>
-                  ))}
+                  {drillDown.products.map((product, idx) => {
+                    const productAreas = getProductUsageAreas(product);
+                    const isEditingUsage = editingUsageProductId === product.id;
+                    return (
+                      <tr key={product.id} className="hover:bg-slate-50 group">
+                        <td className="px-4 py-3 text-sm text-slate-600 font-mono">{product.id}</td>
+                        <td className="px-4 py-3 text-sm font-medium text-slate-800">{product.name}</td>
+                        <td className="px-4 py-3 text-sm text-slate-600">{product.supplier}</td>
+                        <td className="px-4 py-3">
+                          {isEditingUsage ? (
+                            <div className="space-y-2">
+                              <div className="flex flex-wrap gap-1">
+                                {USAGE_AREAS.map(area => {
+                                  const isSelected = productAreas.includes(area);
+                                  return (
+                                    <button
+                                      key={area}
+                                      onClick={() => handleToggleUsageArea(product, area)}
+                                      className={`px-2 py-0.5 text-xs rounded-full transition-all ${
+                                        isSelected
+                                          ? 'bg-blue-600 text-white'
+                                          : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+                                      }`}
+                                    >
+                                      {isSelected && <Check className="w-3 h-3 inline mr-1" />}
+                                      {area}
+                                    </button>
+                                  );
+                                })}
+                              </div>
+                              <button
+                                onClick={() => setEditingUsageProductId(null)}
+                                className="text-xs text-blue-600 hover:underline"
+                              >
+                                Done
+                              </button>
+                            </div>
+                          ) : (
+                            <div 
+                              className="flex flex-wrap gap-1 cursor-pointer group/usage"
+                              onClick={() => setEditingUsageProductId(product.id)}
+                              title="Click to edit usage areas"
+                            >
+                              {productAreas.length > 0 ? (
+                                productAreas.map(area => (
+                                  <span 
+                                    key={area}
+                                    className="px-2 py-0.5 bg-blue-50 text-blue-700 text-xs rounded-full"
+                                  >
+                                    {area}
+                                  </span>
+                                ))
+                              ) : (
+                                <span className="text-xs text-slate-400 italic">No areas</span>
+                              )}
+                              <Tag className="w-3 h-3 text-slate-400 opacity-0 group-hover/usage:opacity-100 transition-opacity ml-1" />
+                            </div>
+                          )}
+                        </td>
+                        <td className="px-4 py-3 text-sm text-slate-600">
+                          {product.currency} {product.price.toFixed(2)}
+                        </td>
+                        <td className="px-4 py-3 text-right">
+                          <div className="flex items-center justify-end gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                            <button
+                              onClick={() => handleEditProduct(product)}
+                              className="p-1.5 text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
+                              title="Edit product"
+                            >
+                              <Edit2 className="w-4 h-4" />
+                            </button>
+                            <button
+                              onClick={() => handleDuplicateProduct(product)}
+                              className="p-1.5 text-green-600 hover:bg-green-50 rounded-lg transition-colors"
+                              title="Duplicate product"
+                            >
+                              <Copy className="w-4 h-4" />
+                            </button>
+                            <button
+                              onClick={() => setDeletingProduct(product)}
+                              className="p-1.5 text-red-600 hover:bg-red-50 rounded-lg transition-colors"
+                              title="Delete product"
+                            >
+                              <Trash2 className="w-4 h-4" />
+                            </button>
+                          </div>
+                        </td>
+                      </tr>
+                    );
+                  })}
                 </tbody>
               </table>
             </div>
