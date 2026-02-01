@@ -89,20 +89,8 @@ const ProductUsageHeatmap: React.FC<ProductUsageHeatmapProps> = ({
   const [isDeleting, setIsDeleting] = useState(false);
 
   const allUsageAreas = useMemo(() => {
-    const areas = new Set<string>(USAGE_AREAS);
-    products.forEach(p => {
-      const usageField = p.customFields?.find(cf => 
-        cf.fieldId.toLowerCase().includes('usage') || 
-        cf.fieldId.toLowerCase().includes('application') ||
-        cf.fieldId.toLowerCase().includes('industry')
-      );
-      if (usageField?.value) {
-        const values = String(usageField.value).split(',').map(v => v.trim());
-        values.forEach(v => areas.add(v));
-      }
-    });
-    return Array.from(areas).sort();
-  }, [products, USAGE_AREAS]);
+    return [...USAGE_AREAS].sort();
+  }, [USAGE_AREAS]);
 
   const allManufacturers = useMemo(() => {
     const manufacturers = new Set<string>();
