@@ -1304,6 +1304,10 @@ const ProductList: React.FC<ProductListProps> = ({
           product={selectedProduct} 
           onClose={() => setSelectedProduct(null)} 
           onUpdate={onUpdate}
+          onEdit={(p) => {
+            setSelectedProduct(null);
+            setEditingProduct(p);
+          }}
           treeNodes={treeNodes}
         />
       )}

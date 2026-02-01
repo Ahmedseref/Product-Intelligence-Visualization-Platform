@@ -281,12 +281,48 @@ const ProductForm: React.FC<ProductFormProps> = ({ onSubmit, onCancel, currentUs
       ? [...existingCustomFields, { fieldId: 'usage_areas', value: selectedUsageAreas.join(', ') }]
       : existingCustomFields;
 
+    let updatedHistory = [...(formData.history || [])];
+    
+    if (mode === 'edit' && initialProduct) {
+      const changes: Record<string, { old: any; new: any }> = {};
+      
+      if (initialProduct.price !== formData.price) {
+        changes.price = { old: initialProduct.price, new: formData.price };
+      }
+      if (initialProduct.moq !== formData.moq) {
+        changes.moq = { old: initialProduct.moq, new: formData.moq };
+      }
+      if (initialProduct.leadTime !== formData.leadTime) {
+        changes.leadTime = { old: initialProduct.leadTime, new: formData.leadTime };
+      }
+      if (initialProduct.name !== formData.name) {
+        changes.name = { old: initialProduct.name, new: formData.name };
+      }
+      if (initialProduct.supplier !== formData.supplier) {
+        changes.supplier = { old: initialProduct.supplier, new: formData.supplier };
+      }
+      
+      if (Object.keys(changes).length > 0) {
+        const historyEntry = {
+          id: `HIST-${Date.now()}`,
+          timestamp: new Date().toISOString(),
+          userId: currentUser.id,
+          userName: currentUser.name,
+          changes,
+          snapshot: {}
+        };
+        updatedHistory = [historyEntry, ...updatedHistory];
+      }
+    }
+
     const submission = {
       ...formData,
       sector,
       category: node?.name || 'Uncategorized',
       technicalSpecs,
-      customFields: updatedCustomFields
+      customFields: updatedCustomFields,
+      history: updatedHistory,
+      lastUpdated: new Date().toISOString()
     };
 
     onSubmit(submission as Product);

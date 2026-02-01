@@ -1,36 +1,20 @@
 
-import React, { useState, useEffect } from 'react';
-import { Product, HistoryEntry, CustomFieldValue, TreeNode } from '../types';
+import React, { useState } from 'react';
+import { Product, CustomFieldValue, TreeNode } from '../types';
 import { ICONS } from '../constants';
-import FileAttachments, { Attachment } from './FileAttachments';
 
 interface ProductDetailsModalProps {
   product: Product;
   onClose: () => void;
   onUpdate: (p: Product) => void;
+  onEdit: (p: Product) => void;
   treeNodes: TreeNode[];
 }
 
-const ProductDetailsModal: React.FC<ProductDetailsModalProps> = ({ product, onClose, onUpdate, treeNodes }) => {
-  const [activeTab, setActiveTab] = useState<'details' | 'history' | 'custom' | 'files'>('details');
+const ProductDetailsModal: React.FC<ProductDetailsModalProps> = ({ product, onClose, onUpdate, onEdit, treeNodes }) => {
+  const [activeTab, setActiveTab] = useState<'details' | 'history' | 'custom'>('details');
   const [isEditingCustom, setIsEditingCustom] = useState(false);
   const [editedCustomFields, setEditedCustomFields] = useState<CustomFieldValue[]>(product.customFields || []);
-  const [attachments, setAttachments] = useState<Attachment[]>([]);
-
-  useEffect(() => {
-    const fetchAttachments = async () => {
-      try {
-        const response = await fetch(`/api/attachments/by-product/${product.id}`);
-        if (response.ok) {
-          const data = await response.json();
-          setAttachments(data);
-        }
-      } catch (error) {
-        console.error('Error fetching attachments:', error);
-      }
-    };
-    fetchAttachments();
-  }, [product.id]);
 
   const handleSaveCustomFields = () => {
     const updatedProduct = {
@@ -83,9 +67,6 @@ const ProductDetailsModal: React.FC<ProductDetailsModalProps> = ({ product, onCl
         {/* Header */}
         <div className="p-6 border-b border-slate-100 flex items-start justify-between bg-slate-50/50">
           <div className="flex items-center gap-4">
-             <div className="w-16 h-16 rounded-xl overflow-hidden border border-slate-200">
-                <img src={product.imageUrl} alt={product.name} className="w-full h-full object-cover" />
-             </div>
              <div>
                 <div className="flex items-center gap-2 mb-1">
                   <h2 className="text-xl font-bold text-slate-900">{product.name}</h2>
@@ -127,12 +108,6 @@ const ProductDetailsModal: React.FC<ProductDetailsModalProps> = ({ product, onCl
              className={`px-4 py-3 text-sm font-semibold transition-all border-b-2 ${activeTab === 'custom' ? 'border-blue-600 text-blue-600' : 'border-transparent text-slate-500 hover:text-slate-700'}`}
           >
             Technical Specs
-          </button>
-          <button 
-             onClick={() => setActiveTab('files')}
-             className={`px-4 py-3 text-sm font-semibold transition-all border-b-2 ${activeTab === 'files' ? 'border-blue-600 text-blue-600' : 'border-transparent text-slate-500 hover:text-slate-700'}`}
-          >
-            Files ({attachments.length})
           </button>
         </div>
 
@@ -289,20 +264,19 @@ const ProductDetailsModal: React.FC<ProductDetailsModalProps> = ({ product, onCl
              </div>
           )}
 
-          {activeTab === 'files' && (
-            <FileAttachments
-              supplierProductId={product.id}
-              attachments={attachments}
-              onAttachmentsChange={setAttachments}
-            />
-          )}
         </div>
 
         {/* Footer */}
         <div className="p-6 border-t border-slate-100 flex items-center justify-between bg-slate-50/30">
           <p className="text-[10px] text-slate-400 font-bold uppercase tracking-widest">Asset Integrity Check: OK</p>
           <div className="flex items-center gap-3">
-            <button className="px-6 py-2 bg-slate-900 text-white text-sm font-bold rounded-xl hover:bg-slate-800 shadow-lg shadow-slate-900/10 transition-all flex items-center gap-2">
+            <button 
+              onClick={() => {
+                onClose();
+                onEdit(product);
+              }}
+              className="px-6 py-2 bg-slate-900 text-white text-sm font-bold rounded-xl hover:bg-slate-800 shadow-lg shadow-slate-900/10 transition-all flex items-center gap-2"
+            >
               {ICONS.Edit} Manage Full Record
             </button>
           </div>
