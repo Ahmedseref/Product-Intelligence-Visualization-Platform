@@ -99,8 +99,18 @@ const ProductUsageHeatmap: React.FC<ProductUsageHeatmapProps> = ({
   }, [treeNodes, categoryLevel, products]);
 
   const getProductUsageAreas = useCallback((product: Product): string[] => {
-    if (product.customFields && typeof product.customFields === 'object' && !Array.isArray(product.customFields)) {
-      const usageAreas = product.customFields['Usage Areas'];
+    if (Array.isArray(product.customFields)) {
+      const usageField = product.customFields.find((cf: any) => 
+        cf.fieldId?.toLowerCase().includes('usage') || 
+        cf.fieldId?.toLowerCase().includes('application')
+      );
+      if (usageField?.value) {
+        return String(usageField.value).split(',').map((v: string) => v.trim()).filter(v => USAGE_AREAS.includes(v));
+      }
+      return [];
+    }
+    if (product.customFields && typeof product.customFields === 'object') {
+      const usageAreas = (product.customFields as any)['Usage Areas'];
       if (Array.isArray(usageAreas)) {
         return usageAreas.filter(v => USAGE_AREAS.includes(v));
       }
