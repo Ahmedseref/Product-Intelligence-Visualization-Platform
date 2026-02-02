@@ -54,9 +54,9 @@ const ProductForm: React.FC<ProductFormProps> = ({ onSubmit, onCancel, currentUs
   
   const getInitialUsageAreas = (): string[] => {
     if (initialProduct?.customFields) {
-      const usageField = initialProduct.customFields.find(cf => cf.fieldId === 'usage_areas');
-      if (usageField?.value) {
-        return String(usageField.value).split(',').map(v => v.trim()).filter(Boolean);
+      const usageAreas = initialProduct.customFields['Usage Areas'];
+      if (Array.isArray(usageAreas)) {
+        return [...usageAreas];
       }
     }
     return [];
@@ -265,10 +265,10 @@ const ProductForm: React.FC<ProductFormProps> = ({ onSubmit, onCancel, currentUs
       current = treeNodes.find(n => n.id === current?.parentId);
     }
 
-    const existingCustomFields = (formData.customFields || []).filter(cf => cf.fieldId !== 'usage_areas');
-    const updatedCustomFields = selectedUsageAreas.length > 0 
-      ? [...existingCustomFields, { fieldId: 'usage_areas', value: selectedUsageAreas.join(', ') }]
-      : existingCustomFields;
+    const updatedCustomFields = {
+      ...(typeof formData.customFields === 'object' && !Array.isArray(formData.customFields) ? formData.customFields : {}),
+      'Usage Areas': selectedUsageAreas
+    };
 
     let updatedHistory = [...(formData.history || [])];
     
