@@ -84,9 +84,17 @@ if (fs.existsSync(distPath)) {
   });
 }
 
-app.listen(PORT, "0.0.0.0", async () => {
+app.listen(PORT, "0.0.0.0", () => {
   console.log(`Server running on http://0.0.0.0:${PORT}`);
-  await bootstrapAdminUser();
-  await initializeBackupService();
-  startScheduledBackups();
+  
+  // Initialize services in the background to avoid blocking startup
+  setImmediate(async () => {
+    try {
+      await bootstrapAdminUser();
+      await initializeBackupService();
+      startScheduledBackups();
+    } catch (error) {
+      console.error("[Startup] Background initialization error:", error);
+    }
+  });
 });
