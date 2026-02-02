@@ -18,6 +18,8 @@ console.log("NODE_ENV:", process.env.NODE_ENV);
 const app = express();
 const PORT = parseInt(process.env.PORT || "3000", 10);
 
+app.set('trust proxy', 1);
+
 app.use(cors({
   origin: true,
   credentials: true,
