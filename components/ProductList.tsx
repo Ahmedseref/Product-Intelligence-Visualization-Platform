@@ -64,6 +64,66 @@ const ALL_COLUMNS: ColumnConfig[] = [
   { key: 'usageAreas', label: 'Usage Areas', sortable: false, defaultVisible: true },
 ];
 
+interface UsageAreasEditorProps {
+  product: Product;
+  usageAreas: string[];
+  onUpdate: (p: Product) => void;
+  onClose: () => void;
+}
+
+const UsageAreasEditor: React.FC<UsageAreasEditorProps> = ({ product, usageAreas, onUpdate, onClose }) => {
+  const [selectedAreas, setSelectedAreas] = useState<string[]>(() => {
+    const areas = product.customFields?.['Usage Areas'] || [];
+    return Array.isArray(areas) ? [...areas] : [];
+  });
+
+  const toggleArea = (area: string) => {
+    setSelectedAreas(prev => {
+      const newAreas = prev.includes(area) 
+        ? prev.filter(a => a !== area)
+        : [...prev, area];
+      
+      const updated = {
+        ...product,
+        customFields: {
+          ...product.customFields,
+          'Usage Areas': newAreas
+        }
+      };
+      onUpdate(updated);
+      
+      return newAreas;
+    });
+  };
+
+  return (
+    <div className="flex flex-wrap gap-1 items-center" onClick={e => e.stopPropagation()}>
+      {usageAreas.map(area => {
+        const isSelected = selectedAreas.includes(area);
+        return (
+          <button
+            key={area}
+            onClick={() => toggleArea(area)}
+            className={`px-2 py-0.5 text-xs rounded-full border transition-all ${
+              isSelected 
+                ? 'bg-blue-100 border-blue-300 text-blue-700' 
+                : 'bg-slate-50 border-slate-200 text-slate-500 hover:bg-slate-100'
+            }`}
+          >
+            {area}
+          </button>
+        );
+      })}
+      <button 
+        onClick={onClose}
+        className="p-1 text-emerald-600 hover:bg-emerald-50 rounded ml-1"
+      >
+        <Check size={14} />
+      </button>
+    </div>
+  );
+};
+
 const ProductList: React.FC<ProductListProps> = ({ 
   products, onUpdate, onDelete, onCreate, customFields, treeNodes,
   suppliers = [], currentUser, onAddFieldDefinition, onAddTreeNode, usageAreas = []
@@ -1224,47 +1284,12 @@ const ProductList: React.FC<ProductListProps> = ({
                     {visibleColumns.has('usageAreas') && (
                       <td className="px-3 py-3 overflow-hidden" style={{ width: columnWidths.usageAreas, minWidth: columnWidths.usageAreas, maxWidth: columnWidths.usageAreas }}>
                         {isEditing(p.id, 'usageAreas') ? (
-                          <div className="flex flex-wrap gap-1 items-center" onClick={e => e.stopPropagation()}>
-                            {usageAreas.map(area => {
-                              const productAreas = p.customFields?.['Usage Areas'] || [];
-                              const isSelected = Array.isArray(productAreas) && productAreas.includes(area);
-                              return (
-                                <button
-                                  key={area}
-                                  onClick={() => {
-                                    const currentAreas = [...(p.customFields?.['Usage Areas'] || [])];
-                                    const idx = currentAreas.indexOf(area);
-                                    if (idx === -1) {
-                                      currentAreas.push(area);
-                                    } else {
-                                      currentAreas.splice(idx, 1);
-                                    }
-                                    const updated = {
-                                      ...p,
-                                      customFields: {
-                                        ...p.customFields,
-                                        'Usage Areas': currentAreas
-                                      }
-                                    };
-                                    onUpdate(updated);
-                                  }}
-                                  className={`px-2 py-0.5 text-xs rounded-full border transition-all ${
-                                    isSelected 
-                                      ? 'bg-blue-100 border-blue-300 text-blue-700' 
-                                      : 'bg-slate-50 border-slate-200 text-slate-500 hover:bg-slate-100'
-                                  }`}
-                                >
-                                  {area}
-                                </button>
-                              );
-                            })}
-                            <button 
-                              onClick={() => setEditingCell(null)}
-                              className="p-1 text-emerald-600 hover:bg-emerald-50 rounded ml-1"
-                            >
-                              <Check size={14} />
-                            </button>
-                          </div>
+                          <UsageAreasEditor
+                            product={p}
+                            usageAreas={usageAreas}
+                            onUpdate={onUpdate}
+                            onClose={() => setEditingCell(null)}
+                          />
                         ) : (
                           <div 
                             className="cursor-text hover:bg-blue-50 hover:ring-1 hover:ring-blue-200 rounded px-1 py-0.5 transition-all"
@@ -1280,19 +1305,30 @@ const ProductList: React.FC<ProductListProps> = ({
                           >
                             {(() => {
                               const areas = p.customFields?.['Usage Areas'] || [];
-                              const validAreas = Array.isArray(areas) ? areas.filter(a => usageAreas.includes(a)) : [];
-                              if (validAreas.length === 0) {
+                              const allAreas = Array.isArray(areas) ? areas : [];
+                              if (allAreas.length === 0) {
                                 return <span className="text-sm text-slate-400">-</span>;
                               }
                               return (
                                 <div className="flex flex-wrap gap-1">
-                                  {validAreas.slice(0, 3).map(area => (
-                                    <span key={area} className="px-1.5 py-0.5 text-xs bg-blue-50 text-blue-600 rounded">
-                                      {area}
-                                    </span>
-                                  ))}
-                                  {validAreas.length > 3 && (
-                                    <span className="text-xs text-slate-400">+{validAreas.length - 3} more</span>
+                                  {allAreas.slice(0, 3).map(area => {
+                                    const isValid = usageAreas.includes(area);
+                                    return (
+                                      <span 
+                                        key={area} 
+                                        className={`px-1.5 py-0.5 text-xs rounded ${
+                                          isValid 
+                                            ? 'bg-blue-50 text-blue-600' 
+                                            : 'bg-amber-50 text-amber-600 line-through'
+                                        }`}
+                                        title={isValid ? area : `"${area}" no longer exists in Settings`}
+                                      >
+                                        {area}
+                                      </span>
+                                    );
+                                  })}
+                                  {allAreas.length > 3 && (
+                                    <span className="text-xs text-slate-400">+{allAreas.length - 3} more</span>
                                   )}
                                 </div>
                               );
