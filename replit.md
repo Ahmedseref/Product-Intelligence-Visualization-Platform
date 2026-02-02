@@ -34,6 +34,18 @@ I prefer detailed explanations and thorough code comments. I value iterative dev
     - **Settings page with dynamic Usage Areas management** (add/edit/delete) stored in database.
     - Usage Areas are used system-wide in ProductForm, MassImportWizard, and ProductUsageHeatmap.
     - **Backup & Versioning System**: Full data protection with gzip compression, point-in-time recovery, scheduled auto-backups (every 6 hours), manual backup creation, export/import functionality, and restore preview with safety net backups.
+    - **Authentication System**: Secure session-based authentication with bcrypt password hashing (12 rounds), cryptographically secure tokens (crypto.randomBytes), rate-limited login (10 attempts/15 min), first-login password change enforcement, and logout functionality.
+
+### Authentication
+- **Default Credentials**: admin / 1111 (must change on first login)
+- **Password Requirements**: Minimum 6 characters
+- **Session Duration**: 24 hours
+- **Security Features**:
+    - bcrypt password hashing with 12 salt rounds
+    - Cryptographically secure session tokens (64 hex characters)
+    - Rate limiting on login attempts
+    - Server-side enforcement of password change before accessing protected routes
+    - Generic error messages to prevent user enumeration
 
 ### System Design Choices
 - Monorepo structure with `client/` and `server/` directories.
@@ -51,3 +63,5 @@ I prefer detailed explanations and thorough code comments. I value iterative dev
 - **Drizzle ORM**: TypeScript ORM for PostgreSQL.
 - **PostgreSQL**: Relational database.
 - **html2canvas**: Used for exporting taxonomy tree to image.
+- **bcrypt**: Password hashing library.
+- **express-rate-limit**: Rate limiting middleware for login protection.
