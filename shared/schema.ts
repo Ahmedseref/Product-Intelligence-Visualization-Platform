@@ -130,6 +130,19 @@ export const appSettings = pgTable("app_settings", {
   updatedAt: timestamp("updated_at").defaultNow(),
 });
 
+export const backups = pgTable("backups", {
+  id: serial("id").primaryKey(),
+  versionNumber: integer("version_number").notNull(),
+  createdAt: timestamp("created_at").defaultNow(),
+  triggerType: varchar("trigger_type", { length: 20 }).notNull(), // AUTO | MANUAL | SYSTEM
+  description: text("description"),
+  compressedData: text("compressed_data").notNull(), // Base64 encoded gzip data
+  originalSize: integer("original_size").notNull(),
+  compressedSize: integer("compressed_size").notNull(),
+  checksum: varchar("checksum", { length: 64 }).notNull(), // SHA-256 hash
+  entityCounts: jsonb("entity_counts").default({}), // { products: n, suppliers: n, treeNodes: n, ... }
+});
+
 export const suppliersRelations = relations(suppliers, ({ many }) => ({
   supplierProducts: many(supplierProducts),
 }));
@@ -186,3 +199,5 @@ export type Attachment = typeof attachments.$inferSelect;
 export type InsertAttachment = typeof attachments.$inferInsert;
 export type AppSettings = typeof appSettings.$inferSelect;
 export type InsertAppSettings = typeof appSettings.$inferInsert;
+export type Backup = typeof backups.$inferSelect;
+export type InsertBackup = typeof backups.$inferInsert;

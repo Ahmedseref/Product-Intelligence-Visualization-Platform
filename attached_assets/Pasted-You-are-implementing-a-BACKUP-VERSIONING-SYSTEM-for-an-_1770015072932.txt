@@ -1,0 +1,187 @@
+You are implementing a BACKUP & VERSIONING SYSTEM for an existing
+Product Intelligence & Visualization Platform.
+
+Tech stack:
+- Frontend: React 19 + TypeScript + Vite + Tailwind
+- Backend: Express.js 5
+- Database: PostgreSQL
+- ORM: Drizzle ORM
+- Entities: taxonomy tree, products, suppliers, custom fields
+
+This system must:
+- Auto-save versions
+- Compress data efficiently
+- Limit storage size
+- Allow export & restore
+- Protect users from data loss
+
+-------------------------------------------------
+1) CORE GOALS
+-------------------------------------------------
+
+- Automatically create versioned backups
+- Minimize storage usage (compression + delta strategy)
+- Allow manual export/import
+- Allow user to restore any previous version
+- Ensure safe recovery after data corruption or accidental deletion
+
+This is NOT just logging — it is a recoverable snapshot system.
+
+-------------------------------------------------
+2) WHAT NEEDS TO BE BACKED UP
+-------------------------------------------------
+
+Backups must include:
+- taxonomy tree (tree_nodes)
+- products
+- suppliers
+- custom fields
+- metadata (timestamps, user info if available)
+
+Backups should represent a CONSISTENT STATE of the system.
+
+-------------------------------------------------
+3) BACKUP STRATEGY (IMPORTANT)
+-------------------------------------------------
+
+### Versioning
+- Each backup has:
+  - version_id (auto-increment or UUID)
+  - created_at
+  - trigger_type: AUTO | MANUAL | SYSTEM
+  - reason (e.g. "Bulk import", "Taxonomy change", "Scheduled backup")
+
+### Auto-save triggers
+Create automatic backups when:
+- Bulk import finishes
+- Taxonomy structure changes
+- Mass delete / update occurs
+- Once every X hours (configurable, e.g. 6h)
+
+-------------------------------------------------
+4) STORAGE & COMPRESSION
+-------------------------------------------------
+
+To avoid large storage size:
+
+- Store backups as:
+  - Compressed JSON (gzip or brotli)
+- Optionally:
+  - Store FULL snapshot every N versions
+  - Store DELTA (diff) for intermediate versions
+
+Compression requirement:
+- Target at least 70–90% size reduction
+
+-------------------------------------------------
+5) DATABASE SCHEMA
+-------------------------------------------------
+
+Create a new table:
+
+backups
+- id (serial / uuid)
+- version_number
+- created_at
+- trigger_type
+- description
+- compressed_data (bytea)
+- original_size
+- compressed_size
+- checksum (for integrity validation)
+
+-------------------------------------------------
+6) BACKEND API
+-------------------------------------------------
+
+Implement endpoints:
+
+POST /api/backups/create
+- Manually trigger a backup
+
+GET /api/backups
+- List all available versions
+- Include size, date, trigger type
+
+GET /api/backups/:id/export
+- Download backup as compressed file (.backup or .gz)
+
+POST /api/backups/restore/:id
+- Restore selected backup
+- Must:
+  - Run inside a transaction
+  - Validate checksum
+  - Create a NEW backup before restoring (safety net)
+
+POST /api/backups/import
+- Upload backup file
+- Validate structure
+- Restore data safely
+
+-------------------------------------------------
+7) RESTORE SAFETY RULES
+-------------------------------------------------
+
+- Restores must be transactional
+- If restore fails → rollback
+- Log restore history
+- Require user confirmation
+- Show preview summary before restore:
+  - Number of products
+  - Categories
+  - Suppliers
+
+-------------------------------------------------
+8) FRONTEND UX
+-------------------------------------------------
+
+Create:
+components/settings/BackupManager.tsx
+
+Features:
+- List of versions (timeline style)
+- Auto / Manual label
+- Size indicator (compressed vs original)
+- Export button
+- Restore button (with confirmation modal)
+- Import backup file
+
+UX expectations:
+- Clear warnings before restore
+- Success / failure feedback
+- Restore progress indicator
+
+-------------------------------------------------
+9) PERFORMANCE & LIMITS
+-------------------------------------------------
+
+- Keep last N backups (configurable, e.g. 50)
+- Automatically delete oldest backups
+- Allow admin to configure:
+  - backup frequency
+  - retention count
+  - full vs delta ratio
+
+-------------------------------------------------
+10) CODE QUALITY
+-------------------------------------------------
+
+- Use transactions for restore
+- Use streaming for export/download
+- Type-safe backup schema
+- Clear comments
+- No silent failures
+
+-------------------------------------------------
+11) DELIVERABLES
+-------------------------------------------------
+
+- Backup table schema
+- Compression & decompression logic
+- Auto-backup trigger logic
+- BackupManager UI
+- Restore safety flow
+- Example backup file format
+
+Implement this as a PRODUCTION-READY safety system,
+not a demo or toy solution.

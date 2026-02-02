@@ -33,6 +33,7 @@ I prefer detailed explanations and thorough code comments. I value iterative dev
     - Real-time database synchronization.
     - **Settings page with dynamic Usage Areas management** (add/edit/delete) stored in database.
     - Usage Areas are used system-wide in ProductForm, MassImportWizard, and ProductUsageHeatmap.
+    - **Backup & Versioning System**: Full data protection with gzip compression, point-in-time recovery, scheduled auto-backups (every 6 hours), manual backup creation, export/import functionality, and restore preview with safety net backups.
 
 ### System Design Choices
 - Monorepo structure with `client/` and `server/` directories.

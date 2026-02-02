@@ -1,5 +1,6 @@
 import type { Express } from "express";
 import { storage } from "./storage";
+import * as backupService from "./backupService";
 
 export function registerRoutes(app: Express): void {
   app.get("/api/tree-nodes", async (req, res) => {
@@ -617,6 +618,157 @@ export function registerRoutes(app: Express): void {
     } catch (error) {
       console.error("Error updating usage areas:", error);
       res.status(500).json({ error: "Failed to update usage areas" });
+    }
+  });
+
+  app.post("/api/backups/create", async (req, res) => {
+    try {
+      const { description } = req.body;
+      const backup = await backupService.createBackup("MANUAL", description || "Manual backup");
+      res.status(201).json(backup);
+    } catch (error) {
+      console.error("Error creating backup:", error);
+      res.status(500).json({ error: "Failed to create backup" });
+    }
+  });
+
+  app.get("/api/backups", async (req, res) => {
+    try {
+      const backups = await backupService.listBackups();
+      res.json(backups);
+    } catch (error) {
+      console.error("Error listing backups:", error);
+      res.status(500).json({ error: "Failed to list backups" });
+    }
+  });
+
+  app.get("/api/backups/:id/preview", async (req, res) => {
+    try {
+      const id = parseInt(req.params.id);
+      if (isNaN(id)) {
+        return res.status(400).json({ error: "Invalid backup ID" });
+      }
+      const preview = await backupService.getRestorePreview(id);
+      res.json(preview);
+    } catch (error) {
+      console.error("Error getting restore preview:", error);
+      res.status(500).json({ error: "Failed to get restore preview" });
+    }
+  });
+
+  app.get("/api/backups/:id/export", async (req, res) => {
+    try {
+      const id = parseInt(req.params.id);
+      if (isNaN(id)) {
+        return res.status(400).json({ error: "Invalid backup ID" });
+      }
+      const { filename, data } = await backupService.exportBackup(id);
+      res.setHeader("Content-Disposition", `attachment; filename="${filename}"`);
+      res.setHeader("Content-Type", "application/octet-stream");
+      res.send(data);
+    } catch (error) {
+      console.error("Error exporting backup:", error);
+      res.status(500).json({ error: "Failed to export backup" });
+    }
+  });
+
+  app.post("/api/backups/restore/:id", async (req, res) => {
+    try {
+      const id = parseInt(req.params.id);
+      if (isNaN(id)) {
+        return res.status(400).json({ error: "Invalid backup ID" });
+      }
+      const result = await backupService.restoreBackup(id);
+      if (result.success) {
+        res.json(result);
+      } else {
+        res.status(500).json(result);
+      }
+    } catch (error) {
+      console.error("Error restoring backup:", error);
+      res.status(500).json({ error: "Failed to restore backup" });
+    }
+  });
+
+  app.post("/api/backups/import", async (req, res) => {
+    const MAX_IMPORT_SIZE = 50 * 1024 * 1024; // 50MB limit
+    let totalSize = 0;
+    
+    try {
+      const chunks: Buffer[] = [];
+      req.on("data", (chunk) => {
+        totalSize += chunk.length;
+        if (totalSize > MAX_IMPORT_SIZE) {
+          req.destroy();
+          return res.status(413).json({ error: "Backup file too large (max 50MB)" });
+        }
+        chunks.push(chunk);
+      });
+      req.on("end", async () => {
+        try {
+          const buffer = Buffer.concat(chunks);
+          const result = await backupService.importBackup(buffer);
+          if (result.success) {
+            res.status(201).json(result);
+          } else {
+            res.status(400).json(result);
+          }
+        } catch (error) {
+          console.error("Error importing backup:", error);
+          res.status(500).json({ error: "Failed to import backup" });
+        }
+      });
+    } catch (error) {
+      console.error("Error importing backup:", error);
+      res.status(500).json({ error: "Failed to import backup" });
+    }
+  });
+
+  app.delete("/api/backups/:id", async (req, res) => {
+    try {
+      const id = parseInt(req.params.id);
+      if (isNaN(id)) {
+        return res.status(400).json({ error: "Invalid backup ID" });
+      }
+      await backupService.deleteBackup(id);
+      res.status(204).send();
+    } catch (error) {
+      console.error("Error deleting backup:", error);
+      res.status(500).json({ error: "Failed to delete backup" });
+    }
+  });
+
+  app.post("/api/backups/auto-trigger", async (req, res) => {
+    try {
+      const { reason } = req.body;
+      if (!reason || typeof reason !== "string") {
+        return res.status(400).json({ error: "Reason is required" });
+      }
+      const backup = await backupService.triggerAutoBackup(reason);
+      res.status(201).json(backup);
+    } catch (error) {
+      console.error("Error triggering auto-backup:", error);
+      res.status(500).json({ error: "Failed to trigger auto-backup" });
+    }
+  });
+
+  app.get("/api/backups/settings", async (req, res) => {
+    try {
+      const settings = backupService.getBackupSettings();
+      res.json(settings);
+    } catch (error) {
+      console.error("Error getting backup settings:", error);
+      res.status(500).json({ error: "Failed to get backup settings" });
+    }
+  });
+
+  app.put("/api/backups/settings", async (req, res) => {
+    try {
+      const settings = await backupService.updateBackupSettings(req.body);
+      res.json(settings);
+    } catch (error) {
+      console.error("Error updating backup settings:", error);
+      res.status(500).json({ error: "Failed to update backup settings" });
     }
   });
 }

@@ -283,4 +283,115 @@ export const api = {
     if (!res.ok) throw new Error('Failed to update usage areas');
     return res.json();
   },
+
+  async listBackups(): Promise<BackupSummary[]> {
+    const res = await fetch(`${API_BASE}/backups`);
+    if (!res.ok) throw new Error('Failed to fetch backups');
+    return res.json();
+  },
+
+  async createBackup(description?: string): Promise<BackupSummary> {
+    const res = await fetch(`${API_BASE}/backups/create`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ description }),
+    });
+    if (!res.ok) throw new Error('Failed to create backup');
+    return res.json();
+  },
+
+  async getRestorePreview(id: number): Promise<RestorePreview> {
+    const res = await fetch(`${API_BASE}/backups/${id}/preview`);
+    if (!res.ok) throw new Error('Failed to get restore preview');
+    return res.json();
+  },
+
+  async restoreBackup(id: number): Promise<{ success: boolean; message: string }> {
+    const res = await fetch(`${API_BASE}/backups/restore/${id}`, {
+      method: 'POST',
+    });
+    if (!res.ok) {
+      const error = await res.json();
+      throw new Error(error.message || 'Failed to restore backup');
+    }
+    return res.json();
+  },
+
+  async exportBackup(id: number): Promise<Blob> {
+    const res = await fetch(`${API_BASE}/backups/${id}/export`);
+    if (!res.ok) throw new Error('Failed to export backup');
+    return res.blob();
+  },
+
+  async importBackup(file: File): Promise<{ success: boolean; backupId?: number; message: string }> {
+    const arrayBuffer = await file.arrayBuffer();
+    const res = await fetch(`${API_BASE}/backups/import`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/octet-stream' },
+      body: arrayBuffer,
+    });
+    if (!res.ok) {
+      const error = await res.json();
+      throw new Error(error.message || 'Failed to import backup');
+    }
+    return res.json();
+  },
+
+  async deleteBackup(id: number): Promise<void> {
+    const res = await fetch(`${API_BASE}/backups/${id}`, {
+      method: 'DELETE',
+    });
+    if (!res.ok) throw new Error('Failed to delete backup');
+  },
+
+  async triggerAutoBackup(reason: string): Promise<BackupSummary> {
+    const res = await fetch(`${API_BASE}/backups/auto-trigger`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ reason }),
+    });
+    if (!res.ok) throw new Error('Failed to trigger auto-backup');
+    return res.json();
+  },
+
+  async getBackupSettings(): Promise<BackupSettingsData> {
+    const res = await fetch(`${API_BASE}/backups/settings`);
+    if (!res.ok) throw new Error('Failed to fetch backup settings');
+    return res.json();
+  },
+
+  async updateBackupSettings(settings: Partial<BackupSettingsData>): Promise<BackupSettingsData> {
+    const res = await fetch(`${API_BASE}/backups/settings`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(settings),
+    });
+    if (!res.ok) throw new Error('Failed to update backup settings');
+    return res.json();
+  },
 };
+
+export interface BackupSummary {
+  id: number;
+  versionNumber: number;
+  createdAt: string | null;
+  triggerType: string;
+  description: string | null;
+  originalSize: number;
+  compressedSize: number;
+  compressionRatio: number;
+  entityCounts: Record<string, number>;
+}
+
+export interface RestorePreview {
+  products: number;
+  suppliers: number;
+  treeNodes: number;
+  customFieldDefinitions: number;
+  appSettings: number;
+}
+
+export interface BackupSettingsData {
+  maxBackups: number;
+  autoBackupIntervalHours: number;
+}

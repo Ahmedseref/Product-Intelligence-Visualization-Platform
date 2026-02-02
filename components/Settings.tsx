@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { Plus, Edit2, Trash2, Check, X, AlertCircle, Tag } from 'lucide-react';
+import BackupManager from './settings/BackupManager';
 
 interface SettingsProps {
   usageAreas: string[];
@@ -191,6 +192,10 @@ const Settings: React.FC<SettingsProps> = ({ usageAreas, onUpdateUsageAreas, onR
             </p>
           </div>
         </div>
+      </div>
+
+      <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden p-6">
+        <BackupManager />
       </div>
     </div>
   );
