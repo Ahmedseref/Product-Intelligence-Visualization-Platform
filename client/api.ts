@@ -41,7 +41,7 @@ export interface ProductData {
   certifications?: string[];
   shelfLife?: string;
   storageConditions?: string;
-  customFields?: any[];
+  customFields?: Record<string, any>;
   technicalSpecs?: TechnicalSpecData[];
   category?: string;
   sector?: string;

@@ -101,7 +101,7 @@ export interface Product {
   certifications: string[];
   shelfLife: string;
   storageConditions: string;
-  customFields: CustomFieldValue[];
+  customFields: Record<string, any>;
   technicalSpecs?: TechnicalSpec[]; // Multiple technical specifications
   dateAdded: string;
   lastUpdated: string;

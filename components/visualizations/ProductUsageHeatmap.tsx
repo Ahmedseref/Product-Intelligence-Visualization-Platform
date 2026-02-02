@@ -99,13 +99,11 @@ const ProductUsageHeatmap: React.FC<ProductUsageHeatmapProps> = ({
   }, [treeNodes, categoryLevel, products]);
 
   const getProductUsageAreas = useCallback((product: Product): string[] => {
-    const usageField = product.customFields?.find(cf => 
-      cf.fieldId.toLowerCase().includes('usage') || 
-      cf.fieldId.toLowerCase().includes('application') ||
-      cf.fieldId.toLowerCase().includes('industry')
-    );
-    if (usageField?.value) {
-      return String(usageField.value).split(',').map(v => v.trim()).filter(v => USAGE_AREAS.includes(v));
+    if (product.customFields && typeof product.customFields === 'object' && !Array.isArray(product.customFields)) {
+      const usageAreas = product.customFields['Usage Areas'];
+      if (Array.isArray(usageAreas)) {
+        return usageAreas.filter(v => USAGE_AREAS.includes(v));
+      }
     }
     return [];
   }, [USAGE_AREAS]);
@@ -278,12 +276,10 @@ const ProductUsageHeatmap: React.FC<ProductUsageHeatmapProps> = ({
       ? currentAreas.filter(a => a !== area)
       : [...currentAreas, area];
     
-    const updatedCustomFields = (product.customFields || []).filter(
-      cf => !cf.fieldId.toLowerCase().includes('usage') && 
-            !cf.fieldId.toLowerCase().includes('application') &&
-            !cf.fieldId.toLowerCase().includes('industry')
-    );
-    updatedCustomFields.push({ fieldId: 'usage_areas', value: newAreas.join(', ') });
+    const updatedCustomFields = {
+      ...(typeof product.customFields === 'object' && !Array.isArray(product.customFields) ? product.customFields : {}),
+      'Usage Areas': newAreas
+    };
     
     const updatedProduct: Product = {
       ...product,

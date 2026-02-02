@@ -260,7 +260,7 @@ const App: React.FC = () => {
           certifications: product.certifications || [],
           shelfLife: product.shelfLife,
           storageConditions: product.storageConditions,
-          customFields: product.customFields || [],
+          customFields: product.customFields || {},
           technicalSpecs: product.technicalSpecs || [],
           category: product.category,
           sector: product.sector,
