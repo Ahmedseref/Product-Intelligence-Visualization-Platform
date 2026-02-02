@@ -388,8 +388,9 @@ const MassImportWizard: React.FC<MassImportWizardProps> = ({ onImport, onCancel,
       if ((product as any).usageAreas) {
         const usageAreasValue = String((product as any).usageAreas).trim();
         if (usageAreasValue) {
+          const existingFields = Array.isArray(product.customFields) ? product.customFields : [];
           product.customFields = [
-            ...(product.customFields || []),
+            ...existingFields,
             { fieldId: 'usage_areas', value: usageAreasValue }
           ];
         }

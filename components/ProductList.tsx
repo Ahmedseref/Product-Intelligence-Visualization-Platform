@@ -71,10 +71,47 @@ interface UsageAreasEditorProps {
   onClose: () => void;
 }
 
+const getProductUsageAreas = (product: Product): string[] => {
+  if (Array.isArray(product.customFields)) {
+    const usageField = product.customFields.find((cf: any) => 
+      cf.fieldId?.toLowerCase().includes('usage') || 
+      cf.fieldId?.toLowerCase().includes('application')
+    );
+    if (usageField?.value) {
+      return String(usageField.value).split(',').map((v: string) => v.trim()).filter(Boolean);
+    }
+    return [];
+  }
+  if (product.customFields && typeof product.customFields === 'object') {
+    const areas = (product.customFields as any)['Usage Areas'] || [];
+    return Array.isArray(areas) ? areas : [];
+  }
+  return [];
+};
+
+const setProductUsageAreas = (product: Product, areas: string[]): Product => {
+  if (Array.isArray(product.customFields)) {
+    const otherFields = product.customFields.filter((cf: any) => 
+      !cf.fieldId?.toLowerCase().includes('usage') && 
+      !cf.fieldId?.toLowerCase().includes('application')
+    );
+    return {
+      ...product,
+      customFields: [
+        ...otherFields,
+        { fieldId: 'usage_areas', value: areas.join(', ') }
+      ]
+    };
+  }
+  return {
+    ...product,
+    customFields: [{ fieldId: 'usage_areas', value: areas.join(', ') }]
+  };
+};
+
 const UsageAreasEditor: React.FC<UsageAreasEditorProps> = ({ product, usageAreas, onUpdate, onClose }) => {
   const [selectedAreas, setSelectedAreas] = useState<string[]>(() => {
-    const areas = product.customFields?.['Usage Areas'] || [];
-    return Array.isArray(areas) ? [...areas] : [];
+    return getProductUsageAreas(product);
   });
 
   const toggleArea = (area: string) => {
@@ -83,13 +120,7 @@ const UsageAreasEditor: React.FC<UsageAreasEditorProps> = ({ product, usageAreas
         ? prev.filter(a => a !== area)
         : [...prev, area];
       
-      const updated = {
-        ...product,
-        customFields: {
-          ...product.customFields,
-          'Usage Areas': newAreas
-        }
-      };
+      const updated = setProductUsageAreas(product, newAreas);
       onUpdate(updated);
       
       return newAreas;
@@ -498,8 +529,7 @@ const ProductList: React.FC<ProductListProps> = ({
       case 'location': return p.manufacturingLocation || '';
       case 'description': return p.description || '';
       case 'usageAreas': {
-        const areas = p.customFields?.['Usage Areas'] || [];
-        return Array.isArray(areas) ? areas.join(', ') : '';
+        return getProductUsageAreas(p).join(', ');
       }
       default: return '';
     }
@@ -1304,8 +1334,7 @@ const ProductList: React.FC<ProductListProps> = ({
                             title="Click to edit usage areas"
                           >
                             {(() => {
-                              const areas = p.customFields?.['Usage Areas'] || [];
-                              const allAreas = Array.isArray(areas) ? areas : [];
+                              const allAreas = getProductUsageAreas(p);
                               if (allAreas.length === 0) {
                                 return <span className="text-sm text-slate-400">-</span>;
                               }
