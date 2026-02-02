@@ -752,6 +752,32 @@ const App: React.FC = () => {
                     console.error('Failed to update usage areas:', e);
                   }
                 }}
+                onRenameUsageArea={async (oldName: string, newName: string) => {
+                  try {
+                    const productsToUpdate = products.filter(p => {
+                      const usageValues = p.customFields?.['Usage Areas'] || [];
+                      return Array.isArray(usageValues) && usageValues.includes(oldName);
+                    });
+                    for (const product of productsToUpdate) {
+                      const usageValues = [...(product.customFields?.['Usage Areas'] || [])];
+                      const idx = usageValues.indexOf(oldName);
+                      if (idx !== -1) {
+                        usageValues[idx] = newName;
+                        const updated = {
+                          ...product,
+                          customFields: {
+                            ...product.customFields,
+                            'Usage Areas': usageValues
+                          }
+                        };
+                        await updateProduct(updated);
+                      }
+                    }
+                    console.log(`Migrated ${productsToUpdate.length} products from "${oldName}" to "${newName}"`);
+                  } catch (e) {
+                    console.error('Failed to migrate usage areas in products:', e);
+                  }
+                }}
               />
             )}
           </main>

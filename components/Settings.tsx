@@ -4,9 +4,10 @@ import { Plus, Edit2, Trash2, Check, X, AlertCircle, Tag } from 'lucide-react';
 interface SettingsProps {
   usageAreas: string[];
   onUpdateUsageAreas: (areas: string[]) => void;
+  onRenameUsageArea?: (oldName: string, newName: string) => void;
 }
 
-const Settings: React.FC<SettingsProps> = ({ usageAreas, onUpdateUsageAreas }) => {
+const Settings: React.FC<SettingsProps> = ({ usageAreas, onUpdateUsageAreas, onRenameUsageArea }) => {
   const [newArea, setNewArea] = useState('');
   const [editingIndex, setEditingIndex] = useState<number | null>(null);
   const [editValue, setEditValue] = useState('');
@@ -28,10 +29,14 @@ const Settings: React.FC<SettingsProps> = ({ usageAreas, onUpdateUsageAreas }) =
   const handleEditSave = () => {
     if (editingIndex === null) return;
     const trimmed = editValue.trim();
-    if (trimmed && !usageAreas.filter((_, i) => i !== editingIndex).includes(trimmed)) {
+    const oldName = usageAreas[editingIndex];
+    if (trimmed && trimmed !== oldName && !usageAreas.filter((_, i) => i !== editingIndex).includes(trimmed)) {
       const updated = [...usageAreas];
       updated[editingIndex] = trimmed;
       onUpdateUsageAreas(updated);
+      if (onRenameUsageArea) {
+        onRenameUsageArea(oldName, trimmed);
+      }
     }
     setEditingIndex(null);
     setEditValue('');
