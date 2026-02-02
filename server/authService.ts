@@ -1,5 +1,5 @@
 import bcrypt from "bcryptjs";
-import { db } from "./db";
+import { db, pool } from "./db";
 import { users } from "../shared/schema";
 import { eq } from "drizzle-orm";
 
@@ -22,8 +22,25 @@ export async function verifyPassword(password: string, hash: string): Promise<bo
   return bcrypt.compare(password, hash);
 }
 
+async function ensureUsersTableExists(): Promise<void> {
+  const createTableSQL = `
+    CREATE TABLE IF NOT EXISTS users (
+      id VARCHAR(255) PRIMARY KEY DEFAULT gen_random_uuid()::text,
+      username VARCHAR(255) UNIQUE NOT NULL,
+      password_hash TEXT NOT NULL,
+      role VARCHAR(50) DEFAULT 'user',
+      is_first_login BOOLEAN DEFAULT true,
+      created_at TIMESTAMP DEFAULT NOW(),
+      updated_at TIMESTAMP DEFAULT NOW()
+    );
+  `;
+  await pool.query(createTableSQL);
+}
+
 export async function bootstrapAdminUser(): Promise<void> {
   try {
+    await ensureUsersTableExists();
+    
     const existingAdmin = await db
       .select()
       .from(users)

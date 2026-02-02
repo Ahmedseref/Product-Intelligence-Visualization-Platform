@@ -8,7 +8,7 @@
   },
   "scripts": {
     "dev": "tsx server/index.ts & vite",
-    "build": "vite build && esbuild server/index.ts --bundle --platform=node --outfile=dist-server/index.cjs --format=cjs --external:pg-native && npm run db:push",
+    "build": "vite build && esbuild server/index.ts --bundle --platform=node --outfile=dist-server/index.cjs --format=cjs --external:pg-native",
     "build:prod": "npm run build",
     "build:server": "esbuild server/index.ts --bundle --platform=node --outfile=dist-server/index.cjs --format=cjs --external:pg-native",
     "start": "PORT=5000 node dist-server/index.cjs",
