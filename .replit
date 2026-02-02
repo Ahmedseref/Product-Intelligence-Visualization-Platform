@@ -49,4 +49,4 @@ externalPort = 3002
 [deployment]
 deploymentTarget = "autoscale"
 build = ["npm", "run", "build"]
-run = ["bash", "-c", "npm run db:push && PORT=5000 node dist-server/index.cjs"]
+run = ["bash", "-c", "PORT=5000 node dist-server/index.cjs"]
