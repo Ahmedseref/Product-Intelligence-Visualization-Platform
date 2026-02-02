@@ -37,7 +37,7 @@ interface FilterState {
   moqMax: string;
 }
 
-type ColumnKey = 'id' | 'name' | 'supplier' | 'sector' | 'category' | 'subCategory' | 'price' | 'currency' | 'unit' | 'moq' | 'leadTime' | 'manufacturer' | 'location' | 'description';
+type ColumnKey = 'id' | 'name' | 'supplier' | 'sector' | 'category' | 'subCategory' | 'price' | 'currency' | 'unit' | 'moq' | 'leadTime' | 'manufacturer' | 'location' | 'description' | 'usageAreas';
 
 interface ColumnConfig {
   key: ColumnKey;
@@ -61,6 +61,7 @@ const ALL_COLUMNS: ColumnConfig[] = [
   { key: 'manufacturer', label: 'Manufacturer', sortable: true, defaultVisible: false },
   { key: 'location', label: 'Location', sortable: true, defaultVisible: false },
   { key: 'description', label: 'Description', sortable: false, defaultVisible: false },
+  { key: 'usageAreas', label: 'Usage Areas', sortable: false, defaultVisible: true },
 ];
 
 const ProductList: React.FC<ProductListProps> = ({ 
@@ -109,6 +110,7 @@ const ProductList: React.FC<ProductListProps> = ({
     currency: 80,
     unit: 80,
     moq: 80,
+    usageAreas: 200,
     leadTime: 100,
     manufacturer: 150,
     location: 150,
@@ -189,7 +191,8 @@ const ProductList: React.FC<ProductListProps> = ({
       leadTime: Math.max(headerWidth, 95),
       manufacturer: Math.min(200, Math.max(headerWidth, getContentWidth('manufacturer'))),
       location: Math.min(200, Math.max(headerWidth, getContentWidth('manufacturingLocation'))),
-      description: Math.min(280, Math.max(headerWidth, getContentWidth('description', 6)))
+      description: Math.min(280, Math.max(headerWidth, getContentWidth('description', 6))),
+      usageAreas: Math.min(300, Math.max(headerWidth, 180))
     };
     
     setColumnWidths(prev => ({ ...prev, [columnKey]: widthMap[columnKey] }));
@@ -434,6 +437,10 @@ const ProductList: React.FC<ProductListProps> = ({
       case 'manufacturer': return p.manufacturer || '';
       case 'location': return p.manufacturingLocation || '';
       case 'description': return p.description || '';
+      case 'usageAreas': {
+        const areas = p.customFields?.['Usage Areas'] || [];
+        return Array.isArray(areas) ? areas.join(', ') : '';
+      }
       default: return '';
     }
   };
@@ -1213,6 +1220,86 @@ const ProductList: React.FC<ProductListProps> = ({
                     )}
                     {visibleColumns.has('description') && (
                       <td className="px-3 py-3 text-sm text-slate-500 truncate overflow-hidden text-ellipsis" style={{ width: columnWidths.description, minWidth: columnWidths.description, maxWidth: columnWidths.description }} title={p.description}>{p.description || '-'}</td>
+                    )}
+                    {visibleColumns.has('usageAreas') && (
+                      <td className="px-3 py-3 overflow-hidden" style={{ width: columnWidths.usageAreas, minWidth: columnWidths.usageAreas, maxWidth: columnWidths.usageAreas }}>
+                        {isEditing(p.id, 'usageAreas') ? (
+                          <div className="flex flex-wrap gap-1 items-center" onClick={e => e.stopPropagation()}>
+                            {usageAreas.map(area => {
+                              const productAreas = p.customFields?.['Usage Areas'] || [];
+                              const isSelected = Array.isArray(productAreas) && productAreas.includes(area);
+                              return (
+                                <button
+                                  key={area}
+                                  onClick={() => {
+                                    const currentAreas = [...(p.customFields?.['Usage Areas'] || [])];
+                                    const idx = currentAreas.indexOf(area);
+                                    if (idx === -1) {
+                                      currentAreas.push(area);
+                                    } else {
+                                      currentAreas.splice(idx, 1);
+                                    }
+                                    const updated = {
+                                      ...p,
+                                      customFields: {
+                                        ...p.customFields,
+                                        'Usage Areas': currentAreas
+                                      }
+                                    };
+                                    onUpdate(updated);
+                                  }}
+                                  className={`px-2 py-0.5 text-xs rounded-full border transition-all ${
+                                    isSelected 
+                                      ? 'bg-blue-100 border-blue-300 text-blue-700' 
+                                      : 'bg-slate-50 border-slate-200 text-slate-500 hover:bg-slate-100'
+                                  }`}
+                                >
+                                  {area}
+                                </button>
+                              );
+                            })}
+                            <button 
+                              onClick={() => setEditingCell(null)}
+                              className="p-1 text-emerald-600 hover:bg-emerald-50 rounded ml-1"
+                            >
+                              <Check size={14} />
+                            </button>
+                          </div>
+                        ) : (
+                          <div 
+                            className="cursor-text hover:bg-blue-50 hover:ring-1 hover:ring-blue-200 rounded px-1 py-0.5 transition-all"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              if (clickTimeoutRef.current) {
+                                clearTimeout(clickTimeoutRef.current);
+                                clickTimeoutRef.current = null;
+                              }
+                              setEditingCell({ productId: p.id, field: 'usageAreas' });
+                            }}
+                            title="Click to edit usage areas"
+                          >
+                            {(() => {
+                              const areas = p.customFields?.['Usage Areas'] || [];
+                              const validAreas = Array.isArray(areas) ? areas.filter(a => usageAreas.includes(a)) : [];
+                              if (validAreas.length === 0) {
+                                return <span className="text-sm text-slate-400">-</span>;
+                              }
+                              return (
+                                <div className="flex flex-wrap gap-1">
+                                  {validAreas.slice(0, 3).map(area => (
+                                    <span key={area} className="px-1.5 py-0.5 text-xs bg-blue-50 text-blue-600 rounded">
+                                      {area}
+                                    </span>
+                                  ))}
+                                  {validAreas.length > 3 && (
+                                    <span className="text-xs text-slate-400">+{validAreas.length - 3} more</span>
+                                  )}
+                                </div>
+                              );
+                            })()}
+                          </div>
+                        )}
+                      </td>
                     )}
                     <td className="px-3 py-3 text-right sticky right-0 bg-white group-hover:bg-blue-50/30 z-10">
                     <div className="flex items-center justify-end gap-0.5" onClick={e => e.stopPropagation()}>
