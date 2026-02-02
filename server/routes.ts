@@ -1,8 +1,19 @@
 import type { Express } from "express";
 import { storage } from "./storage";
 import * as backupService from "./backupService";
+import { authMiddleware, requirePasswordChange } from "./authRoutes";
 
 export function registerRoutes(app: Express): void {
+  app.use("/api/tree-nodes", authMiddleware, requirePasswordChange);
+  app.use("/api/products", authMiddleware, requirePasswordChange);
+  app.use("/api/suppliers", authMiddleware, requirePasswordChange);
+  app.use("/api/custom-fields", authMiddleware, requirePasswordChange);
+  app.use("/api/usage-areas", authMiddleware, requirePasswordChange);
+  app.use("/api/seed", authMiddleware, requirePasswordChange);
+  app.use("/api/backups", authMiddleware, requirePasswordChange);
+  app.use("/api/supplier-products", authMiddleware, requirePasswordChange);
+  app.use("/api/settings", authMiddleware, requirePasswordChange);
+
   app.get("/api/tree-nodes", async (req, res) => {
     try {
       const nodes = await storage.getTreeNodes();

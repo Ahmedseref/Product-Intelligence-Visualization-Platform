@@ -1,5 +1,15 @@
-import { pgTable, text, serial, integer, timestamp, jsonb, boolean, real, varchar } from "drizzle-orm/pg-core";
-import { relations } from "drizzle-orm";
+import { pgTable, text, serial, integer, timestamp, jsonb, boolean, real, varchar, uuid } from "drizzle-orm/pg-core";
+import { relations, sql } from "drizzle-orm";
+
+export const users = pgTable("users", {
+  id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
+  username: varchar("username", { length: 100 }).notNull().unique(),
+  passwordHash: text("password_hash").notNull(),
+  role: varchar("role", { length: 20 }).notNull().default("user"),
+  isFirstLogin: boolean("is_first_login").default(true),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
 
 export const suppliers = pgTable("suppliers", {
   id: serial("id").primaryKey(),
@@ -201,3 +211,5 @@ export type AppSettings = typeof appSettings.$inferSelect;
 export type InsertAppSettings = typeof appSettings.$inferInsert;
 export type Backup = typeof backups.$inferSelect;
 export type InsertBackup = typeof backups.$inferInsert;
+export type User = typeof users.$inferSelect;
+export type InsertUser = typeof users.$inferInsert;

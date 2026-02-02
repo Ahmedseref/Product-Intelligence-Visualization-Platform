@@ -6,6 +6,8 @@ import fs from "fs";
 import { registerRoutes } from "./routes";
 import { registerObjectStorageRoutes } from "./replit_integrations/object_storage";
 import { startScheduledBackups, initializeBackupService } from "./backupService";
+import { registerAuthRoutes } from "./authRoutes";
+import { bootstrapAdminUser } from "./authService";
 
 const rootDir = process.cwd();
 
@@ -37,6 +39,7 @@ app.get("/", (req, res, next) => {
   next();
 });
 
+registerAuthRoutes(app);
 registerObjectStorageRoutes(app);
 registerRoutes(app);
 
@@ -81,6 +84,7 @@ if (fs.existsSync(distPath)) {
 
 app.listen(PORT, "0.0.0.0", async () => {
   console.log(`Server running on http://0.0.0.0:${PORT}`);
+  await bootstrapAdminUser();
   await initializeBackupService();
   startScheduledBackups();
 });

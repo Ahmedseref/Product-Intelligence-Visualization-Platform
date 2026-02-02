@@ -1,0 +1,151 @@
+You are implementing an AUTHENTICATION SYSTEM for a private web application.
+
+Tech stack:
+- Frontend: React 19 + TypeScript + Vite + Tailwind
+- Backend: Express.js 5
+- Database: PostgreSQL
+- ORM: Drizzle ORM
+- Auth method: Username + Password
+- Session-based authentication (JWT or secure cookies)
+
+-------------------------------------------------
+1) AUTHENTICATION RULES
+-------------------------------------------------
+
+Initial system credentials:
+- Default username: admin
+- Default password: 1111
+
+Rules:
+- On first login, admin can use username + password directly
+- Password MUST be changeable from Settings
+- Passwords must NEVER be stored in plain text
+- Hash passwords using bcrypt or argon2
+
+-------------------------------------------------
+2) USER MODEL
+-------------------------------------------------
+
+Create users table:
+
+users
+- id (uuid)
+- username (unique)
+- password_hash
+- role (admin | user)
+- is_first_login (boolean)
+- created_at
+- updated_at
+
+On system bootstrap:
+- Auto-create admin user if none exists
+- Username: admin
+- Password: "1111" (hashed)
+- is_first_login = true
+
+-------------------------------------------------
+3) BACKEND AUTH FLOW
+-------------------------------------------------
+
+Endpoints:
+
+POST /api/auth/login
+- Input: username, password
+- Validate credentials
+- Return session or JWT
+- If is_first_login = true:
+  - Require password change
+
+POST /api/auth/logout
+- Destroy session / invalidate token
+
+POST /api/auth/change-password
+- Requires authentication
+- Validate:
+  - old password
+  - new password (min length 6)
+- Update password_hash
+- Set is_first_login = false
+
+GET /api/auth/me
+- Returns logged-in user info
+- Used for route protection
+
+-------------------------------------------------
+4) SECURITY REQUIREMENTS
+-------------------------------------------------
+
+- Hash passwords (bcrypt / argon2)
+- Rate-limit login attempts
+- Generic error messages (no user enumeration)
+- Secure cookies if using sessions
+- JWT expiration if using tokens
+
+-------------------------------------------------
+5) FRONTEND FLOW
+-------------------------------------------------
+
+Pages:
+- /login
+- /settings/security
+
+Login Page:
+- Username input
+- Password input
+- Submit button
+- Error feedback
+
+First Login Flow:
+- After successful login:
+  - If is_first_login === true
+  - Redirect to Change Password screen
+  - Block access to rest of app until password updated
+
+Settings → Security:
+- Change password form
+- Confirm password
+- Success feedback
+
+-------------------------------------------------
+6) ROUTE PROTECTION
+-------------------------------------------------
+
+- Protect all routes except /login
+- If user not authenticated → redirect to /login
+- If first login not completed → force redirect to change-password
+
+-------------------------------------------------
+7) UX EXPECTATIONS
+-------------------------------------------------
+
+- Clear error messages
+- Loading states
+- Password visibility toggle
+- Logout button in header
+
+-------------------------------------------------
+8) FUTURE-PROOFING (DO NOT IMPLEMENT NOW)
+-------------------------------------------------
+
+Design system so later we can add:
+- Multiple users
+- Roles & permissions
+- Email-based auth
+- SSO
+
+-------------------------------------------------
+9) DELIVERABLES
+-------------------------------------------------
+
+- Users table schema (Drizzle)
+- Auth middleware
+- Password hashing logic
+- Login + Change Password UI
+- Route guards
+- Admin bootstrap logic
+
+Implement this as a CLEAN MVP AUTH SYSTEM:
+- Simple
+- Secure
+- Maintainable
+- No unnecessary complexity

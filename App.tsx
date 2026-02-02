@@ -13,16 +13,24 @@ import SupplierManager from './components/SupplierManager';
 import MassImportWizard from './components/MassImportWizard';
 import FloatingNotesWidget from './components/FloatingNotesWidget';
 import Settings from './components/Settings';
-import { api } from './client/api';
+import Login from './components/Login';
+import ChangePassword from './components/ChangePassword';
+import { api, authApi, setAuthToken, initAuthToken, AuthUser } from './client/api';
+import { LogOut } from 'lucide-react';
 
 const App: React.FC = () => {
+  const [authUser, setAuthUser] = useState<AuthUser | null>(null);
+  const [isAuthLoading, setIsAuthLoading] = useState(true);
+  const [authError, setAuthError] = useState<string | null>(null);
+  const [showChangePassword, setShowChangePassword] = useState(false);
+
   const [viewMode, setViewMode] = useState<ViewMode>('dashboard');
   const [products, setProducts] = useState<Product[]>(INITIAL_PRODUCTS);
   const [treeNodes, setTreeNodes] = useState<TreeNode[]>(INITIAL_TREE_NODES);
   const [suppliers, setSuppliers] = useState<Supplier[]>([]);
   const [supplierProducts, setSupplierProducts] = useState<SupplierProduct[]>([]);
   const [customFieldConfigs, setCustomFieldConfigs] = useState<CustomField[]>([]);
-  const [currentUser] = useState<User>({ id: 'U-01', name: 'Admin User', role: 'Admin' });
+  const [currentUser, setCurrentUser] = useState<User>({ id: 'U-01', name: 'Admin User', role: 'Admin' });
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
@@ -34,6 +42,61 @@ const App: React.FC = () => {
   const [isResizingPanel, setIsResizingPanel] = useState(false);
   const panelResizeRef = React.useRef<HTMLDivElement>(null);
   const resizeStartRef = React.useRef<{ startX: number; startWidth: number } | null>(null);
+
+  useEffect(() => {
+    initAuthToken();
+    authApi.getCurrentUser().then(user => {
+      if (user) {
+        setAuthUser(user);
+        setCurrentUser({ id: user.id, name: user.username, role: user.role });
+        if (user.isFirstLogin) {
+          setShowChangePassword(true);
+        }
+      }
+      setIsAuthLoading(false);
+    });
+  }, []);
+
+  const handleLogin = async (username: string, password: string) => {
+    setAuthError(null);
+    setIsAuthLoading(true);
+    try {
+      const response = await authApi.login(username, password);
+      setAuthToken(response.token);
+      setAuthUser(response.user);
+      setCurrentUser({ id: response.user.id, name: response.user.username, role: response.user.role });
+      if (response.user.isFirstLogin) {
+        setShowChangePassword(true);
+      }
+    } catch (err: any) {
+      setAuthError(err.message || 'Login failed');
+    } finally {
+      setIsAuthLoading(false);
+    }
+  };
+
+  const handleLogout = async () => {
+    await authApi.logout();
+    setAuthUser(null);
+    setShowChangePassword(false);
+    setViewMode('dashboard');
+  };
+
+  const handleChangePassword = async (oldPassword: string, newPassword: string) => {
+    setAuthError(null);
+    setIsAuthLoading(true);
+    try {
+      await authApi.changePassword(oldPassword, newPassword);
+      setShowChangePassword(false);
+      if (authUser) {
+        setAuthUser({ ...authUser, isFirstLogin: false });
+      }
+    } catch (err: any) {
+      setAuthError(err.message || 'Failed to change password');
+    } finally {
+      setIsAuthLoading(false);
+    }
+  };
 
   const syncWithDatabase = useCallback(async () => {
     const retryFetch = async <T,>(fn: () => Promise<T>, attempts: number, delay: number): Promise<T> => {
@@ -538,6 +601,29 @@ const App: React.FC = () => {
     return path;
   }, [selectedNodeId, treeNodes]);
 
+  if (isAuthLoading && !authUser) {
+    return (
+      <div className="min-h-screen bg-slate-900 flex items-center justify-center">
+        <div className="animate-spin w-8 h-8 border-4 border-blue-500 border-t-transparent rounded-full"></div>
+      </div>
+    );
+  }
+
+  if (!authUser) {
+    return <Login onLogin={handleLogin} error={authError} isLoading={isAuthLoading} />;
+  }
+
+  if (showChangePassword) {
+    return (
+      <ChangePassword 
+        onChangePassword={handleChangePassword} 
+        error={authError} 
+        isLoading={isAuthLoading}
+        isFirstLogin={authUser.isFirstLogin}
+      />
+    );
+  }
+
   return (
     <div className="flex h-screen bg-slate-50 overflow-hidden">
       {error && (
@@ -606,6 +692,13 @@ const App: React.FC = () => {
                 <p className="text-xs font-semibold text-slate-900 leading-none">{currentUser.name}</p>
                 <p className="text-[10px] text-slate-500 leading-none mt-1">{currentUser.role}</p>
               </div>
+              <button
+                onClick={handleLogout}
+                className="ml-2 p-2 text-slate-500 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors"
+                title="Logout"
+              >
+                <LogOut className="w-4 h-4" />
+              </button>
             </div>
           </div>
         </header>

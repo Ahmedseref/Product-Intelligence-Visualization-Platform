@@ -100,17 +100,27 @@ export interface SupplierProductData {
   history?: any[];
 }
 
+function authFetch(url: string, options: RequestInit = {}): Promise<Response> {
+  const headers: Record<string, string> = {
+    'Content-Type': 'application/json',
+    ...(options.headers as Record<string, string> || {}),
+  };
+  if (authToken) {
+    headers['Authorization'] = `Bearer ${authToken}`;
+  }
+  return fetch(url, { ...options, headers });
+}
+
 export const api = {
   async getTreeNodes(): Promise<TreeNodeData[]> {
-    const res = await fetch(`${API_BASE}/tree-nodes`);
+    const res = await authFetch(`${API_BASE}/tree-nodes`);
     if (!res.ok) throw new Error('Failed to fetch tree nodes');
     return res.json();
   },
 
   async createTreeNode(node: Omit<TreeNodeData, 'id'>): Promise<TreeNodeData> {
-    const res = await fetch(`${API_BASE}/tree-nodes`, {
+    const res = await authFetch(`${API_BASE}/tree-nodes`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(node),
     });
     if (!res.ok) throw new Error('Failed to create tree node');
@@ -118,9 +128,8 @@ export const api = {
   },
 
   async updateTreeNode(nodeId: string, updates: Partial<TreeNodeData>): Promise<TreeNodeData> {
-    const res = await fetch(`${API_BASE}/tree-nodes/${nodeId}`, {
+    const res = await authFetch(`${API_BASE}/tree-nodes/${nodeId}`, {
       method: 'PATCH',
-      headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(updates),
     });
     if (!res.ok) throw new Error('Failed to update tree node');
@@ -128,22 +137,21 @@ export const api = {
   },
 
   async deleteTreeNode(nodeId: string): Promise<void> {
-    const res = await fetch(`${API_BASE}/tree-nodes/${nodeId}`, {
+    const res = await authFetch(`${API_BASE}/tree-nodes/${nodeId}`, {
       method: 'DELETE',
     });
     if (!res.ok) throw new Error('Failed to delete tree node');
   },
 
   async getProducts(): Promise<ProductData[]> {
-    const res = await fetch(`${API_BASE}/products`);
+    const res = await authFetch(`${API_BASE}/products`);
     if (!res.ok) throw new Error('Failed to fetch products');
     return res.json();
   },
 
   async createProduct(product: Omit<ProductData, 'id'>): Promise<ProductData> {
-    const res = await fetch(`${API_BASE}/products`, {
+    const res = await authFetch(`${API_BASE}/products`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(product),
     });
     if (!res.ok) throw new Error('Failed to create product');
@@ -151,9 +159,8 @@ export const api = {
   },
 
   async updateProduct(productId: string, updates: Partial<ProductData>): Promise<ProductData> {
-    const res = await fetch(`${API_BASE}/products/${productId}`, {
+    const res = await authFetch(`${API_BASE}/products/${productId}`, {
       method: 'PATCH',
-      headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(updates),
     });
     if (!res.ok) throw new Error('Failed to update product');
@@ -161,22 +168,21 @@ export const api = {
   },
 
   async deleteProduct(productId: string): Promise<void> {
-    const res = await fetch(`${API_BASE}/products/${productId}`, {
+    const res = await authFetch(`${API_BASE}/products/${productId}`, {
       method: 'DELETE',
     });
     if (!res.ok) throw new Error('Failed to delete product');
   },
 
   async getCustomFields(): Promise<CustomFieldData[]> {
-    const res = await fetch(`${API_BASE}/custom-fields`);
+    const res = await authFetch(`${API_BASE}/custom-fields`);
     if (!res.ok) throw new Error('Failed to fetch custom fields');
     return res.json();
   },
 
   async createCustomField(field: Omit<CustomFieldData, 'id'>): Promise<CustomFieldData> {
-    const res = await fetch(`${API_BASE}/custom-fields`, {
+    const res = await authFetch(`${API_BASE}/custom-fields`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(field),
     });
     if (!res.ok) throw new Error('Failed to create custom field');
@@ -184,28 +190,27 @@ export const api = {
   },
 
   async deleteCustomField(fieldId: string): Promise<void> {
-    const res = await fetch(`${API_BASE}/custom-fields/${fieldId}`, {
+    const res = await authFetch(`${API_BASE}/custom-fields/${fieldId}`, {
       method: 'DELETE',
     });
     if (!res.ok) throw new Error('Failed to delete custom field');
   },
 
   async seedDatabase(): Promise<{ message: string }> {
-    const res = await fetch(`${API_BASE}/seed`, { method: 'POST' });
+    const res = await authFetch(`${API_BASE}/seed`, { method: 'POST' });
     if (!res.ok) throw new Error('Failed to seed database');
     return res.json();
   },
 
   async getSuppliers(): Promise<SupplierData[]> {
-    const res = await fetch(`${API_BASE}/suppliers`);
+    const res = await authFetch(`${API_BASE}/suppliers`);
     if (!res.ok) throw new Error('Failed to fetch suppliers');
     return res.json();
   },
 
   async createSupplier(supplier: Omit<SupplierData, 'id'>): Promise<SupplierData> {
-    const res = await fetch(`${API_BASE}/suppliers`, {
+    const res = await authFetch(`${API_BASE}/suppliers`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(supplier),
     });
     if (!res.ok) throw new Error('Failed to create supplier');
@@ -213,9 +218,8 @@ export const api = {
   },
 
   async updateSupplier(supplierId: string, updates: Partial<SupplierData>): Promise<SupplierData> {
-    const res = await fetch(`${API_BASE}/suppliers/${supplierId}`, {
+    const res = await authFetch(`${API_BASE}/suppliers/${supplierId}`, {
       method: 'PATCH',
-      headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(updates),
     });
     if (!res.ok) throw new Error('Failed to update supplier');
@@ -223,28 +227,27 @@ export const api = {
   },
 
   async deleteSupplier(supplierId: string): Promise<void> {
-    const res = await fetch(`${API_BASE}/suppliers/${supplierId}`, {
+    const res = await authFetch(`${API_BASE}/suppliers/${supplierId}`, {
       method: 'DELETE',
     });
     if (!res.ok) throw new Error('Failed to delete supplier');
   },
 
   async getSupplierProducts(): Promise<SupplierProductData[]> {
-    const res = await fetch(`${API_BASE}/supplier-products`);
+    const res = await authFetch(`${API_BASE}/supplier-products`);
     if (!res.ok) throw new Error('Failed to fetch supplier products');
     return res.json();
   },
 
   async getSupplierProductsBySupplier(supplierId: string): Promise<SupplierProductData[]> {
-    const res = await fetch(`${API_BASE}/supplier-products/by-supplier/${supplierId}`);
+    const res = await authFetch(`${API_BASE}/supplier-products/by-supplier/${supplierId}`);
     if (!res.ok) throw new Error('Failed to fetch supplier products');
     return res.json();
   },
 
   async createSupplierProduct(sp: Omit<SupplierProductData, 'id'>): Promise<SupplierProductData> {
-    const res = await fetch(`${API_BASE}/supplier-products`, {
+    const res = await authFetch(`${API_BASE}/supplier-products`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(sp),
     });
     if (!res.ok) throw new Error('Failed to create supplier product');
@@ -252,9 +255,8 @@ export const api = {
   },
 
   async updateSupplierProduct(supplierProductId: string, updates: Partial<SupplierProductData>): Promise<SupplierProductData> {
-    const res = await fetch(`${API_BASE}/supplier-products/${supplierProductId}`, {
+    const res = await authFetch(`${API_BASE}/supplier-products/${supplierProductId}`, {
       method: 'PATCH',
-      headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(updates),
     });
     if (!res.ok) throw new Error('Failed to update supplier product');
@@ -262,22 +264,21 @@ export const api = {
   },
 
   async deleteSupplierProduct(supplierProductId: string): Promise<void> {
-    const res = await fetch(`${API_BASE}/supplier-products/${supplierProductId}`, {
+    const res = await authFetch(`${API_BASE}/supplier-products/${supplierProductId}`, {
       method: 'DELETE',
     });
     if (!res.ok) throw new Error('Failed to delete supplier product');
   },
 
   async getUsageAreas(): Promise<string[]> {
-    const res = await fetch(`${API_BASE}/settings/usage-areas`);
+    const res = await authFetch(`${API_BASE}/settings/usage-areas`);
     if (!res.ok) throw new Error('Failed to fetch usage areas');
     return res.json();
   },
 
   async updateUsageAreas(areas: string[]): Promise<string[]> {
-    const res = await fetch(`${API_BASE}/settings/usage-areas`, {
+    const res = await authFetch(`${API_BASE}/settings/usage-areas`, {
       method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ areas }),
     });
     if (!res.ok) throw new Error('Failed to update usage areas');
@@ -285,15 +286,14 @@ export const api = {
   },
 
   async listBackups(): Promise<BackupSummary[]> {
-    const res = await fetch(`${API_BASE}/backups`);
+    const res = await authFetch(`${API_BASE}/backups`);
     if (!res.ok) throw new Error('Failed to fetch backups');
     return res.json();
   },
 
   async createBackup(description?: string): Promise<BackupSummary> {
-    const res = await fetch(`${API_BASE}/backups/create`, {
+    const res = await authFetch(`${API_BASE}/backups/create`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ description }),
     });
     if (!res.ok) throw new Error('Failed to create backup');
@@ -301,13 +301,13 @@ export const api = {
   },
 
   async getRestorePreview(id: number): Promise<RestorePreview> {
-    const res = await fetch(`${API_BASE}/backups/${id}/preview`);
+    const res = await authFetch(`${API_BASE}/backups/${id}/preview`);
     if (!res.ok) throw new Error('Failed to get restore preview');
     return res.json();
   },
 
   async restoreBackup(id: number): Promise<{ success: boolean; message: string }> {
-    const res = await fetch(`${API_BASE}/backups/restore/${id}`, {
+    const res = await authFetch(`${API_BASE}/backups/restore/${id}`, {
       method: 'POST',
     });
     if (!res.ok) {
@@ -318,16 +318,20 @@ export const api = {
   },
 
   async exportBackup(id: number): Promise<Blob> {
-    const res = await fetch(`${API_BASE}/backups/${id}/export`);
+    const res = await authFetch(`${API_BASE}/backups/${id}/export`);
     if (!res.ok) throw new Error('Failed to export backup');
     return res.blob();
   },
 
   async importBackup(file: File): Promise<{ success: boolean; backupId?: number; message: string }> {
     const arrayBuffer = await file.arrayBuffer();
+    const headers: Record<string, string> = { 'Content-Type': 'application/octet-stream' };
+    if (authToken) {
+      headers['Authorization'] = `Bearer ${authToken}`;
+    }
     const res = await fetch(`${API_BASE}/backups/import`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/octet-stream' },
+      headers,
       body: arrayBuffer,
     });
     if (!res.ok) {
@@ -338,16 +342,15 @@ export const api = {
   },
 
   async deleteBackup(id: number): Promise<void> {
-    const res = await fetch(`${API_BASE}/backups/${id}`, {
+    const res = await authFetch(`${API_BASE}/backups/${id}`, {
       method: 'DELETE',
     });
     if (!res.ok) throw new Error('Failed to delete backup');
   },
 
   async triggerAutoBackup(reason: string): Promise<BackupSummary> {
-    const res = await fetch(`${API_BASE}/backups/auto-trigger`, {
+    const res = await authFetch(`${API_BASE}/backups/auto-trigger`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ reason }),
     });
     if (!res.ok) throw new Error('Failed to trigger auto-backup');
@@ -355,15 +358,14 @@ export const api = {
   },
 
   async getBackupSettings(): Promise<BackupSettingsData> {
-    const res = await fetch(`${API_BASE}/backups/settings`);
+    const res = await authFetch(`${API_BASE}/backups/settings`);
     if (!res.ok) throw new Error('Failed to fetch backup settings');
     return res.json();
   },
 
   async updateBackupSettings(settings: Partial<BackupSettingsData>): Promise<BackupSettingsData> {
-    const res = await fetch(`${API_BASE}/backups/settings`, {
+    const res = await authFetch(`${API_BASE}/backups/settings`, {
       method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(settings),
     });
     if (!res.ok) throw new Error('Failed to update backup settings');
@@ -395,3 +397,96 @@ export interface BackupSettingsData {
   maxBackups: number;
   autoBackupIntervalHours: number;
 }
+
+export interface AuthUser {
+  id: string;
+  username: string;
+  role: string;
+  isFirstLogin: boolean;
+}
+
+export interface LoginResponse {
+  token: string;
+  user: AuthUser;
+}
+
+let authToken: string | null = null;
+
+export function setAuthToken(token: string | null): void {
+  authToken = token;
+  if (token) {
+    localStorage.setItem('auth_token', token);
+  } else {
+    localStorage.removeItem('auth_token');
+  }
+}
+
+export function getStoredToken(): string | null {
+  return localStorage.getItem('auth_token');
+}
+
+export function initAuthToken(): void {
+  authToken = getStoredToken();
+}
+
+function getAuthHeaders(): Record<string, string> {
+  const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+  if (authToken) {
+    headers['Authorization'] = `Bearer ${authToken}`;
+  }
+  return headers;
+}
+
+export const authApi = {
+  async login(username: string, password: string): Promise<LoginResponse> {
+    const response = await fetch(`${API_BASE}/auth/login`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ username, password }),
+    });
+    if (!response.ok) {
+      const error = await response.json();
+      throw new Error(error.error || 'Login failed');
+    }
+    return response.json();
+  },
+
+  async logout(): Promise<void> {
+    await fetch(`${API_BASE}/auth/logout`, {
+      method: 'POST',
+      headers: getAuthHeaders(),
+    });
+    setAuthToken(null);
+  },
+
+  async changePassword(oldPassword: string, newPassword: string): Promise<void> {
+    const response = await fetch(`${API_BASE}/auth/change-password`, {
+      method: 'POST',
+      headers: getAuthHeaders(),
+      body: JSON.stringify({ oldPassword, newPassword }),
+    });
+    if (!response.ok) {
+      const error = await response.json();
+      throw new Error(error.error || 'Failed to change password');
+    }
+  },
+
+  async getCurrentUser(): Promise<AuthUser | null> {
+    if (!authToken) return null;
+    try {
+      const response = await fetch(`${API_BASE}/auth/me`, {
+        headers: getAuthHeaders(),
+      });
+      if (!response.ok) {
+        if (response.status === 401) {
+          setAuthToken(null);
+          return null;
+        }
+        throw new Error('Failed to get user');
+      }
+      return response.json();
+    } catch {
+      return null;
+    }
+  },
+};
