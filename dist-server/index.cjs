@@ -106,7 +106,7 @@ var require_main = __commonJS({
     var fs4 = require("fs");
     var path3 = require("path");
     var os = require("os");
-    var crypto13 = require("crypto");
+    var crypto14 = require("crypto");
     var packageJson4 = require_package();
     var version4 = packageJson4.version;
     var TIPS = [
@@ -360,7 +360,7 @@ var require_main = __commonJS({
       const authTag = ciphertext.subarray(-16);
       ciphertext = ciphertext.subarray(12, -16);
       try {
-        const aesgcm = crypto13.createDecipheriv("aes-256-gcm", key, nonce);
+        const aesgcm = crypto14.createDecipheriv("aes-256-gcm", key, nonce);
         aesgcm.setAuthTag(authTag);
         return `${aesgcm.update(ciphertext)}${aesgcm.final()}`;
       } catch (error) {
@@ -610,12 +610,12 @@ var require_common = __commonJS({
       createDebug.skips = [];
       createDebug.formatters = {};
       function selectColor(namespace) {
-        let hash = 0;
+        let hash2 = 0;
         for (let i = 0; i < namespace.length; i++) {
-          hash = (hash << 5) - hash + namespace.charCodeAt(i);
-          hash |= 0;
+          hash2 = (hash2 << 5) - hash2 + namespace.charCodeAt(i);
+          hash2 |= 0;
         }
-        return createDebug.colors[Math.abs(hash) % createDebug.colors.length];
+        return createDebug.colors[Math.abs(hash2) % createDebug.colors.length];
       }
       createDebug.selectColor = selectColor;
       function createDebug(namespace) {
@@ -2035,7 +2035,7 @@ var require_safer = __commonJS({
   "node_modules/safer-buffer/safer.js"(exports2, module2) {
     "use strict";
     var buffer = require("buffer");
-    var Buffer2 = buffer.Buffer;
+    var Buffer3 = buffer.Buffer;
     var safer = {};
     var key;
     for (key in buffer) {
@@ -2044,12 +2044,12 @@ var require_safer = __commonJS({
       safer[key] = buffer[key];
     }
     var Safer = safer.Buffer = {};
-    for (key in Buffer2) {
-      if (!Buffer2.hasOwnProperty(key)) continue;
+    for (key in Buffer3) {
+      if (!Buffer3.hasOwnProperty(key)) continue;
       if (key === "allocUnsafe" || key === "allocUnsafeSlow") continue;
-      Safer[key] = Buffer2[key];
+      Safer[key] = Buffer3[key];
     }
-    safer.Buffer.prototype = Buffer2.prototype;
+    safer.Buffer.prototype = Buffer3.prototype;
     if (!Safer.from || Safer.from === Uint8Array.from) {
       Safer.from = function(value, encodingOrOffset, length) {
         if (typeof value === "number") {
@@ -2058,7 +2058,7 @@ var require_safer = __commonJS({
         if (value && typeof value.length === "undefined") {
           throw new TypeError("The first argument must be one of type string, Buffer, ArrayBuffer, Array, or Array-like Object. Received type " + typeof value);
         }
-        return Buffer2(value, encodingOrOffset, length);
+        return Buffer3(value, encodingOrOffset, length);
       };
     }
     if (!Safer.alloc) {
@@ -2069,7 +2069,7 @@ var require_safer = __commonJS({
         if (size < 0 || size >= 2 * (1 << 30)) {
           throw new RangeError('The value "' + size + '" is invalid for option "size"');
         }
-        var buf = Buffer2(size);
+        var buf = Buffer3(size);
         if (!fill || fill.length === 0) {
           buf.fill(0);
         } else if (typeof encoding === "string") {
@@ -2164,7 +2164,7 @@ var require_merge_exports = __commonJS({
 var require_internal = __commonJS({
   "node_modules/iconv-lite/encodings/internal.js"(exports2, module2) {
     "use strict";
-    var Buffer2 = require_safer().Buffer;
+    var Buffer3 = require_safer().Buffer;
     module2.exports = {
       // Encodings
       utf8: { type: "_internal", bomAware: true },
@@ -2188,7 +2188,7 @@ var require_internal = __commonJS({
       } else if (this.enc === "cesu8") {
         this.enc = "utf8";
         this.encoder = InternalEncoderCesu8;
-        if (Buffer2.from("eda0bdedb2a9", "hex").toString() !== "\u{1F4A9}") {
+        if (Buffer3.from("eda0bdedb2a9", "hex").toString() !== "\u{1F4A9}") {
           this.decoder = InternalDecoderCesu8;
           this.defaultCharUnicode = iconv.defaultCharUnicode;
         }
@@ -2201,8 +2201,8 @@ var require_internal = __commonJS({
       this.decoder = new StringDecoder(codec.enc);
     }
     InternalDecoder.prototype.write = function(buf) {
-      if (!Buffer2.isBuffer(buf)) {
-        buf = Buffer2.from(buf);
+      if (!Buffer3.isBuffer(buf)) {
+        buf = Buffer3.from(buf);
       }
       return this.decoder.write(buf);
     };
@@ -2213,7 +2213,7 @@ var require_internal = __commonJS({
       this.enc = codec.enc;
     }
     InternalEncoder.prototype.write = function(str) {
-      return Buffer2.from(str, this.enc);
+      return Buffer3.from(str, this.enc);
     };
     InternalEncoder.prototype.end = function() {
     };
@@ -2225,15 +2225,15 @@ var require_internal = __commonJS({
       var completeQuads = str.length - str.length % 4;
       this.prevStr = str.slice(completeQuads);
       str = str.slice(0, completeQuads);
-      return Buffer2.from(str, "base64");
+      return Buffer3.from(str, "base64");
     };
     InternalEncoderBase64.prototype.end = function() {
-      return Buffer2.from(this.prevStr, "base64");
+      return Buffer3.from(this.prevStr, "base64");
     };
     function InternalEncoderCesu8(options, codec) {
     }
     InternalEncoderCesu8.prototype.write = function(str) {
-      var buf = Buffer2.alloc(str.length * 3);
+      var buf = Buffer3.alloc(str.length * 3);
       var bufIdx = 0;
       for (var i = 0; i < str.length; i++) {
         var charCode = str.charCodeAt(i);
@@ -2329,13 +2329,13 @@ var require_internal = __commonJS({
           str = str.slice(0, str.length - 1);
         }
       }
-      return Buffer2.from(str, this.enc);
+      return Buffer3.from(str, this.enc);
     };
     InternalEncoderUtf8.prototype.end = function() {
       if (this.highSurrogate) {
         var str = this.highSurrogate;
         this.highSurrogate = "";
-        return Buffer2.from(str, this.enc);
+        return Buffer3.from(str, this.enc);
       }
     };
   }
@@ -2345,7 +2345,7 @@ var require_internal = __commonJS({
 var require_utf32 = __commonJS({
   "node_modules/iconv-lite/encodings/utf32.js"(exports2) {
     "use strict";
-    var Buffer2 = require_safer().Buffer;
+    var Buffer3 = require_safer().Buffer;
     exports2._utf32 = Utf32Codec;
     function Utf32Codec(codecOptions, iconv) {
       this.iconv = iconv;
@@ -2363,8 +2363,8 @@ var require_utf32 = __commonJS({
       this.highSurrogate = 0;
     }
     Utf32Encoder.prototype.write = function(str) {
-      var src = Buffer2.from(str, "ucs2");
-      var dst = Buffer2.alloc(src.length * 2);
+      var src = Buffer3.from(str, "ucs2");
+      var dst = Buffer3.alloc(src.length * 2);
       var write32 = this.isLE ? dst.writeUInt32LE : dst.writeUInt32BE;
       var offset = 0;
       for (var i = 0; i < src.length; i += 2) {
@@ -2400,7 +2400,7 @@ var require_utf32 = __commonJS({
       if (!this.highSurrogate) {
         return;
       }
-      var buf = Buffer2.alloc(4);
+      var buf = Buffer3.alloc(4);
       if (this.isLE) {
         buf.writeUInt32LE(this.highSurrogate, 0);
       } else {
@@ -2420,7 +2420,7 @@ var require_utf32 = __commonJS({
       }
       var i = 0;
       var codepoint = 0;
-      var dst = Buffer2.alloc(src.length + 4);
+      var dst = Buffer3.alloc(src.length + 4);
       var offset = 0;
       var isLE = this.isLE;
       var overflow = this.overflow;
@@ -2576,7 +2576,7 @@ var require_utf32 = __commonJS({
 var require_utf16 = __commonJS({
   "node_modules/iconv-lite/encodings/utf16.js"(exports2) {
     "use strict";
-    var Buffer2 = require_safer().Buffer;
+    var Buffer3 = require_safer().Buffer;
     exports2.utf16be = Utf16BECodec;
     function Utf16BECodec() {
     }
@@ -2586,7 +2586,7 @@ var require_utf16 = __commonJS({
     function Utf16BEEncoder() {
     }
     Utf16BEEncoder.prototype.write = function(str) {
-      var buf = Buffer2.from(str, "ucs2");
+      var buf = Buffer3.from(str, "ucs2");
       for (var i = 0; i < buf.length; i += 2) {
         var tmp = buf[i];
         buf[i] = buf[i + 1];
@@ -2603,7 +2603,7 @@ var require_utf16 = __commonJS({
       if (buf.length == 0) {
         return "";
       }
-      var buf2 = Buffer2.alloc(buf.length + 1);
+      var buf2 = Buffer3.alloc(buf.length + 1);
       var i = 0;
       var j = 0;
       if (this.overflowByte !== -1) {
@@ -2719,7 +2719,7 @@ var require_utf16 = __commonJS({
 var require_utf7 = __commonJS({
   "node_modules/iconv-lite/encodings/utf7.js"(exports2) {
     "use strict";
-    var Buffer2 = require_safer().Buffer;
+    var Buffer3 = require_safer().Buffer;
     exports2.utf7 = Utf7Codec;
     exports2.unicode11utf7 = "utf7";
     function Utf7Codec(codecOptions, iconv) {
@@ -2733,7 +2733,7 @@ var require_utf7 = __commonJS({
       this.iconv = codec.iconv;
     }
     Utf7Encoder.prototype.write = function(str) {
-      return Buffer2.from(str.replace(nonDirectChars, function(chunk) {
+      return Buffer3.from(str.replace(nonDirectChars, function(chunk) {
         return "+" + (chunk === "+" ? "" : this.iconv.encode(chunk, "utf16-be").toString("base64").replace(/=+$/, "")) + "-";
       }.bind(this)));
     };
@@ -2771,7 +2771,7 @@ var require_utf7 = __commonJS({
               res += "+";
             } else {
               var b64str = base64Accum + this.iconv.decode(buf.slice(lastI, i2), "ascii");
-              res += this.iconv.decode(Buffer2.from(b64str, "base64"), "utf16-be");
+              res += this.iconv.decode(Buffer3.from(b64str, "base64"), "utf16-be");
             }
             if (buf[i2] != minusChar) {
               i2--;
@@ -2789,7 +2789,7 @@ var require_utf7 = __commonJS({
         var canBeDecoded = b64str.length - b64str.length % 8;
         base64Accum = b64str.slice(canBeDecoded);
         b64str = b64str.slice(0, canBeDecoded);
-        res += this.iconv.decode(Buffer2.from(b64str, "base64"), "utf16-be");
+        res += this.iconv.decode(Buffer3.from(b64str, "base64"), "utf16-be");
       }
       this.inBase64 = inBase64;
       this.base64Accum = base64Accum;
@@ -2798,7 +2798,7 @@ var require_utf7 = __commonJS({
     Utf7Decoder.prototype.end = function() {
       var res = "";
       if (this.inBase64 && this.base64Accum.length > 0) {
-        res = this.iconv.decode(Buffer2.from(this.base64Accum, "base64"), "utf16-be");
+        res = this.iconv.decode(Buffer3.from(this.base64Accum, "base64"), "utf16-be");
       }
       this.inBase64 = false;
       this.base64Accum = "";
@@ -2814,14 +2814,14 @@ var require_utf7 = __commonJS({
     function Utf7IMAPEncoder(options, codec) {
       this.iconv = codec.iconv;
       this.inBase64 = false;
-      this.base64Accum = Buffer2.alloc(6);
+      this.base64Accum = Buffer3.alloc(6);
       this.base64AccumIdx = 0;
     }
     Utf7IMAPEncoder.prototype.write = function(str) {
       var inBase64 = this.inBase64;
       var base64Accum = this.base64Accum;
       var base64AccumIdx = this.base64AccumIdx;
-      var buf = Buffer2.alloc(str.length * 5 + 10);
+      var buf = Buffer3.alloc(str.length * 5 + 10);
       var bufIdx = 0;
       for (var i2 = 0; i2 < str.length; i2++) {
         var uChar = str.charCodeAt(i2);
@@ -2860,7 +2860,7 @@ var require_utf7 = __commonJS({
       return buf.slice(0, bufIdx);
     };
     Utf7IMAPEncoder.prototype.end = function() {
-      var buf = Buffer2.alloc(10);
+      var buf = Buffer3.alloc(10);
       var bufIdx = 0;
       if (this.inBase64) {
         if (this.base64AccumIdx > 0) {
@@ -2897,7 +2897,7 @@ var require_utf7 = __commonJS({
               res += "&";
             } else {
               var b64str = base64Accum + this.iconv.decode(buf.slice(lastI, i2), "ascii").replace(/,/g, "/");
-              res += this.iconv.decode(Buffer2.from(b64str, "base64"), "utf16-be");
+              res += this.iconv.decode(Buffer3.from(b64str, "base64"), "utf16-be");
             }
             if (buf[i2] != minusChar) {
               i2--;
@@ -2915,7 +2915,7 @@ var require_utf7 = __commonJS({
         var canBeDecoded = b64str.length - b64str.length % 8;
         base64Accum = b64str.slice(canBeDecoded);
         b64str = b64str.slice(0, canBeDecoded);
-        res += this.iconv.decode(Buffer2.from(b64str, "base64"), "utf16-be");
+        res += this.iconv.decode(Buffer3.from(b64str, "base64"), "utf16-be");
       }
       this.inBase64 = inBase64;
       this.base64Accum = base64Accum;
@@ -2924,7 +2924,7 @@ var require_utf7 = __commonJS({
     Utf7IMAPDecoder.prototype.end = function() {
       var res = "";
       if (this.inBase64 && this.base64Accum.length > 0) {
-        res = this.iconv.decode(Buffer2.from(this.base64Accum, "base64"), "utf16-be");
+        res = this.iconv.decode(Buffer3.from(this.base64Accum, "base64"), "utf16-be");
       }
       this.inBase64 = false;
       this.base64Accum = "";
@@ -2937,7 +2937,7 @@ var require_utf7 = __commonJS({
 var require_sbcs_codec = __commonJS({
   "node_modules/iconv-lite/encodings/sbcs-codec.js"(exports2) {
     "use strict";
-    var Buffer2 = require_safer().Buffer;
+    var Buffer3 = require_safer().Buffer;
     exports2._sbcs = SBCSCodec;
     function SBCSCodec(codecOptions, iconv) {
       if (!codecOptions) {
@@ -2953,8 +2953,8 @@ var require_sbcs_codec = __commonJS({
         }
         codecOptions.chars = asciiString + codecOptions.chars;
       }
-      this.decodeBuf = Buffer2.from(codecOptions.chars, "ucs2");
-      var encodeBuf = Buffer2.alloc(65536, iconv.defaultCharSingleByte.charCodeAt(0));
+      this.decodeBuf = Buffer3.from(codecOptions.chars, "ucs2");
+      var encodeBuf = Buffer3.alloc(65536, iconv.defaultCharSingleByte.charCodeAt(0));
       for (var i = 0; i < codecOptions.chars.length; i++) {
         encodeBuf[codecOptions.chars.charCodeAt(i)] = i;
       }
@@ -2966,7 +2966,7 @@ var require_sbcs_codec = __commonJS({
       this.encodeBuf = codec.encodeBuf;
     }
     SBCSEncoder.prototype.write = function(str) {
-      var buf = Buffer2.alloc(str.length);
+      var buf = Buffer3.alloc(str.length);
       for (var i = 0; i < str.length; i++) {
         buf[i] = this.encodeBuf[str.charCodeAt(i)];
       }
@@ -2979,7 +2979,7 @@ var require_sbcs_codec = __commonJS({
     }
     SBCSDecoder.prototype.write = function(buf) {
       var decodeBuf = this.decodeBuf;
-      var newBuf = Buffer2.alloc(buf.length * 2);
+      var newBuf = Buffer3.alloc(buf.length * 2);
       var idx1 = 0;
       var idx2 = 0;
       for (var i = 0; i < buf.length; i++) {
@@ -3607,7 +3607,7 @@ var require_sbcs_data_generated = __commonJS({
 var require_dbcs_codec = __commonJS({
   "node_modules/iconv-lite/encodings/dbcs-codec.js"(exports2) {
     "use strict";
-    var Buffer2 = require_safer().Buffer;
+    var Buffer3 = require_safer().Buffer;
     exports2._dbcs = DBCSCodec;
     var UNASSIGNED = -1;
     var GB18030_CODE = -2;
@@ -3843,7 +3843,7 @@ var require_dbcs_codec = __commonJS({
       this.gb18030 = codec.gb18030;
     }
     DBCSEncoder.prototype.write = function(str) {
-      var newBuf = Buffer2.alloc(str.length * (this.gb18030 ? 4 : 3));
+      var newBuf = Buffer3.alloc(str.length * (this.gb18030 ? 4 : 3));
       var leadSurrogate = this.leadSurrogate;
       var seqObj = this.seqObj;
       var nextChar = -1;
@@ -3947,7 +3947,7 @@ var require_dbcs_codec = __commonJS({
       if (this.leadSurrogate === -1 && this.seqObj === void 0) {
         return;
       }
-      var newBuf = Buffer2.alloc(10);
+      var newBuf = Buffer3.alloc(10);
       var j = 0;
       if (this.seqObj) {
         var dbcsCode = this.seqObj[DEF_CHAR];
@@ -3978,7 +3978,7 @@ var require_dbcs_codec = __commonJS({
       this.gb18030 = codec.gb18030;
     }
     DBCSDecoder.prototype.write = function(buf) {
-      var newBuf = Buffer2.alloc(buf.length * 2);
+      var newBuf = Buffer3.alloc(buf.length * 2);
       var nodeIdx = this.nodeIdx;
       var prevBytes = this.prevBytes;
       var prevOffset = this.prevBytes.length;
@@ -5587,7 +5587,7 @@ var require_encodings = __commonJS({
 var require_streams = __commonJS({
   "node_modules/iconv-lite/lib/streams.js"(exports2, module2) {
     "use strict";
-    var Buffer2 = require_safer().Buffer;
+    var Buffer3 = require_safer().Buffer;
     module2.exports = function(streamModule) {
       var Transform3 = streamModule.Transform;
       function IconvLiteEncoderStream(conv, options) {
@@ -5627,7 +5627,7 @@ var require_streams = __commonJS({
           chunks.push(chunk);
         });
         this.on("end", function() {
-          cb(null, Buffer2.concat(chunks));
+          cb(null, Buffer3.concat(chunks));
         });
         return this;
       };
@@ -5641,7 +5641,7 @@ var require_streams = __commonJS({
         constructor: { value: IconvLiteDecoderStream }
       });
       IconvLiteDecoderStream.prototype._transform = function(chunk, encoding, done) {
-        if (!Buffer2.isBuffer(chunk) && !(chunk instanceof Uint8Array)) {
+        if (!Buffer3.isBuffer(chunk) && !(chunk instanceof Uint8Array)) {
           return done(new Error("Iconv decoding stream needs buffers as its input."));
         }
         try {
@@ -5684,7 +5684,7 @@ var require_streams = __commonJS({
 var require_lib = __commonJS({
   "node_modules/iconv-lite/lib/index.js"(exports2, module2) {
     "use strict";
-    var Buffer2 = require_safer().Buffer;
+    var Buffer3 = require_safer().Buffer;
     var bomHandling = require_bom_handling();
     var mergeModules = require_merge_exports();
     var iconv = module2.exports;
@@ -5696,7 +5696,7 @@ var require_lib = __commonJS({
       var encoder = iconv.getEncoder(encoding, options);
       var res = encoder.write(str);
       var trail = encoder.end();
-      return trail && trail.length > 0 ? Buffer2.concat([res, trail]) : res;
+      return trail && trail.length > 0 ? Buffer3.concat([res, trail]) : res;
     };
     iconv.decode = function decode2(buf, encoding, options) {
       if (typeof buf === "string") {
@@ -5704,7 +5704,7 @@ var require_lib = __commonJS({
           console.error("Iconv-lite warning: decode()-ing strings is deprecated. Refer to https://github.com/ashtuchkin/iconv-lite/wiki/Use-Buffers-when-decoding");
           iconv.skipDecodeWarning = true;
         }
-        buf = Buffer2.from("" + (buf || ""), "binary");
+        buf = Buffer3.from("" + (buf || ""), "binary");
       }
       var decoder = iconv.getDecoder(encoding, options);
       var res = decoder.write(buf);
@@ -19299,16 +19299,16 @@ var require_etag = __commonJS({
   "node_modules/etag/index.js"(exports2, module2) {
     "use strict";
     module2.exports = etag;
-    var crypto13 = require("crypto");
+    var crypto14 = require("crypto");
     var Stats = require("fs").Stats;
     var toString = Object.prototype.toString;
     function entitytag(entity) {
       if (entity.length === 0) {
         return '"0-2jmj7l5rSw0yVb/vlWAYkK/YBwk"';
       }
-      var hash = crypto13.createHash("sha1").update(entity, "utf8").digest("base64").substring(0, 27);
+      var hash2 = crypto14.createHash("sha1").update(entity, "utf8").digest("base64").substring(0, 27);
       var len = typeof entity === "string" ? Buffer.byteLength(entity, "utf8") : entity.length;
-      return '"' + len.toString(16) + "-" + hash + '"';
+      return '"' + len.toString(16) + "-" + hash2 + '"';
     }
     function etag(entity, options) {
       if (entity == null) {
@@ -20175,7 +20175,7 @@ var require_utils3 = __commonJS({
     var proxyaddr = require_proxy_addr();
     var qs = require_lib2();
     var querystring2 = require("node:querystring");
-    var { Buffer: Buffer2 } = require("node:buffer");
+    var { Buffer: Buffer3 } = require("node:buffer");
     exports2.methods = METHODS.map((method) => method.toLowerCase());
     exports2.etag = createETagGenerator({ weak: false });
     exports2.wetag = createETagGenerator({ weak: true });
@@ -20279,7 +20279,7 @@ var require_utils3 = __commonJS({
     };
     function createETagGenerator(options) {
       return function generateETag(body, encoding) {
-        var buf = !Buffer2.isBuffer(body) ? Buffer2.from(body, encoding) : body;
+        var buf = !Buffer3.isBuffer(body) ? Buffer3.from(body, encoding) : body;
         return etag(buf, options);
       };
     }
@@ -22412,7 +22412,7 @@ var require_request = __commonJS({
   "node_modules/express/lib/request.js"(exports2, module2) {
     "use strict";
     var accepts = require_accepts();
-    var isIP = require("node:net").isIP;
+    var isIP2 = require("node:net").isIP;
     var typeis = require_type_is();
     var http = require("node:http");
     var fresh = require_fresh();
@@ -22502,7 +22502,7 @@ var require_request = __commonJS({
       var hostname = this.hostname;
       if (!hostname) return [];
       var offset = this.app.get("subdomain offset");
-      var subdomains2 = !isIP(hostname) ? hostname.split(".").reverse() : [hostname];
+      var subdomains2 = !isIP2(hostname) ? hostname.split(".").reverse() : [hostname];
       return subdomains2.slice(offset);
     });
     defineGetter(req, "path", function path3() {
@@ -22721,17 +22721,17 @@ var require_content_disposition = __commonJS({
 // node_modules/cookie-signature/index.js
 var require_cookie_signature = __commonJS({
   "node_modules/cookie-signature/index.js"(exports2) {
-    var crypto13 = require("crypto");
+    var crypto14 = require("crypto");
     exports2.sign = function(val, secret) {
       if ("string" != typeof val) throw new TypeError("Cookie value must be provided as a string.");
       if (null == secret) throw new TypeError("Secret key must be provided.");
-      return val + "." + crypto13.createHmac("sha256", secret).update(val).digest("base64").replace(/\=+$/, "");
+      return val + "." + crypto14.createHmac("sha256", secret).update(val).digest("base64").replace(/\=+$/, "");
     };
     exports2.unsign = function(input, secret) {
       if ("string" != typeof input) throw new TypeError("Signed cookie string must be provided.");
       if (null == secret) throw new TypeError("Secret key must be provided.");
       var tentativeValue = input.slice(0, input.lastIndexOf(".")), expectedInput = exports2.sign(tentativeValue, secret), expectedBuffer = Buffer.from(expectedInput), inputBuffer = Buffer.from(input);
-      return expectedBuffer.length === inputBuffer.length && crypto13.timingSafeEqual(expectedBuffer, inputBuffer) ? tentativeValue : false;
+      return expectedBuffer.length === inputBuffer.length && crypto14.timingSafeEqual(expectedBuffer, inputBuffer) ? tentativeValue : false;
     };
   }
 });
@@ -23482,7 +23482,7 @@ var require_response = __commonJS({
     var extname = path3.extname;
     var resolve = path3.resolve;
     var vary = require_vary();
-    var { Buffer: Buffer2 } = require("node:buffer");
+    var { Buffer: Buffer3 } = require("node:buffer");
     var res = Object.create(http.ServerResponse.prototype);
     module2.exports = res;
     res.status = function status(code) {
@@ -23546,12 +23546,12 @@ var require_response = __commonJS({
       var generateETag = !this.get("ETag") && typeof etagFn === "function";
       var len;
       if (chunk !== void 0) {
-        if (Buffer2.isBuffer(chunk)) {
+        if (Buffer3.isBuffer(chunk)) {
           len = chunk.length;
         } else if (!generateETag && chunk.length < 1e3) {
-          len = Buffer2.byteLength(chunk, encoding);
+          len = Buffer3.byteLength(chunk, encoding);
         } else {
-          chunk = Buffer2.from(chunk, encoding);
+          chunk = Buffer3.from(chunk, encoding);
           encoding = void 0;
           len = chunk.length;
         }
@@ -23813,7 +23813,7 @@ var require_response = __commonJS({
         }
       });
       this.status(status);
-      this.set("Content-Length", Buffer2.byteLength(body));
+      this.set("Content-Length", Buffer3.byteLength(body));
       if (this.req.method === "HEAD") {
         this.end();
       } else {
@@ -25514,9 +25514,9 @@ var require_utils4 = __commonJS({
 var require_utils_legacy = __commonJS({
   "node_modules/pg/lib/crypto/utils-legacy.js"(exports2, module2) {
     "use strict";
-    var nodeCrypto = require("crypto");
+    var nodeCrypto2 = require("crypto");
     function md53(string) {
-      return nodeCrypto.createHash("md5").update(string, "utf-8").digest("hex");
+      return nodeCrypto2.createHash("md5").update(string, "utf-8").digest("hex");
     }
     function postgresMd5PasswordHash(user, password, salt) {
       const inner = md53(password + user);
@@ -25524,21 +25524,21 @@ var require_utils_legacy = __commonJS({
       return "md5" + outer;
     }
     function sha256(text2) {
-      return nodeCrypto.createHash("sha256").update(text2).digest();
+      return nodeCrypto2.createHash("sha256").update(text2).digest();
     }
     function hashByName(hashName, text2) {
       hashName = hashName.replace(/(\D)-/, "$1");
-      return nodeCrypto.createHash(hashName).update(text2).digest();
+      return nodeCrypto2.createHash(hashName).update(text2).digest();
     }
     function hmacSha256(key, msg) {
-      return nodeCrypto.createHmac("sha256", key).update(msg).digest();
+      return nodeCrypto2.createHmac("sha256", key).update(msg).digest();
     }
     async function deriveKey(password, salt, iterations) {
-      return nodeCrypto.pbkdf2Sync(password, salt, iterations, 32, "sha256");
+      return nodeCrypto2.pbkdf2Sync(password, salt, iterations, 32, "sha256");
     }
     module2.exports = {
       postgresMd5PasswordHash,
-      randomBytes: nodeCrypto.randomBytes,
+      randomBytes: nodeCrypto2.randomBytes,
       deriveKey,
       sha256,
       hashByName,
@@ -25551,29 +25551,29 @@ var require_utils_legacy = __commonJS({
 // node_modules/pg/lib/crypto/utils-webcrypto.js
 var require_utils_webcrypto = __commonJS({
   "node_modules/pg/lib/crypto/utils-webcrypto.js"(exports2, module2) {
-    var nodeCrypto = require("crypto");
+    var nodeCrypto2 = require("crypto");
     module2.exports = {
       postgresMd5PasswordHash,
-      randomBytes,
+      randomBytes: randomBytes2,
       deriveKey,
       sha256,
       hashByName,
       hmacSha256,
       md5: md53
     };
-    var webCrypto = nodeCrypto.webcrypto || globalThis.crypto;
+    var webCrypto = nodeCrypto2.webcrypto || globalThis.crypto;
     var subtleCrypto = webCrypto.subtle;
     var textEncoder = new TextEncoder();
-    function randomBytes(length) {
+    function randomBytes2(length) {
       return webCrypto.getRandomValues(Buffer.alloc(length));
     }
     async function md53(string) {
       try {
-        return nodeCrypto.createHash("md5").update(string, "utf-8").digest("hex");
+        return nodeCrypto2.createHash("md5").update(string, "utf-8").digest("hex");
       } catch (e) {
         const data = typeof string === "string" ? textEncoder.encode(string) : string;
-        const hash = await subtleCrypto.digest("MD5", data);
-        return Array.from(new Uint8Array(hash)).map((b) => b.toString(16).padStart(2, "0")).join("");
+        const hash2 = await subtleCrypto.digest("MD5", data);
+        return Array.from(new Uint8Array(hash2)).map((b) => b.toString(16).padStart(2, "0")).join("");
       }
     }
     async function postgresMd5PasswordHash(user, password, salt) {
@@ -25729,7 +25729,7 @@ var require_cert_signatures = __commonJS({
 var require_sasl = __commonJS({
   "node_modules/pg/lib/crypto/sasl.js"(exports2, module2) {
     "use strict";
-    var crypto13 = require_utils5();
+    var crypto14 = require_utils5();
     var { signatureAlgorithmHashFromCertificate } = require_cert_signatures();
     function startSession(mechanisms, stream) {
       const candidates = ["SCRAM-SHA-256"];
@@ -25741,7 +25741,7 @@ var require_sasl = __commonJS({
       if (mechanism === "SCRAM-SHA-256-PLUS" && typeof stream.getPeerCertificate !== "function") {
         throw new Error("SASL: Mechanism SCRAM-SHA-256-PLUS requires a certificate");
       }
-      const clientNonce = crypto13.randomBytes(18).toString("base64");
+      const clientNonce = crypto14.randomBytes(18).toString("base64");
       const gs2Header = mechanism === "SCRAM-SHA-256-PLUS" ? "p=tls-server-end-point" : stream ? "y" : "n";
       return {
         mechanism,
@@ -25776,20 +25776,20 @@ var require_sasl = __commonJS({
         const peerCert = stream.getPeerCertificate().raw;
         let hashName = signatureAlgorithmHashFromCertificate(peerCert);
         if (hashName === "MD5" || hashName === "SHA-1") hashName = "SHA-256";
-        const certHash = await crypto13.hashByName(hashName, peerCert);
+        const certHash = await crypto14.hashByName(hashName, peerCert);
         const bindingData = Buffer.concat([Buffer.from("p=tls-server-end-point,,"), Buffer.from(certHash)]);
         channelBinding = bindingData.toString("base64");
       }
       const clientFinalMessageWithoutProof = "c=" + channelBinding + ",r=" + sv.nonce;
       const authMessage = clientFirstMessageBare + "," + serverFirstMessage + "," + clientFinalMessageWithoutProof;
       const saltBytes = Buffer.from(sv.salt, "base64");
-      const saltedPassword = await crypto13.deriveKey(password, saltBytes, sv.iteration);
-      const clientKey = await crypto13.hmacSha256(saltedPassword, "Client Key");
-      const storedKey = await crypto13.sha256(clientKey);
-      const clientSignature = await crypto13.hmacSha256(storedKey, authMessage);
+      const saltedPassword = await crypto14.deriveKey(password, saltBytes, sv.iteration);
+      const clientKey = await crypto14.hmacSha256(saltedPassword, "Client Key");
+      const storedKey = await crypto14.sha256(clientKey);
+      const clientSignature = await crypto14.hmacSha256(storedKey, authMessage);
       const clientProof = xorBuffers(Buffer.from(clientKey), Buffer.from(clientSignature)).toString("base64");
-      const serverKey = await crypto13.hmacSha256(saltedPassword, "Server Key");
-      const serverSignatureBytes = await crypto13.hmacSha256(serverKey, authMessage);
+      const serverKey = await crypto14.hmacSha256(saltedPassword, "Server Key");
+      const serverSignatureBytes = await crypto14.hmacSha256(serverKey, authMessage);
       session.message = "SASLResponse";
       session.serverSignature = Buffer.from(serverSignatureBytes).toString("base64");
       session.response = clientFinalMessageWithoutProof + ",p=" + clientProof;
@@ -27925,7 +27925,7 @@ var require_client = __commonJS({
     var Query2 = require_query();
     var defaults2 = require_defaults();
     var Connection2 = require_connection();
-    var crypto13 = require_utils5();
+    var crypto14 = require_utils5();
     var Client2 = class extends EventEmitter2 {
       constructor(config) {
         super();
@@ -28120,7 +28120,7 @@ var require_client = __commonJS({
       _handleAuthMD5Password(msg) {
         this._checkPgPass(async () => {
           try {
-            const hashedPassword = await crypto13.postgresMd5PasswordHash(this.user, this.password, msg.salt);
+            const hashedPassword = await crypto14.postgresMd5PasswordHash(this.user, this.password, msg.salt);
             this.connection.password(hashedPassword);
           } catch (e) {
             this.emit("error", e);
@@ -29278,6 +29278,1536 @@ var require_lib5 = __commonJS({
         }
       });
     }
+  }
+});
+
+// node_modules/ip-address/dist/common.js
+var require_common2 = __commonJS({
+  "node_modules/ip-address/dist/common.js"(exports2) {
+    "use strict";
+    Object.defineProperty(exports2, "__esModule", { value: true });
+    exports2.isInSubnet = isInSubnet;
+    exports2.isCorrect = isCorrect;
+    exports2.numberToPaddedHex = numberToPaddedHex;
+    exports2.stringToPaddedHex = stringToPaddedHex;
+    exports2.testBit = testBit;
+    function isInSubnet(address) {
+      if (this.subnetMask < address.subnetMask) {
+        return false;
+      }
+      if (this.mask(address.subnetMask) === address.mask()) {
+        return true;
+      }
+      return false;
+    }
+    function isCorrect(defaultBits) {
+      return function() {
+        if (this.addressMinusSuffix !== this.correctForm()) {
+          return false;
+        }
+        if (this.subnetMask === defaultBits && !this.parsedSubnet) {
+          return true;
+        }
+        return this.parsedSubnet === String(this.subnetMask);
+      };
+    }
+    function numberToPaddedHex(number) {
+      return number.toString(16).padStart(2, "0");
+    }
+    function stringToPaddedHex(numberString) {
+      return numberToPaddedHex(parseInt(numberString, 10));
+    }
+    function testBit(binaryValue, position) {
+      const { length } = binaryValue;
+      if (position > length) {
+        return false;
+      }
+      const positionInString = length - position;
+      return binaryValue.substring(positionInString, positionInString + 1) === "1";
+    }
+  }
+});
+
+// node_modules/ip-address/dist/v4/constants.js
+var require_constants = __commonJS({
+  "node_modules/ip-address/dist/v4/constants.js"(exports2) {
+    "use strict";
+    Object.defineProperty(exports2, "__esModule", { value: true });
+    exports2.RE_SUBNET_STRING = exports2.RE_ADDRESS = exports2.GROUPS = exports2.BITS = void 0;
+    exports2.BITS = 32;
+    exports2.GROUPS = 4;
+    exports2.RE_ADDRESS = /^(25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.(25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.(25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.(25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)$/g;
+    exports2.RE_SUBNET_STRING = /\/\d{1,2}$/;
+  }
+});
+
+// node_modules/ip-address/dist/address-error.js
+var require_address_error = __commonJS({
+  "node_modules/ip-address/dist/address-error.js"(exports2) {
+    "use strict";
+    Object.defineProperty(exports2, "__esModule", { value: true });
+    exports2.AddressError = void 0;
+    var AddressError = class extends Error {
+      constructor(message, parseMessage) {
+        super(message);
+        this.name = "AddressError";
+        this.parseMessage = parseMessage;
+      }
+    };
+    exports2.AddressError = AddressError;
+  }
+});
+
+// node_modules/ip-address/dist/ipv4.js
+var require_ipv4 = __commonJS({
+  "node_modules/ip-address/dist/ipv4.js"(exports2) {
+    "use strict";
+    var __createBinding = exports2 && exports2.__createBinding || (Object.create ? (function(o, m, k, k2) {
+      if (k2 === void 0) k2 = k;
+      var desc2 = Object.getOwnPropertyDescriptor(m, k);
+      if (!desc2 || ("get" in desc2 ? !m.__esModule : desc2.writable || desc2.configurable)) {
+        desc2 = { enumerable: true, get: function() {
+          return m[k];
+        } };
+      }
+      Object.defineProperty(o, k2, desc2);
+    }) : (function(o, m, k, k2) {
+      if (k2 === void 0) k2 = k;
+      o[k2] = m[k];
+    }));
+    var __setModuleDefault = exports2 && exports2.__setModuleDefault || (Object.create ? (function(o, v) {
+      Object.defineProperty(o, "default", { enumerable: true, value: v });
+    }) : function(o, v) {
+      o["default"] = v;
+    });
+    var __importStar = exports2 && exports2.__importStar || function(mod) {
+      if (mod && mod.__esModule) return mod;
+      var result = {};
+      if (mod != null) {
+        for (var k in mod) if (k !== "default" && Object.prototype.hasOwnProperty.call(mod, k)) __createBinding(result, mod, k);
+      }
+      __setModuleDefault(result, mod);
+      return result;
+    };
+    Object.defineProperty(exports2, "__esModule", { value: true });
+    exports2.Address4 = void 0;
+    var common = __importStar(require_common2());
+    var constants = __importStar(require_constants());
+    var address_error_1 = require_address_error();
+    var Address4 = class _Address4 {
+      constructor(address) {
+        this.groups = constants.GROUPS;
+        this.parsedAddress = [];
+        this.parsedSubnet = "";
+        this.subnet = "/32";
+        this.subnetMask = 32;
+        this.v4 = true;
+        this.isCorrect = common.isCorrect(constants.BITS);
+        this.isInSubnet = common.isInSubnet;
+        this.address = address;
+        const subnet = constants.RE_SUBNET_STRING.exec(address);
+        if (subnet) {
+          this.parsedSubnet = subnet[0].replace("/", "");
+          this.subnetMask = parseInt(this.parsedSubnet, 10);
+          this.subnet = `/${this.subnetMask}`;
+          if (this.subnetMask < 0 || this.subnetMask > constants.BITS) {
+            throw new address_error_1.AddressError("Invalid subnet mask.");
+          }
+          address = address.replace(constants.RE_SUBNET_STRING, "");
+        }
+        this.addressMinusSuffix = address;
+        this.parsedAddress = this.parse(address);
+      }
+      static isValid(address) {
+        try {
+          new _Address4(address);
+          return true;
+        } catch (e) {
+          return false;
+        }
+      }
+      /*
+       * Parses a v4 address
+       */
+      parse(address) {
+        const groups = address.split(".");
+        if (!address.match(constants.RE_ADDRESS)) {
+          throw new address_error_1.AddressError("Invalid IPv4 address.");
+        }
+        return groups;
+      }
+      /**
+       * Returns the correct form of an address
+       * @memberof Address4
+       * @instance
+       * @returns {String}
+       */
+      correctForm() {
+        return this.parsedAddress.map((part) => parseInt(part, 10)).join(".");
+      }
+      /**
+       * Converts a hex string to an IPv4 address object
+       * @memberof Address4
+       * @static
+       * @param {string} hex - a hex string to convert
+       * @returns {Address4}
+       */
+      static fromHex(hex) {
+        const padded = hex.replace(/:/g, "").padStart(8, "0");
+        const groups = [];
+        let i;
+        for (i = 0; i < 8; i += 2) {
+          const h = padded.slice(i, i + 2);
+          groups.push(parseInt(h, 16));
+        }
+        return new _Address4(groups.join("."));
+      }
+      /**
+       * Converts an integer into a IPv4 address object
+       * @memberof Address4
+       * @static
+       * @param {integer} integer - a number to convert
+       * @returns {Address4}
+       */
+      static fromInteger(integer2) {
+        return _Address4.fromHex(integer2.toString(16));
+      }
+      /**
+       * Return an address from in-addr.arpa form
+       * @memberof Address4
+       * @static
+       * @param {string} arpaFormAddress - an 'in-addr.arpa' form ipv4 address
+       * @returns {Adress4}
+       * @example
+       * var address = Address4.fromArpa(42.2.0.192.in-addr.arpa.)
+       * address.correctForm(); // '192.0.2.42'
+       */
+      static fromArpa(arpaFormAddress) {
+        const leader = arpaFormAddress.replace(/(\.in-addr\.arpa)?\.$/, "");
+        const address = leader.split(".").reverse().join(".");
+        return new _Address4(address);
+      }
+      /**
+       * Converts an IPv4 address object to a hex string
+       * @memberof Address4
+       * @instance
+       * @returns {String}
+       */
+      toHex() {
+        return this.parsedAddress.map((part) => common.stringToPaddedHex(part)).join(":");
+      }
+      /**
+       * Converts an IPv4 address object to an array of bytes
+       * @memberof Address4
+       * @instance
+       * @returns {Array}
+       */
+      toArray() {
+        return this.parsedAddress.map((part) => parseInt(part, 10));
+      }
+      /**
+       * Converts an IPv4 address object to an IPv6 address group
+       * @memberof Address4
+       * @instance
+       * @returns {String}
+       */
+      toGroup6() {
+        const output = [];
+        let i;
+        for (i = 0; i < constants.GROUPS; i += 2) {
+          output.push(`${common.stringToPaddedHex(this.parsedAddress[i])}${common.stringToPaddedHex(this.parsedAddress[i + 1])}`);
+        }
+        return output.join(":");
+      }
+      /**
+       * Returns the address as a `bigint`
+       * @memberof Address4
+       * @instance
+       * @returns {bigint}
+       */
+      bigInt() {
+        return BigInt(`0x${this.parsedAddress.map((n) => common.stringToPaddedHex(n)).join("")}`);
+      }
+      /**
+       * Helper function getting start address.
+       * @memberof Address4
+       * @instance
+       * @returns {bigint}
+       */
+      _startAddress() {
+        return BigInt(`0b${this.mask() + "0".repeat(constants.BITS - this.subnetMask)}`);
+      }
+      /**
+       * The first address in the range given by this address' subnet.
+       * Often referred to as the Network Address.
+       * @memberof Address4
+       * @instance
+       * @returns {Address4}
+       */
+      startAddress() {
+        return _Address4.fromBigInt(this._startAddress());
+      }
+      /**
+       * The first host address in the range given by this address's subnet ie
+       * the first address after the Network Address
+       * @memberof Address4
+       * @instance
+       * @returns {Address4}
+       */
+      startAddressExclusive() {
+        const adjust = BigInt("1");
+        return _Address4.fromBigInt(this._startAddress() + adjust);
+      }
+      /**
+       * Helper function getting end address.
+       * @memberof Address4
+       * @instance
+       * @returns {bigint}
+       */
+      _endAddress() {
+        return BigInt(`0b${this.mask() + "1".repeat(constants.BITS - this.subnetMask)}`);
+      }
+      /**
+       * The last address in the range given by this address' subnet
+       * Often referred to as the Broadcast
+       * @memberof Address4
+       * @instance
+       * @returns {Address4}
+       */
+      endAddress() {
+        return _Address4.fromBigInt(this._endAddress());
+      }
+      /**
+       * The last host address in the range given by this address's subnet ie
+       * the last address prior to the Broadcast Address
+       * @memberof Address4
+       * @instance
+       * @returns {Address4}
+       */
+      endAddressExclusive() {
+        const adjust = BigInt("1");
+        return _Address4.fromBigInt(this._endAddress() - adjust);
+      }
+      /**
+       * Converts a BigInt to a v4 address object
+       * @memberof Address4
+       * @static
+       * @param {bigint} bigInt - a BigInt to convert
+       * @returns {Address4}
+       */
+      static fromBigInt(bigInt) {
+        return _Address4.fromHex(bigInt.toString(16));
+      }
+      /**
+       * Returns the first n bits of the address, defaulting to the
+       * subnet mask
+       * @memberof Address4
+       * @instance
+       * @returns {String}
+       */
+      mask(mask) {
+        if (mask === void 0) {
+          mask = this.subnetMask;
+        }
+        return this.getBitsBase2(0, mask);
+      }
+      /**
+       * Returns the bits in the given range as a base-2 string
+       * @memberof Address4
+       * @instance
+       * @returns {string}
+       */
+      getBitsBase2(start, end) {
+        return this.binaryZeroPad().slice(start, end);
+      }
+      /**
+       * Return the reversed ip6.arpa form of the address
+       * @memberof Address4
+       * @param {Object} options
+       * @param {boolean} options.omitSuffix - omit the "in-addr.arpa" suffix
+       * @instance
+       * @returns {String}
+       */
+      reverseForm(options) {
+        if (!options) {
+          options = {};
+        }
+        const reversed = this.correctForm().split(".").reverse().join(".");
+        if (options.omitSuffix) {
+          return reversed;
+        }
+        return `${reversed}.in-addr.arpa.`;
+      }
+      /**
+       * Returns true if the given address is a multicast address
+       * @memberof Address4
+       * @instance
+       * @returns {boolean}
+       */
+      isMulticast() {
+        return this.isInSubnet(new _Address4("224.0.0.0/4"));
+      }
+      /**
+       * Returns a zero-padded base-2 string representation of the address
+       * @memberof Address4
+       * @instance
+       * @returns {string}
+       */
+      binaryZeroPad() {
+        return this.bigInt().toString(2).padStart(constants.BITS, "0");
+      }
+      /**
+       * Groups an IPv4 address for inclusion at the end of an IPv6 address
+       * @returns {String}
+       */
+      groupForV6() {
+        const segments = this.parsedAddress;
+        return this.address.replace(constants.RE_ADDRESS, `<span class="hover-group group-v4 group-6">${segments.slice(0, 2).join(".")}</span>.<span class="hover-group group-v4 group-7">${segments.slice(2, 4).join(".")}</span>`);
+      }
+    };
+    exports2.Address4 = Address4;
+  }
+});
+
+// node_modules/ip-address/dist/v6/constants.js
+var require_constants2 = __commonJS({
+  "node_modules/ip-address/dist/v6/constants.js"(exports2) {
+    "use strict";
+    Object.defineProperty(exports2, "__esModule", { value: true });
+    exports2.RE_URL_WITH_PORT = exports2.RE_URL = exports2.RE_ZONE_STRING = exports2.RE_SUBNET_STRING = exports2.RE_BAD_ADDRESS = exports2.RE_BAD_CHARACTERS = exports2.TYPES = exports2.SCOPES = exports2.GROUPS = exports2.BITS = void 0;
+    exports2.BITS = 128;
+    exports2.GROUPS = 8;
+    exports2.SCOPES = {
+      0: "Reserved",
+      1: "Interface local",
+      2: "Link local",
+      4: "Admin local",
+      5: "Site local",
+      8: "Organization local",
+      14: "Global",
+      15: "Reserved"
+    };
+    exports2.TYPES = {
+      "ff01::1/128": "Multicast (All nodes on this interface)",
+      "ff01::2/128": "Multicast (All routers on this interface)",
+      "ff02::1/128": "Multicast (All nodes on this link)",
+      "ff02::2/128": "Multicast (All routers on this link)",
+      "ff05::2/128": "Multicast (All routers in this site)",
+      "ff02::5/128": "Multicast (OSPFv3 AllSPF routers)",
+      "ff02::6/128": "Multicast (OSPFv3 AllDR routers)",
+      "ff02::9/128": "Multicast (RIP routers)",
+      "ff02::a/128": "Multicast (EIGRP routers)",
+      "ff02::d/128": "Multicast (PIM routers)",
+      "ff02::16/128": "Multicast (MLDv2 reports)",
+      "ff01::fb/128": "Multicast (mDNSv6)",
+      "ff02::fb/128": "Multicast (mDNSv6)",
+      "ff05::fb/128": "Multicast (mDNSv6)",
+      "ff02::1:2/128": "Multicast (All DHCP servers and relay agents on this link)",
+      "ff05::1:2/128": "Multicast (All DHCP servers and relay agents in this site)",
+      "ff02::1:3/128": "Multicast (All DHCP servers on this link)",
+      "ff05::1:3/128": "Multicast (All DHCP servers in this site)",
+      "::/128": "Unspecified",
+      "::1/128": "Loopback",
+      "ff00::/8": "Multicast",
+      "fe80::/10": "Link-local unicast"
+    };
+    exports2.RE_BAD_CHARACTERS = /([^0-9a-f:/%])/gi;
+    exports2.RE_BAD_ADDRESS = /([0-9a-f]{5,}|:{3,}|[^:]:$|^:[^:]|\/$)/gi;
+    exports2.RE_SUBNET_STRING = /\/\d{1,3}(?=%|$)/;
+    exports2.RE_ZONE_STRING = /%.*$/;
+    exports2.RE_URL = /^\[{0,1}([0-9a-f:]+)\]{0,1}/;
+    exports2.RE_URL_WITH_PORT = /\[([0-9a-f:]+)\]:([0-9]{1,5})/;
+  }
+});
+
+// node_modules/ip-address/dist/v6/helpers.js
+var require_helpers = __commonJS({
+  "node_modules/ip-address/dist/v6/helpers.js"(exports2) {
+    "use strict";
+    Object.defineProperty(exports2, "__esModule", { value: true });
+    exports2.spanAllZeroes = spanAllZeroes;
+    exports2.spanAll = spanAll;
+    exports2.spanLeadingZeroes = spanLeadingZeroes;
+    exports2.simpleGroup = simpleGroup;
+    function spanAllZeroes(s) {
+      return s.replace(/(0+)/g, '<span class="zero">$1</span>');
+    }
+    function spanAll(s, offset = 0) {
+      const letters = s.split("");
+      return letters.map((n, i) => `<span class="digit value-${n} position-${i + offset}">${spanAllZeroes(n)}</span>`).join("");
+    }
+    function spanLeadingZeroesSimple(group) {
+      return group.replace(/^(0+)/, '<span class="zero">$1</span>');
+    }
+    function spanLeadingZeroes(address) {
+      const groups = address.split(":");
+      return groups.map((g) => spanLeadingZeroesSimple(g)).join(":");
+    }
+    function simpleGroup(addressString, offset = 0) {
+      const groups = addressString.split(":");
+      return groups.map((g, i) => {
+        if (/group-v4/.test(g)) {
+          return g;
+        }
+        return `<span class="hover-group group-${i + offset}">${spanLeadingZeroesSimple(g)}</span>`;
+      });
+    }
+  }
+});
+
+// node_modules/ip-address/dist/v6/regular-expressions.js
+var require_regular_expressions = __commonJS({
+  "node_modules/ip-address/dist/v6/regular-expressions.js"(exports2) {
+    "use strict";
+    var __createBinding = exports2 && exports2.__createBinding || (Object.create ? (function(o, m, k, k2) {
+      if (k2 === void 0) k2 = k;
+      var desc2 = Object.getOwnPropertyDescriptor(m, k);
+      if (!desc2 || ("get" in desc2 ? !m.__esModule : desc2.writable || desc2.configurable)) {
+        desc2 = { enumerable: true, get: function() {
+          return m[k];
+        } };
+      }
+      Object.defineProperty(o, k2, desc2);
+    }) : (function(o, m, k, k2) {
+      if (k2 === void 0) k2 = k;
+      o[k2] = m[k];
+    }));
+    var __setModuleDefault = exports2 && exports2.__setModuleDefault || (Object.create ? (function(o, v) {
+      Object.defineProperty(o, "default", { enumerable: true, value: v });
+    }) : function(o, v) {
+      o["default"] = v;
+    });
+    var __importStar = exports2 && exports2.__importStar || function(mod) {
+      if (mod && mod.__esModule) return mod;
+      var result = {};
+      if (mod != null) {
+        for (var k in mod) if (k !== "default" && Object.prototype.hasOwnProperty.call(mod, k)) __createBinding(result, mod, k);
+      }
+      __setModuleDefault(result, mod);
+      return result;
+    };
+    Object.defineProperty(exports2, "__esModule", { value: true });
+    exports2.ADDRESS_BOUNDARY = void 0;
+    exports2.groupPossibilities = groupPossibilities;
+    exports2.padGroup = padGroup;
+    exports2.simpleRegularExpression = simpleRegularExpression;
+    exports2.possibleElisions = possibleElisions;
+    var v6 = __importStar(require_constants2());
+    function groupPossibilities(possibilities) {
+      return `(${possibilities.join("|")})`;
+    }
+    function padGroup(group) {
+      if (group.length < 4) {
+        return `0{0,${4 - group.length}}${group}`;
+      }
+      return group;
+    }
+    exports2.ADDRESS_BOUNDARY = "[^A-Fa-f0-9:]";
+    function simpleRegularExpression(groups) {
+      const zeroIndexes = [];
+      groups.forEach((group, i) => {
+        const groupInteger = parseInt(group, 16);
+        if (groupInteger === 0) {
+          zeroIndexes.push(i);
+        }
+      });
+      const possibilities = zeroIndexes.map((zeroIndex) => groups.map((group, i) => {
+        if (i === zeroIndex) {
+          const elision = i === 0 || i === v6.GROUPS - 1 ? ":" : "";
+          return groupPossibilities([padGroup(group), elision]);
+        }
+        return padGroup(group);
+      }).join(":"));
+      possibilities.push(groups.map(padGroup).join(":"));
+      return groupPossibilities(possibilities);
+    }
+    function possibleElisions(elidedGroups, moreLeft, moreRight) {
+      const left = moreLeft ? "" : ":";
+      const right = moreRight ? "" : ":";
+      const possibilities = [];
+      if (!moreLeft && !moreRight) {
+        possibilities.push("::");
+      }
+      if (moreLeft && moreRight) {
+        possibilities.push("");
+      }
+      if (moreRight && !moreLeft || !moreRight && moreLeft) {
+        possibilities.push(":");
+      }
+      possibilities.push(`${left}(:0{1,4}){1,${elidedGroups - 1}}`);
+      possibilities.push(`(0{1,4}:){1,${elidedGroups - 1}}${right}`);
+      possibilities.push(`(0{1,4}:){${elidedGroups - 1}}0{1,4}`);
+      for (let groups = 1; groups < elidedGroups - 1; groups++) {
+        for (let position = 1; position < elidedGroups - groups; position++) {
+          possibilities.push(`(0{1,4}:){${position}}:(0{1,4}:){${elidedGroups - position - groups - 1}}0{1,4}`);
+        }
+      }
+      return groupPossibilities(possibilities);
+    }
+  }
+});
+
+// node_modules/ip-address/dist/ipv6.js
+var require_ipv6 = __commonJS({
+  "node_modules/ip-address/dist/ipv6.js"(exports2) {
+    "use strict";
+    var __createBinding = exports2 && exports2.__createBinding || (Object.create ? (function(o, m, k, k2) {
+      if (k2 === void 0) k2 = k;
+      var desc2 = Object.getOwnPropertyDescriptor(m, k);
+      if (!desc2 || ("get" in desc2 ? !m.__esModule : desc2.writable || desc2.configurable)) {
+        desc2 = { enumerable: true, get: function() {
+          return m[k];
+        } };
+      }
+      Object.defineProperty(o, k2, desc2);
+    }) : (function(o, m, k, k2) {
+      if (k2 === void 0) k2 = k;
+      o[k2] = m[k];
+    }));
+    var __setModuleDefault = exports2 && exports2.__setModuleDefault || (Object.create ? (function(o, v) {
+      Object.defineProperty(o, "default", { enumerable: true, value: v });
+    }) : function(o, v) {
+      o["default"] = v;
+    });
+    var __importStar = exports2 && exports2.__importStar || function(mod) {
+      if (mod && mod.__esModule) return mod;
+      var result = {};
+      if (mod != null) {
+        for (var k in mod) if (k !== "default" && Object.prototype.hasOwnProperty.call(mod, k)) __createBinding(result, mod, k);
+      }
+      __setModuleDefault(result, mod);
+      return result;
+    };
+    Object.defineProperty(exports2, "__esModule", { value: true });
+    exports2.Address6 = void 0;
+    var common = __importStar(require_common2());
+    var constants4 = __importStar(require_constants());
+    var constants6 = __importStar(require_constants2());
+    var helpers = __importStar(require_helpers());
+    var ipv4_1 = require_ipv4();
+    var regular_expressions_1 = require_regular_expressions();
+    var address_error_1 = require_address_error();
+    var common_1 = require_common2();
+    function assert(condition) {
+      if (!condition) {
+        throw new Error("Assertion failed.");
+      }
+    }
+    function addCommas(number) {
+      const r = /(\d+)(\d{3})/;
+      while (r.test(number)) {
+        number = number.replace(r, "$1,$2");
+      }
+      return number;
+    }
+    function spanLeadingZeroes4(n) {
+      n = n.replace(/^(0{1,})([1-9]+)$/, '<span class="parse-error">$1</span>$2');
+      n = n.replace(/^(0{1,})(0)$/, '<span class="parse-error">$1</span>$2');
+      return n;
+    }
+    function compact(address, slice) {
+      const s1 = [];
+      const s2 = [];
+      let i;
+      for (i = 0; i < address.length; i++) {
+        if (i < slice[0]) {
+          s1.push(address[i]);
+        } else if (i > slice[1]) {
+          s2.push(address[i]);
+        }
+      }
+      return s1.concat(["compact"]).concat(s2);
+    }
+    function paddedHex(octet) {
+      return parseInt(octet, 16).toString(16).padStart(4, "0");
+    }
+    function unsignByte(b) {
+      return b & 255;
+    }
+    var Address62 = class _Address6 {
+      constructor(address, optionalGroups) {
+        this.addressMinusSuffix = "";
+        this.parsedSubnet = "";
+        this.subnet = "/128";
+        this.subnetMask = 128;
+        this.v4 = false;
+        this.zone = "";
+        this.isInSubnet = common.isInSubnet;
+        this.isCorrect = common.isCorrect(constants6.BITS);
+        if (optionalGroups === void 0) {
+          this.groups = constants6.GROUPS;
+        } else {
+          this.groups = optionalGroups;
+        }
+        this.address = address;
+        const subnet = constants6.RE_SUBNET_STRING.exec(address);
+        if (subnet) {
+          this.parsedSubnet = subnet[0].replace("/", "");
+          this.subnetMask = parseInt(this.parsedSubnet, 10);
+          this.subnet = `/${this.subnetMask}`;
+          if (Number.isNaN(this.subnetMask) || this.subnetMask < 0 || this.subnetMask > constants6.BITS) {
+            throw new address_error_1.AddressError("Invalid subnet mask.");
+          }
+          address = address.replace(constants6.RE_SUBNET_STRING, "");
+        } else if (/\//.test(address)) {
+          throw new address_error_1.AddressError("Invalid subnet mask.");
+        }
+        const zone = constants6.RE_ZONE_STRING.exec(address);
+        if (zone) {
+          this.zone = zone[0];
+          address = address.replace(constants6.RE_ZONE_STRING, "");
+        }
+        this.addressMinusSuffix = address;
+        this.parsedAddress = this.parse(this.addressMinusSuffix);
+      }
+      static isValid(address) {
+        try {
+          new _Address6(address);
+          return true;
+        } catch (e) {
+          return false;
+        }
+      }
+      /**
+       * Convert a BigInt to a v6 address object
+       * @memberof Address6
+       * @static
+       * @param {bigint} bigInt - a BigInt to convert
+       * @returns {Address6}
+       * @example
+       * var bigInt = BigInt('1000000000000');
+       * var address = Address6.fromBigInt(bigInt);
+       * address.correctForm(); // '::e8:d4a5:1000'
+       */
+      static fromBigInt(bigInt) {
+        const hex = bigInt.toString(16).padStart(32, "0");
+        const groups = [];
+        let i;
+        for (i = 0; i < constants6.GROUPS; i++) {
+          groups.push(hex.slice(i * 4, (i + 1) * 4));
+        }
+        return new _Address6(groups.join(":"));
+      }
+      /**
+       * Convert a URL (with optional port number) to an address object
+       * @memberof Address6
+       * @static
+       * @param {string} url - a URL with optional port number
+       * @example
+       * var addressAndPort = Address6.fromURL('http://[ffff::]:8080/foo/');
+       * addressAndPort.address.correctForm(); // 'ffff::'
+       * addressAndPort.port; // 8080
+       */
+      static fromURL(url2) {
+        let host;
+        let port = null;
+        let result;
+        if (url2.indexOf("[") !== -1 && url2.indexOf("]:") !== -1) {
+          result = constants6.RE_URL_WITH_PORT.exec(url2);
+          if (result === null) {
+            return {
+              error: "failed to parse address with port",
+              address: null,
+              port: null
+            };
+          }
+          host = result[1];
+          port = result[2];
+        } else if (url2.indexOf("/") !== -1) {
+          url2 = url2.replace(/^[a-z0-9]+:\/\//, "");
+          result = constants6.RE_URL.exec(url2);
+          if (result === null) {
+            return {
+              error: "failed to parse address from URL",
+              address: null,
+              port: null
+            };
+          }
+          host = result[1];
+        } else {
+          host = url2;
+        }
+        if (port) {
+          port = parseInt(port, 10);
+          if (port < 0 || port > 65536) {
+            port = null;
+          }
+        } else {
+          port = null;
+        }
+        return {
+          address: new _Address6(host),
+          port
+        };
+      }
+      /**
+       * Create an IPv6-mapped address given an IPv4 address
+       * @memberof Address6
+       * @static
+       * @param {string} address - An IPv4 address string
+       * @returns {Address6}
+       * @example
+       * var address = Address6.fromAddress4('192.168.0.1');
+       * address.correctForm(); // '::ffff:c0a8:1'
+       * address.to4in6(); // '::ffff:192.168.0.1'
+       */
+      static fromAddress4(address) {
+        const address4 = new ipv4_1.Address4(address);
+        const mask6 = constants6.BITS - (constants4.BITS - address4.subnetMask);
+        return new _Address6(`::ffff:${address4.correctForm()}/${mask6}`);
+      }
+      /**
+       * Return an address from ip6.arpa form
+       * @memberof Address6
+       * @static
+       * @param {string} arpaFormAddress - an 'ip6.arpa' form address
+       * @returns {Adress6}
+       * @example
+       * var address = Address6.fromArpa(e.f.f.f.3.c.2.6.f.f.f.e.6.6.8.e.1.0.6.7.9.4.e.c.0.0.0.0.1.0.0.2.ip6.arpa.)
+       * address.correctForm(); // '2001:0:ce49:7601:e866:efff:62c3:fffe'
+       */
+      static fromArpa(arpaFormAddress) {
+        let address = arpaFormAddress.replace(/(\.ip6\.arpa)?\.$/, "");
+        const semicolonAmount = 7;
+        if (address.length !== 63) {
+          throw new address_error_1.AddressError("Invalid 'ip6.arpa' form.");
+        }
+        const parts = address.split(".").reverse();
+        for (let i = semicolonAmount; i > 0; i--) {
+          const insertIndex = i * 4;
+          parts.splice(insertIndex, 0, ":");
+        }
+        address = parts.join("");
+        return new _Address6(address);
+      }
+      /**
+       * Return the Microsoft UNC transcription of the address
+       * @memberof Address6
+       * @instance
+       * @returns {String} the Microsoft UNC transcription of the address
+       */
+      microsoftTranscription() {
+        return `${this.correctForm().replace(/:/g, "-")}.ipv6-literal.net`;
+      }
+      /**
+       * Return the first n bits of the address, defaulting to the subnet mask
+       * @memberof Address6
+       * @instance
+       * @param {number} [mask=subnet] - the number of bits to mask
+       * @returns {String} the first n bits of the address as a string
+       */
+      mask(mask = this.subnetMask) {
+        return this.getBitsBase2(0, mask);
+      }
+      /**
+       * Return the number of possible subnets of a given size in the address
+       * @memberof Address6
+       * @instance
+       * @param {number} [subnetSize=128] - the subnet size
+       * @returns {String}
+       */
+      // TODO: probably useful to have a numeric version of this too
+      possibleSubnets(subnetSize = 128) {
+        const availableBits = constants6.BITS - this.subnetMask;
+        const subnetBits = Math.abs(subnetSize - constants6.BITS);
+        const subnetPowers = availableBits - subnetBits;
+        if (subnetPowers < 0) {
+          return "0";
+        }
+        return addCommas((BigInt("2") ** BigInt(subnetPowers)).toString(10));
+      }
+      /**
+       * Helper function getting start address.
+       * @memberof Address6
+       * @instance
+       * @returns {bigint}
+       */
+      _startAddress() {
+        return BigInt(`0b${this.mask() + "0".repeat(constants6.BITS - this.subnetMask)}`);
+      }
+      /**
+       * The first address in the range given by this address' subnet
+       * Often referred to as the Network Address.
+       * @memberof Address6
+       * @instance
+       * @returns {Address6}
+       */
+      startAddress() {
+        return _Address6.fromBigInt(this._startAddress());
+      }
+      /**
+       * The first host address in the range given by this address's subnet ie
+       * the first address after the Network Address
+       * @memberof Address6
+       * @instance
+       * @returns {Address6}
+       */
+      startAddressExclusive() {
+        const adjust = BigInt("1");
+        return _Address6.fromBigInt(this._startAddress() + adjust);
+      }
+      /**
+       * Helper function getting end address.
+       * @memberof Address6
+       * @instance
+       * @returns {bigint}
+       */
+      _endAddress() {
+        return BigInt(`0b${this.mask() + "1".repeat(constants6.BITS - this.subnetMask)}`);
+      }
+      /**
+       * The last address in the range given by this address' subnet
+       * Often referred to as the Broadcast
+       * @memberof Address6
+       * @instance
+       * @returns {Address6}
+       */
+      endAddress() {
+        return _Address6.fromBigInt(this._endAddress());
+      }
+      /**
+       * The last host address in the range given by this address's subnet ie
+       * the last address prior to the Broadcast Address
+       * @memberof Address6
+       * @instance
+       * @returns {Address6}
+       */
+      endAddressExclusive() {
+        const adjust = BigInt("1");
+        return _Address6.fromBigInt(this._endAddress() - adjust);
+      }
+      /**
+       * Return the scope of the address
+       * @memberof Address6
+       * @instance
+       * @returns {String}
+       */
+      getScope() {
+        let scope = constants6.SCOPES[parseInt(this.getBits(12, 16).toString(10), 10)];
+        if (this.getType() === "Global unicast" && scope !== "Link local") {
+          scope = "Global";
+        }
+        return scope || "Unknown";
+      }
+      /**
+       * Return the type of the address
+       * @memberof Address6
+       * @instance
+       * @returns {String}
+       */
+      getType() {
+        for (const subnet of Object.keys(constants6.TYPES)) {
+          if (this.isInSubnet(new _Address6(subnet))) {
+            return constants6.TYPES[subnet];
+          }
+        }
+        return "Global unicast";
+      }
+      /**
+       * Return the bits in the given range as a BigInt
+       * @memberof Address6
+       * @instance
+       * @returns {bigint}
+       */
+      getBits(start, end) {
+        return BigInt(`0b${this.getBitsBase2(start, end)}`);
+      }
+      /**
+       * Return the bits in the given range as a base-2 string
+       * @memberof Address6
+       * @instance
+       * @returns {String}
+       */
+      getBitsBase2(start, end) {
+        return this.binaryZeroPad().slice(start, end);
+      }
+      /**
+       * Return the bits in the given range as a base-16 string
+       * @memberof Address6
+       * @instance
+       * @returns {String}
+       */
+      getBitsBase16(start, end) {
+        const length = end - start;
+        if (length % 4 !== 0) {
+          throw new Error("Length of bits to retrieve must be divisible by four");
+        }
+        return this.getBits(start, end).toString(16).padStart(length / 4, "0");
+      }
+      /**
+       * Return the bits that are set past the subnet mask length
+       * @memberof Address6
+       * @instance
+       * @returns {String}
+       */
+      getBitsPastSubnet() {
+        return this.getBitsBase2(this.subnetMask, constants6.BITS);
+      }
+      /**
+       * Return the reversed ip6.arpa form of the address
+       * @memberof Address6
+       * @param {Object} options
+       * @param {boolean} options.omitSuffix - omit the "ip6.arpa" suffix
+       * @instance
+       * @returns {String}
+       */
+      reverseForm(options) {
+        if (!options) {
+          options = {};
+        }
+        const characters = Math.floor(this.subnetMask / 4);
+        const reversed = this.canonicalForm().replace(/:/g, "").split("").slice(0, characters).reverse().join(".");
+        if (characters > 0) {
+          if (options.omitSuffix) {
+            return reversed;
+          }
+          return `${reversed}.ip6.arpa.`;
+        }
+        if (options.omitSuffix) {
+          return "";
+        }
+        return "ip6.arpa.";
+      }
+      /**
+       * Return the correct form of the address
+       * @memberof Address6
+       * @instance
+       * @returns {String}
+       */
+      correctForm() {
+        let i;
+        let groups = [];
+        let zeroCounter = 0;
+        const zeroes = [];
+        for (i = 0; i < this.parsedAddress.length; i++) {
+          const value = parseInt(this.parsedAddress[i], 16);
+          if (value === 0) {
+            zeroCounter++;
+          }
+          if (value !== 0 && zeroCounter > 0) {
+            if (zeroCounter > 1) {
+              zeroes.push([i - zeroCounter, i - 1]);
+            }
+            zeroCounter = 0;
+          }
+        }
+        if (zeroCounter > 1) {
+          zeroes.push([this.parsedAddress.length - zeroCounter, this.parsedAddress.length - 1]);
+        }
+        const zeroLengths = zeroes.map((n) => n[1] - n[0] + 1);
+        if (zeroes.length > 0) {
+          const index = zeroLengths.indexOf(Math.max(...zeroLengths));
+          groups = compact(this.parsedAddress, zeroes[index]);
+        } else {
+          groups = this.parsedAddress;
+        }
+        for (i = 0; i < groups.length; i++) {
+          if (groups[i] !== "compact") {
+            groups[i] = parseInt(groups[i], 16).toString(16);
+          }
+        }
+        let correct = groups.join(":");
+        correct = correct.replace(/^compact$/, "::");
+        correct = correct.replace(/(^compact)|(compact$)/, ":");
+        correct = correct.replace(/compact/, "");
+        return correct;
+      }
+      /**
+       * Return a zero-padded base-2 string representation of the address
+       * @memberof Address6
+       * @instance
+       * @returns {String}
+       * @example
+       * var address = new Address6('2001:4860:4001:803::1011');
+       * address.binaryZeroPad();
+       * // '0010000000000001010010000110000001000000000000010000100000000011
+       * //  0000000000000000000000000000000000000000000000000001000000010001'
+       */
+      binaryZeroPad() {
+        return this.bigInt().toString(2).padStart(constants6.BITS, "0");
+      }
+      // TODO: Improve the semantics of this helper function
+      parse4in6(address) {
+        const groups = address.split(":");
+        const lastGroup = groups.slice(-1)[0];
+        const address4 = lastGroup.match(constants4.RE_ADDRESS);
+        if (address4) {
+          this.parsedAddress4 = address4[0];
+          this.address4 = new ipv4_1.Address4(this.parsedAddress4);
+          for (let i = 0; i < this.address4.groups; i++) {
+            if (/^0[0-9]+/.test(this.address4.parsedAddress[i])) {
+              throw new address_error_1.AddressError("IPv4 addresses can't have leading zeroes.", address.replace(constants4.RE_ADDRESS, this.address4.parsedAddress.map(spanLeadingZeroes4).join(".")));
+            }
+          }
+          this.v4 = true;
+          groups[groups.length - 1] = this.address4.toGroup6();
+          address = groups.join(":");
+        }
+        return address;
+      }
+      // TODO: Make private?
+      parse(address) {
+        address = this.parse4in6(address);
+        const badCharacters = address.match(constants6.RE_BAD_CHARACTERS);
+        if (badCharacters) {
+          throw new address_error_1.AddressError(`Bad character${badCharacters.length > 1 ? "s" : ""} detected in address: ${badCharacters.join("")}`, address.replace(constants6.RE_BAD_CHARACTERS, '<span class="parse-error">$1</span>'));
+        }
+        const badAddress = address.match(constants6.RE_BAD_ADDRESS);
+        if (badAddress) {
+          throw new address_error_1.AddressError(`Address failed regex: ${badAddress.join("")}`, address.replace(constants6.RE_BAD_ADDRESS, '<span class="parse-error">$1</span>'));
+        }
+        let groups = [];
+        const halves = address.split("::");
+        if (halves.length === 2) {
+          let first = halves[0].split(":");
+          let last = halves[1].split(":");
+          if (first.length === 1 && first[0] === "") {
+            first = [];
+          }
+          if (last.length === 1 && last[0] === "") {
+            last = [];
+          }
+          const remaining = this.groups - (first.length + last.length);
+          if (!remaining) {
+            throw new address_error_1.AddressError("Error parsing groups");
+          }
+          this.elidedGroups = remaining;
+          this.elisionBegin = first.length;
+          this.elisionEnd = first.length + this.elidedGroups;
+          groups = groups.concat(first);
+          for (let i = 0; i < remaining; i++) {
+            groups.push("0");
+          }
+          groups = groups.concat(last);
+        } else if (halves.length === 1) {
+          groups = address.split(":");
+          this.elidedGroups = 0;
+        } else {
+          throw new address_error_1.AddressError("Too many :: groups found");
+        }
+        groups = groups.map((group) => parseInt(group, 16).toString(16));
+        if (groups.length !== this.groups) {
+          throw new address_error_1.AddressError("Incorrect number of groups found");
+        }
+        return groups;
+      }
+      /**
+       * Return the canonical form of the address
+       * @memberof Address6
+       * @instance
+       * @returns {String}
+       */
+      canonicalForm() {
+        return this.parsedAddress.map(paddedHex).join(":");
+      }
+      /**
+       * Return the decimal form of the address
+       * @memberof Address6
+       * @instance
+       * @returns {String}
+       */
+      decimal() {
+        return this.parsedAddress.map((n) => parseInt(n, 16).toString(10).padStart(5, "0")).join(":");
+      }
+      /**
+       * Return the address as a BigInt
+       * @memberof Address6
+       * @instance
+       * @returns {bigint}
+       */
+      bigInt() {
+        return BigInt(`0x${this.parsedAddress.map(paddedHex).join("")}`);
+      }
+      /**
+       * Return the last two groups of this address as an IPv4 address string
+       * @memberof Address6
+       * @instance
+       * @returns {Address4}
+       * @example
+       * var address = new Address6('2001:4860:4001::1825:bf11');
+       * address.to4().correctForm(); // '24.37.191.17'
+       */
+      to4() {
+        const binary = this.binaryZeroPad().split("");
+        return ipv4_1.Address4.fromHex(BigInt(`0b${binary.slice(96, 128).join("")}`).toString(16));
+      }
+      /**
+       * Return the v4-in-v6 form of the address
+       * @memberof Address6
+       * @instance
+       * @returns {String}
+       */
+      to4in6() {
+        const address4 = this.to4();
+        const address6 = new _Address6(this.parsedAddress.slice(0, 6).join(":"), 6);
+        const correct = address6.correctForm();
+        let infix = "";
+        if (!/:$/.test(correct)) {
+          infix = ":";
+        }
+        return correct + infix + address4.address;
+      }
+      /**
+       * Return an object containing the Teredo properties of the address
+       * @memberof Address6
+       * @instance
+       * @returns {Object}
+       */
+      inspectTeredo() {
+        const prefix = this.getBitsBase16(0, 32);
+        const bitsForUdpPort = this.getBits(80, 96);
+        const udpPort = (bitsForUdpPort ^ BigInt("0xffff")).toString();
+        const server4 = ipv4_1.Address4.fromHex(this.getBitsBase16(32, 64));
+        const bitsForClient4 = this.getBits(96, 128);
+        const client4 = ipv4_1.Address4.fromHex((bitsForClient4 ^ BigInt("0xffffffff")).toString(16));
+        const flagsBase2 = this.getBitsBase2(64, 80);
+        const coneNat = (0, common_1.testBit)(flagsBase2, 15);
+        const reserved = (0, common_1.testBit)(flagsBase2, 14);
+        const groupIndividual = (0, common_1.testBit)(flagsBase2, 8);
+        const universalLocal = (0, common_1.testBit)(flagsBase2, 9);
+        const nonce = BigInt(`0b${flagsBase2.slice(2, 6) + flagsBase2.slice(8, 16)}`).toString(10);
+        return {
+          prefix: `${prefix.slice(0, 4)}:${prefix.slice(4, 8)}`,
+          server4: server4.address,
+          client4: client4.address,
+          flags: flagsBase2,
+          coneNat,
+          microsoft: {
+            reserved,
+            universalLocal,
+            groupIndividual,
+            nonce
+          },
+          udpPort
+        };
+      }
+      /**
+       * Return an object containing the 6to4 properties of the address
+       * @memberof Address6
+       * @instance
+       * @returns {Object}
+       */
+      inspect6to4() {
+        const prefix = this.getBitsBase16(0, 16);
+        const gateway = ipv4_1.Address4.fromHex(this.getBitsBase16(16, 48));
+        return {
+          prefix: prefix.slice(0, 4),
+          gateway: gateway.address
+        };
+      }
+      /**
+       * Return a v6 6to4 address from a v6 v4inv6 address
+       * @memberof Address6
+       * @instance
+       * @returns {Address6}
+       */
+      to6to4() {
+        if (!this.is4()) {
+          return null;
+        }
+        const addr6to4 = [
+          "2002",
+          this.getBitsBase16(96, 112),
+          this.getBitsBase16(112, 128),
+          "",
+          "/16"
+        ].join(":");
+        return new _Address6(addr6to4);
+      }
+      /**
+       * Return a byte array
+       * @memberof Address6
+       * @instance
+       * @returns {Array}
+       */
+      toByteArray() {
+        const valueWithoutPadding = this.bigInt().toString(16);
+        const leadingPad = "0".repeat(valueWithoutPadding.length % 2);
+        const value = `${leadingPad}${valueWithoutPadding}`;
+        const bytes = [];
+        for (let i = 0, length = value.length; i < length; i += 2) {
+          bytes.push(parseInt(value.substring(i, i + 2), 16));
+        }
+        return bytes;
+      }
+      /**
+       * Return an unsigned byte array
+       * @memberof Address6
+       * @instance
+       * @returns {Array}
+       */
+      toUnsignedByteArray() {
+        return this.toByteArray().map(unsignByte);
+      }
+      /**
+       * Convert a byte array to an Address6 object
+       * @memberof Address6
+       * @static
+       * @returns {Address6}
+       */
+      static fromByteArray(bytes) {
+        return this.fromUnsignedByteArray(bytes.map(unsignByte));
+      }
+      /**
+       * Convert an unsigned byte array to an Address6 object
+       * @memberof Address6
+       * @static
+       * @returns {Address6}
+       */
+      static fromUnsignedByteArray(bytes) {
+        const BYTE_MAX = BigInt("256");
+        let result = BigInt("0");
+        let multiplier = BigInt("1");
+        for (let i = bytes.length - 1; i >= 0; i--) {
+          result += multiplier * BigInt(bytes[i].toString(10));
+          multiplier *= BYTE_MAX;
+        }
+        return _Address6.fromBigInt(result);
+      }
+      /**
+       * Returns true if the address is in the canonical form, false otherwise
+       * @memberof Address6
+       * @instance
+       * @returns {boolean}
+       */
+      isCanonical() {
+        return this.addressMinusSuffix === this.canonicalForm();
+      }
+      /**
+       * Returns true if the address is a link local address, false otherwise
+       * @memberof Address6
+       * @instance
+       * @returns {boolean}
+       */
+      isLinkLocal() {
+        if (this.getBitsBase2(0, 64) === "1111111010000000000000000000000000000000000000000000000000000000") {
+          return true;
+        }
+        return false;
+      }
+      /**
+       * Returns true if the address is a multicast address, false otherwise
+       * @memberof Address6
+       * @instance
+       * @returns {boolean}
+       */
+      isMulticast() {
+        return this.getType() === "Multicast";
+      }
+      /**
+       * Returns true if the address is a v4-in-v6 address, false otherwise
+       * @memberof Address6
+       * @instance
+       * @returns {boolean}
+       */
+      is4() {
+        return this.v4;
+      }
+      /**
+       * Returns true if the address is a Teredo address, false otherwise
+       * @memberof Address6
+       * @instance
+       * @returns {boolean}
+       */
+      isTeredo() {
+        return this.isInSubnet(new _Address6("2001::/32"));
+      }
+      /**
+       * Returns true if the address is a 6to4 address, false otherwise
+       * @memberof Address6
+       * @instance
+       * @returns {boolean}
+       */
+      is6to4() {
+        return this.isInSubnet(new _Address6("2002::/16"));
+      }
+      /**
+       * Returns true if the address is a loopback address, false otherwise
+       * @memberof Address6
+       * @instance
+       * @returns {boolean}
+       */
+      isLoopback() {
+        return this.getType() === "Loopback";
+      }
+      // #endregion
+      // #region HTML
+      /**
+       * @returns {String} the address in link form with a default port of 80
+       */
+      href(optionalPort) {
+        if (optionalPort === void 0) {
+          optionalPort = "";
+        } else {
+          optionalPort = `:${optionalPort}`;
+        }
+        return `http://[${this.correctForm()}]${optionalPort}/`;
+      }
+      /**
+       * @returns {String} a link suitable for conveying the address via a URL hash
+       */
+      link(options) {
+        if (!options) {
+          options = {};
+        }
+        if (options.className === void 0) {
+          options.className = "";
+        }
+        if (options.prefix === void 0) {
+          options.prefix = "/#address=";
+        }
+        if (options.v4 === void 0) {
+          options.v4 = false;
+        }
+        let formFunction = this.correctForm;
+        if (options.v4) {
+          formFunction = this.to4in6;
+        }
+        const form = formFunction.call(this);
+        if (options.className) {
+          return `<a href="${options.prefix}${form}" class="${options.className}">${form}</a>`;
+        }
+        return `<a href="${options.prefix}${form}">${form}</a>`;
+      }
+      /**
+       * Groups an address
+       * @returns {String}
+       */
+      group() {
+        if (this.elidedGroups === 0) {
+          return helpers.simpleGroup(this.address).join(":");
+        }
+        assert(typeof this.elidedGroups === "number");
+        assert(typeof this.elisionBegin === "number");
+        const output = [];
+        const [left, right] = this.address.split("::");
+        if (left.length) {
+          output.push(...helpers.simpleGroup(left));
+        } else {
+          output.push("");
+        }
+        const classes = ["hover-group"];
+        for (let i = this.elisionBegin; i < this.elisionBegin + this.elidedGroups; i++) {
+          classes.push(`group-${i}`);
+        }
+        output.push(`<span class="${classes.join(" ")}"></span>`);
+        if (right.length) {
+          output.push(...helpers.simpleGroup(right, this.elisionEnd));
+        } else {
+          output.push("");
+        }
+        if (this.is4()) {
+          assert(this.address4 instanceof ipv4_1.Address4);
+          output.pop();
+          output.push(this.address4.groupForV6());
+        }
+        return output.join(":");
+      }
+      // #endregion
+      // #region Regular expressions
+      /**
+       * Generate a regular expression string that can be used to find or validate
+       * all variations of this address
+       * @memberof Address6
+       * @instance
+       * @param {boolean} substringSearch
+       * @returns {string}
+       */
+      regularExpressionString(substringSearch = false) {
+        let output = [];
+        const address6 = new _Address6(this.correctForm());
+        if (address6.elidedGroups === 0) {
+          output.push((0, regular_expressions_1.simpleRegularExpression)(address6.parsedAddress));
+        } else if (address6.elidedGroups === constants6.GROUPS) {
+          output.push((0, regular_expressions_1.possibleElisions)(constants6.GROUPS));
+        } else {
+          const halves = address6.address.split("::");
+          if (halves[0].length) {
+            output.push((0, regular_expressions_1.simpleRegularExpression)(halves[0].split(":")));
+          }
+          assert(typeof address6.elidedGroups === "number");
+          output.push((0, regular_expressions_1.possibleElisions)(address6.elidedGroups, halves[0].length !== 0, halves[1].length !== 0));
+          if (halves[1].length) {
+            output.push((0, regular_expressions_1.simpleRegularExpression)(halves[1].split(":")));
+          }
+          output = [output.join(":")];
+        }
+        if (!substringSearch) {
+          output = [
+            "(?=^|",
+            regular_expressions_1.ADDRESS_BOUNDARY,
+            "|[^\\w\\:])(",
+            ...output,
+            ")(?=[^\\w\\:]|",
+            regular_expressions_1.ADDRESS_BOUNDARY,
+            "|$)"
+          ];
+        }
+        return output.join("");
+      }
+      /**
+       * Generate a regular expression that can be used to find or validate all
+       * variations of this address.
+       * @memberof Address6
+       * @instance
+       * @param {boolean} substringSearch
+       * @returns {RegExp}
+       */
+      regularExpression(substringSearch = false) {
+        return new RegExp(this.regularExpressionString(substringSearch), "i");
+      }
+    };
+    exports2.Address6 = Address62;
+  }
+});
+
+// node_modules/ip-address/dist/ip-address.js
+var require_ip_address = __commonJS({
+  "node_modules/ip-address/dist/ip-address.js"(exports2) {
+    "use strict";
+    var __createBinding = exports2 && exports2.__createBinding || (Object.create ? (function(o, m, k, k2) {
+      if (k2 === void 0) k2 = k;
+      var desc2 = Object.getOwnPropertyDescriptor(m, k);
+      if (!desc2 || ("get" in desc2 ? !m.__esModule : desc2.writable || desc2.configurable)) {
+        desc2 = { enumerable: true, get: function() {
+          return m[k];
+        } };
+      }
+      Object.defineProperty(o, k2, desc2);
+    }) : (function(o, m, k, k2) {
+      if (k2 === void 0) k2 = k;
+      o[k2] = m[k];
+    }));
+    var __setModuleDefault = exports2 && exports2.__setModuleDefault || (Object.create ? (function(o, v) {
+      Object.defineProperty(o, "default", { enumerable: true, value: v });
+    }) : function(o, v) {
+      o["default"] = v;
+    });
+    var __importStar = exports2 && exports2.__importStar || function(mod) {
+      if (mod && mod.__esModule) return mod;
+      var result = {};
+      if (mod != null) {
+        for (var k in mod) if (k !== "default" && Object.prototype.hasOwnProperty.call(mod, k)) __createBinding(result, mod, k);
+      }
+      __setModuleDefault(result, mod);
+      return result;
+    };
+    Object.defineProperty(exports2, "__esModule", { value: true });
+    exports2.v6 = exports2.AddressError = exports2.Address6 = exports2.Address4 = void 0;
+    var ipv4_1 = require_ipv4();
+    Object.defineProperty(exports2, "Address4", { enumerable: true, get: function() {
+      return ipv4_1.Address4;
+    } });
+    var ipv6_1 = require_ipv6();
+    Object.defineProperty(exports2, "Address6", { enumerable: true, get: function() {
+      return ipv6_1.Address6;
+    } });
+    var address_error_1 = require_address_error();
+    Object.defineProperty(exports2, "AddressError", { enumerable: true, get: function() {
+      return address_error_1.AddressError;
+    } });
+    var helpers = __importStar(require_helpers());
+    exports2.v6 = { helpers };
   }
 });
 
@@ -32506,7 +34036,7 @@ var require_util = __commonJS({
 });
 
 // node_modules/gaxios/build/src/common.js
-var require_common2 = __commonJS({
+var require_common3 = __commonJS({
   "node_modules/gaxios/build/src/common.js"(exports2) {
     "use strict";
     var __importDefault = exports2 && exports2.__importDefault || function(mod) {
@@ -32754,15 +34284,15 @@ var require_retry = __commonJS({
 // node_modules/gaxios/node_modules/uuid/dist/esm-node/rng.js
 function rng() {
   if (poolPtr > rnds8Pool.length - 16) {
-    import_crypto.default.randomFillSync(rnds8Pool);
+    import_crypto4.default.randomFillSync(rnds8Pool);
     poolPtr = 0;
   }
   return rnds8Pool.slice(poolPtr, poolPtr += 16);
 }
-var import_crypto, rnds8Pool, poolPtr;
+var import_crypto4, rnds8Pool, poolPtr;
 var init_rng = __esm({
   "node_modules/gaxios/node_modules/uuid/dist/esm-node/rng.js"() {
-    import_crypto = __toESM(require("crypto"));
+    import_crypto4 = __toESM(require("crypto"));
     rnds8Pool = new Uint8Array(256);
     poolPtr = rnds8Pool.length;
   }
@@ -32965,12 +34495,12 @@ function md5(bytes) {
   } else if (typeof bytes === "string") {
     bytes = Buffer.from(bytes, "utf8");
   }
-  return import_crypto2.default.createHash("md5").update(bytes).digest();
+  return import_crypto5.default.createHash("md5").update(bytes).digest();
 }
-var import_crypto2, md5_default;
+var import_crypto5, md5_default;
 var init_md5 = __esm({
   "node_modules/gaxios/node_modules/uuid/dist/esm-node/md5.js"() {
-    import_crypto2 = __toESM(require("crypto"));
+    import_crypto5 = __toESM(require("crypto"));
     md5_default = md5;
   }
 });
@@ -32987,12 +34517,12 @@ var init_v3 = __esm({
 });
 
 // node_modules/gaxios/node_modules/uuid/dist/esm-node/native.js
-var import_crypto3, native_default;
+var import_crypto6, native_default;
 var init_native = __esm({
   "node_modules/gaxios/node_modules/uuid/dist/esm-node/native.js"() {
-    import_crypto3 = __toESM(require("crypto"));
+    import_crypto6 = __toESM(require("crypto"));
     native_default = {
-      randomUUID: import_crypto3.default.randomUUID
+      randomUUID: import_crypto6.default.randomUUID
     };
   }
 });
@@ -33032,12 +34562,12 @@ function sha1(bytes) {
   } else if (typeof bytes === "string") {
     bytes = Buffer.from(bytes, "utf8");
   }
-  return import_crypto4.default.createHash("sha1").update(bytes).digest();
+  return import_crypto7.default.createHash("sha1").update(bytes).digest();
 }
-var import_crypto4, sha1_default;
+var import_crypto7, sha1_default;
 var init_sha1 = __esm({
   "node_modules/gaxios/node_modules/uuid/dist/esm-node/sha1.js"() {
-    import_crypto4 = __toESM(require("crypto"));
+    import_crypto7 = __toESM(require("crypto"));
     sha1_default = sha1;
   }
 });
@@ -33116,7 +34646,7 @@ var require_interceptor = __commonJS({
 });
 
 // node_modules/agent-base/dist/helpers.js
-var require_helpers = __commonJS({
+var require_helpers2 = __commonJS({
   "node_modules/agent-base/dist/helpers.js"(exports2) {
     "use strict";
     var __createBinding = exports2 && exports2.__createBinding || (Object.create ? (function(o, m, k, k2) {
@@ -33224,7 +34754,7 @@ var require_dist3 = __commonJS({
     var net = __importStar(require("net"));
     var http = __importStar(require("http"));
     var https_1 = require("https");
-    __exportStar(require_helpers(), exports2);
+    __exportStar(require_helpers2(), exports2);
     var INTERNAL = /* @__PURE__ */ Symbol("AgentBaseInternalState");
     var Agent = class extends http.Agent {
       constructor(opts) {
@@ -33648,7 +35178,7 @@ var require_gaxios = __commonJS({
     var querystring_1 = __importDefault(require("querystring"));
     var is_stream_1 = __importDefault(require_is_stream());
     var url_1 = require("url");
-    var common_1 = require_common2();
+    var common_1 = require_common3();
     var retry_1 = require_retry();
     var stream_1 = require("stream");
     var uuid_1 = (init_esm_node(), __toCommonJS(esm_node_exports));
@@ -34039,7 +35569,7 @@ var require_src2 = __commonJS({
     Object.defineProperty(exports2, "Gaxios", { enumerable: true, get: function() {
       return gaxios_1.Gaxios;
     } });
-    var common_1 = require_common2();
+    var common_1 = require_common3();
     Object.defineProperty(exports2, "GaxiosError", { enumerable: true, get: function() {
       return common_1.GaxiosError;
     } });
@@ -34486,7 +36016,7 @@ var require_bignumber = __commonJS({
             if (carry) x = [carry].concat(x);
             return x;
           }
-          function compare2(a, b, aL, bL) {
+          function compare3(a, b, aL, bL) {
             var i, cmp;
             if (aL != bL) {
               cmp = aL > bL ? 1 : -1;
@@ -34556,7 +36086,7 @@ var require_bignumber = __commonJS({
               if (yc[1] >= base / 2) yc0++;
               do {
                 n = 0;
-                cmp = compare2(yc, rem, yL, remL);
+                cmp = compare3(yc, rem, yL, remL);
                 if (cmp < 0) {
                   rem0 = rem[0];
                   if (yL != remL) rem0 = rem0 * base + (rem[1] || 0);
@@ -34566,7 +36096,7 @@ var require_bignumber = __commonJS({
                     prod = multiply(yc, n, base);
                     prodL = prod.length;
                     remL = rem.length;
-                    while (compare2(prod, rem, prodL, remL) == 1) {
+                    while (compare3(prod, rem, prodL, remL) == 1) {
                       n--;
                       subtract(prod, yL < prodL ? yz : yc, prodL, base);
                       prodL = prod.length;
@@ -34583,7 +36113,7 @@ var require_bignumber = __commonJS({
                   subtract(rem, prod, remL, base);
                   remL = rem.length;
                   if (cmp == -1) {
-                    while (compare2(yc, rem, yL, remL) < 1) {
+                    while (compare3(yc, rem, yL, remL) < 1) {
                       n++;
                       subtract(rem, yL < remL ? yz : yc, remL, base);
                       remL = rem.length;
@@ -34652,7 +36182,7 @@ var require_bignumber = __commonJS({
           var k, y, i = 1, x = new BigNumber2(args[0]);
           for (; i < args.length; i++) {
             y = new BigNumber2(args[i]);
-            if (!y.s || (k = compare(x, y)) === n || k === 0 && x.s === n) {
+            if (!y.s || (k = compare2(x, y)) === n || k === 0 && x.s === n) {
               x = y;
             }
           }
@@ -34797,7 +36327,7 @@ var require_bignumber = __commonJS({
           return x;
         };
         P.comparedTo = function(y, b) {
-          return compare(this, new BigNumber2(y, b));
+          return compare2(this, new BigNumber2(y, b));
         };
         P.decimalPlaces = P.dp = function(dp, rm) {
           var c, n, v, x = this;
@@ -34895,25 +36425,25 @@ var require_bignumber = __commonJS({
           return round(n, n.e + 1, rm);
         };
         P.isEqualTo = P.eq = function(y, b) {
-          return compare(this, new BigNumber2(y, b)) === 0;
+          return compare2(this, new BigNumber2(y, b)) === 0;
         };
         P.isFinite = function() {
           return !!this.c;
         };
         P.isGreaterThan = P.gt = function(y, b) {
-          return compare(this, new BigNumber2(y, b)) > 0;
+          return compare2(this, new BigNumber2(y, b)) > 0;
         };
         P.isGreaterThanOrEqualTo = P.gte = function(y, b) {
-          return (b = compare(this, new BigNumber2(y, b))) === 1 || b === 0;
+          return (b = compare2(this, new BigNumber2(y, b))) === 1 || b === 0;
         };
         P.isInteger = function() {
           return !!this.c && bitFloor(this.e / LOG_BASE) > this.c.length - 2;
         };
         P.isLessThan = P.lt = function(y, b) {
-          return compare(this, new BigNumber2(y, b)) < 0;
+          return compare2(this, new BigNumber2(y, b)) < 0;
         };
         P.isLessThanOrEqualTo = P.lte = function(y, b) {
-          return (b = compare(this, new BigNumber2(y, b))) === -1 || b === 0;
+          return (b = compare2(this, new BigNumber2(y, b))) === -1 || b === 0;
         };
         P.isNaN = function() {
           return !this.s;
@@ -35341,7 +36871,7 @@ var require_bignumber = __commonJS({
         for (j = r.length; r.charCodeAt(--j) === 48; ) ;
         return r.slice(0, j + 1 || 1);
       }
-      function compare(x, y) {
+      function compare2(x, y) {
         var a, b, xc = x.c, yc = y.c, i = x.s, j = y.s, k = x.e, l = y.e;
         if (!i || !j) return null;
         a = xc && !xc[0];
@@ -36672,22 +38202,22 @@ var require_crypto2 = __commonJS({
     "use strict";
     Object.defineProperty(exports2, "__esModule", { value: true });
     exports2.NodeCrypto = void 0;
-    var crypto13 = require("crypto");
+    var crypto14 = require("crypto");
     var NodeCrypto = class {
       async sha256DigestBase64(str) {
-        return crypto13.createHash("sha256").update(str).digest("base64");
+        return crypto14.createHash("sha256").update(str).digest("base64");
       }
       randomBytesBase64(count) {
-        return crypto13.randomBytes(count).toString("base64");
+        return crypto14.randomBytes(count).toString("base64");
       }
       async verify(pubkey, data, signature) {
-        const verifier = crypto13.createVerify("RSA-SHA256");
+        const verifier = crypto14.createVerify("RSA-SHA256");
         verifier.update(data);
         verifier.end();
         return verifier.verify(pubkey, signature, "base64");
       }
       async sign(privateKey, data) {
-        const signer = crypto13.createSign("RSA-SHA256");
+        const signer = crypto14.createSign("RSA-SHA256");
         signer.update(data);
         signer.end();
         return signer.sign(privateKey, "base64");
@@ -36705,7 +38235,7 @@ var require_crypto2 = __commonJS({
        *   string in hexadecimal encoding.
        */
       async sha256DigestHex(str) {
-        return crypto13.createHash("sha256").update(str).digest("hex");
+        return crypto14.createHash("sha256").update(str).digest("hex");
       }
       /**
        * Computes the HMAC hash of a message using the provided crypto key and the
@@ -36717,7 +38247,7 @@ var require_crypto2 = __commonJS({
        */
       async signWithHmacSha256(key, msg) {
         const cryptoKey = typeof key === "string" ? key : toBuffer(key);
-        return toArrayBuffer(crypto13.createHmac("sha256", cryptoKey).update(msg).digest());
+        return toArrayBuffer(crypto14.createHmac("sha256", cryptoKey).update(msg).digest());
       }
     };
     exports2.NodeCrypto = NodeCrypto;
@@ -36969,34 +38499,34 @@ var require_transporters = __commonJS({
 var require_safe_buffer = __commonJS({
   "node_modules/safe-buffer/index.js"(exports2, module2) {
     var buffer = require("buffer");
-    var Buffer2 = buffer.Buffer;
+    var Buffer3 = buffer.Buffer;
     function copyProps(src, dst) {
       for (var key in src) {
         dst[key] = src[key];
       }
     }
-    if (Buffer2.from && Buffer2.alloc && Buffer2.allocUnsafe && Buffer2.allocUnsafeSlow) {
+    if (Buffer3.from && Buffer3.alloc && Buffer3.allocUnsafe && Buffer3.allocUnsafeSlow) {
       module2.exports = buffer;
     } else {
       copyProps(buffer, exports2);
       exports2.Buffer = SafeBuffer;
     }
     function SafeBuffer(arg, encodingOrOffset, length) {
-      return Buffer2(arg, encodingOrOffset, length);
+      return Buffer3(arg, encodingOrOffset, length);
     }
-    SafeBuffer.prototype = Object.create(Buffer2.prototype);
-    copyProps(Buffer2, SafeBuffer);
+    SafeBuffer.prototype = Object.create(Buffer3.prototype);
+    copyProps(Buffer3, SafeBuffer);
     SafeBuffer.from = function(arg, encodingOrOffset, length) {
       if (typeof arg === "number") {
         throw new TypeError("Argument must not be a number");
       }
-      return Buffer2(arg, encodingOrOffset, length);
+      return Buffer3(arg, encodingOrOffset, length);
     };
     SafeBuffer.alloc = function(size, fill, encoding) {
       if (typeof size !== "number") {
         throw new TypeError("Argument must be a number");
       }
-      var buf = Buffer2(size);
+      var buf = Buffer3(size);
       if (fill !== void 0) {
         if (typeof encoding === "string") {
           buf.fill(fill, encoding);
@@ -37012,7 +38542,7 @@ var require_safe_buffer = __commonJS({
       if (typeof size !== "number") {
         throw new TypeError("Argument must be a number");
       }
-      return Buffer2(size);
+      return Buffer3(size);
     };
     SafeBuffer.allocUnsafeSlow = function(size) {
       if (typeof size !== "number") {
@@ -37051,7 +38581,7 @@ var require_param_bytes_for_alg = __commonJS({
 var require_ecdsa_sig_formatter = __commonJS({
   "node_modules/ecdsa-sig-formatter/src/ecdsa-sig-formatter.js"(exports2, module2) {
     "use strict";
-    var Buffer2 = require_safe_buffer().Buffer;
+    var Buffer3 = require_safe_buffer().Buffer;
     var getParamBytesForAlg = require_param_bytes_for_alg();
     var MAX_OCTET = 128;
     var CLASS_UNIVERSAL = 0;
@@ -37064,10 +38594,10 @@ var require_ecdsa_sig_formatter = __commonJS({
       return base64.replace(/=/g, "").replace(/\+/g, "-").replace(/\//g, "_");
     }
     function signatureAsBuffer(signature) {
-      if (Buffer2.isBuffer(signature)) {
+      if (Buffer3.isBuffer(signature)) {
         return signature;
       } else if ("string" === typeof signature) {
-        return Buffer2.from(signature, "base64");
+        return Buffer3.from(signature, "base64");
       }
       throw new TypeError("ECDSA signature must be a Base64 string or a Buffer");
     }
@@ -37115,7 +38645,7 @@ var require_ecdsa_sig_formatter = __commonJS({
         throw new Error('Expected to consume entire buffer, but "' + (inputLength - offset) + '" bytes remain');
       }
       var rPadding = paramBytes - rLength, sPadding = paramBytes - sLength;
-      var dst = Buffer2.allocUnsafe(rPadding + rLength + sPadding + sLength);
+      var dst = Buffer3.allocUnsafe(rPadding + rLength + sPadding + sLength);
       for (offset = 0; offset < rPadding; ++offset) {
         dst[offset] = 0;
       }
@@ -37153,7 +38683,7 @@ var require_ecdsa_sig_formatter = __commonJS({
       var sLength = paramBytes - sPadding;
       var rsBytes = 1 + 1 + rLength + 1 + 1 + sLength;
       var shortLength = rsBytes < MAX_OCTET;
-      var dst = Buffer2.allocUnsafe((shortLength ? 2 : 3) + rsBytes);
+      var dst = Buffer3.allocUnsafe((shortLength ? 2 : 3) + rsBytes);
       var offset = 0;
       dst[offset++] = ENCODED_TAG_SEQ;
       if (shortLength) {
@@ -37495,10 +39025,10 @@ var require_oauth2client = __commonJS({
        * https://github.com/googleapis/google-auth-library-nodejs/blob/main/samples/oauth2-codeVerifier.js
        */
       async generateCodeVerifierAsync() {
-        const crypto13 = (0, crypto_1.createCrypto)();
-        const randomString = crypto13.randomBytesBase64(96);
+        const crypto14 = (0, crypto_1.createCrypto)();
+        const randomString = crypto14.randomBytesBase64(96);
         const codeVerifier = randomString.replace(/\+/g, "~").replace(/=/g, "_").replace(/\//g, "-");
-        const unencodedCodeChallenge = await crypto13.sha256DigestBase64(codeVerifier);
+        const unencodedCodeChallenge = await crypto14.sha256DigestBase64(codeVerifier);
         const codeChallenge = unencodedCodeChallenge.split("=")[0].replace(/\+/g, "-").replace(/\//g, "_");
         return { codeVerifier, codeChallenge };
       }
@@ -37942,7 +39472,7 @@ var require_oauth2client = __commonJS({
        * @return Returns a promise resolving to LoginTicket on verification.
        */
       async verifySignedJwtWithCertsAsync(jwt, certs, requiredAudience, issuers, maxExpiry) {
-        const crypto13 = (0, crypto_1.createCrypto)();
+        const crypto14 = (0, crypto_1.createCrypto)();
         if (!maxExpiry) {
           maxExpiry = _OAuth2Client.DEFAULT_MAX_TOKEN_LIFETIME_SECS_;
         }
@@ -37955,7 +39485,7 @@ var require_oauth2client = __commonJS({
         let envelope;
         let payload;
         try {
-          envelope = JSON.parse(crypto13.decodeBase64StringUtf8(segments[0]));
+          envelope = JSON.parse(crypto14.decodeBase64StringUtf8(segments[0]));
         } catch (err) {
           if (err instanceof Error) {
             err.message = `Can't parse token envelope: ${segments[0]}': ${err.message}`;
@@ -37966,7 +39496,7 @@ var require_oauth2client = __commonJS({
           throw new Error("Can't parse token envelope: " + segments[0]);
         }
         try {
-          payload = JSON.parse(crypto13.decodeBase64StringUtf8(segments[1]));
+          payload = JSON.parse(crypto14.decodeBase64StringUtf8(segments[1]));
         } catch (err) {
           if (err instanceof Error) {
             err.message = `Can't parse token payload '${segments[0]}`;
@@ -37983,7 +39513,7 @@ var require_oauth2client = __commonJS({
         if (envelope.alg === "ES256") {
           signature = formatEcdsa.joseToDer(signature, "ES256").toString("base64");
         }
-        const verified = await crypto13.verify(cert, signed, signature);
+        const verified = await crypto14.verify(cert, signed, signature);
         if (!verified) {
           throw new Error("Invalid token signature: " + jwt);
         }
@@ -38268,7 +39798,7 @@ var require_envDetect = __commonJS({
 // node_modules/jws/lib/data-stream.js
 var require_data_stream = __commonJS({
   "node_modules/jws/lib/data-stream.js"(exports2, module2) {
-    var Buffer2 = require_safe_buffer().Buffer;
+    var Buffer3 = require_safe_buffer().Buffer;
     var Stream = require("stream");
     var util2 = require("util");
     function DataStream(data) {
@@ -38276,11 +39806,11 @@ var require_data_stream = __commonJS({
       this.writable = true;
       this.readable = true;
       if (!data) {
-        this.buffer = Buffer2.alloc(0);
+        this.buffer = Buffer3.alloc(0);
         return this;
       }
       if (typeof data.pipe === "function") {
-        this.buffer = Buffer2.alloc(0);
+        this.buffer = Buffer3.alloc(0);
         data.pipe(this);
         return this;
       }
@@ -38298,7 +39828,7 @@ var require_data_stream = __commonJS({
     }
     util2.inherits(DataStream, Stream);
     DataStream.prototype.write = function write(data) {
-      this.buffer = Buffer2.concat([this.buffer, Buffer2.from(data)]);
+      this.buffer = Buffer3.concat([this.buffer, Buffer3.from(data)]);
       this.emit("data", data);
     };
     DataStream.prototype.end = function end(data) {
@@ -38317,11 +39847,11 @@ var require_data_stream = __commonJS({
 var require_buffer_equal_constant_time = __commonJS({
   "node_modules/buffer-equal-constant-time/index.js"(exports2, module2) {
     "use strict";
-    var Buffer2 = require("buffer").Buffer;
+    var Buffer3 = require("buffer").Buffer;
     var SlowBuffer = require("buffer").SlowBuffer;
     module2.exports = bufferEq;
     function bufferEq(a, b) {
-      if (!Buffer2.isBuffer(a) || !Buffer2.isBuffer(b)) {
+      if (!Buffer3.isBuffer(a) || !Buffer3.isBuffer(b)) {
         return false;
       }
       if (a.length !== b.length) {
@@ -38334,14 +39864,14 @@ var require_buffer_equal_constant_time = __commonJS({
       return c === 0;
     }
     bufferEq.install = function() {
-      Buffer2.prototype.equal = SlowBuffer.prototype.equal = function equal(that) {
+      Buffer3.prototype.equal = SlowBuffer.prototype.equal = function equal(that) {
         return bufferEq(this, that);
       };
     };
-    var origBufEqual = Buffer2.prototype.equal;
+    var origBufEqual = Buffer3.prototype.equal;
     var origSlowBufEqual = SlowBuffer.prototype.equal;
     bufferEq.restore = function() {
-      Buffer2.prototype.equal = origBufEqual;
+      Buffer3.prototype.equal = origBufEqual;
       SlowBuffer.prototype.equal = origSlowBufEqual;
     };
   }
@@ -38350,21 +39880,21 @@ var require_buffer_equal_constant_time = __commonJS({
 // node_modules/jwa/index.js
 var require_jwa = __commonJS({
   "node_modules/jwa/index.js"(exports2, module2) {
-    var Buffer2 = require_safe_buffer().Buffer;
-    var crypto13 = require("crypto");
+    var Buffer3 = require_safe_buffer().Buffer;
+    var crypto14 = require("crypto");
     var formatEcdsa = require_ecdsa_sig_formatter();
     var util2 = require("util");
     var MSG_INVALID_ALGORITHM = '"%s" is not a valid algorithm.\n  Supported algorithms are:\n  "HS256", "HS384", "HS512", "RS256", "RS384", "RS512", "PS256", "PS384", "PS512", "ES256", "ES384", "ES512" and "none".';
     var MSG_INVALID_SECRET = "secret must be a string or buffer";
     var MSG_INVALID_VERIFIER_KEY = "key must be a string or a buffer";
     var MSG_INVALID_SIGNER_KEY = "key must be a string, a buffer or an object";
-    var supportsKeyObjects = typeof crypto13.createPublicKey === "function";
+    var supportsKeyObjects = typeof crypto14.createPublicKey === "function";
     if (supportsKeyObjects) {
       MSG_INVALID_VERIFIER_KEY += " or a KeyObject";
       MSG_INVALID_SECRET += "or a KeyObject";
     }
     function checkIsPublicKey(key) {
-      if (Buffer2.isBuffer(key)) {
+      if (Buffer3.isBuffer(key)) {
         return;
       }
       if (typeof key === "string") {
@@ -38387,7 +39917,7 @@ var require_jwa = __commonJS({
       }
     }
     function checkIsPrivateKey(key) {
-      if (Buffer2.isBuffer(key)) {
+      if (Buffer3.isBuffer(key)) {
         return;
       }
       if (typeof key === "string") {
@@ -38399,7 +39929,7 @@ var require_jwa = __commonJS({
       throw typeError(MSG_INVALID_SIGNER_KEY);
     }
     function checkIsSecretKey(key) {
-      if (Buffer2.isBuffer(key)) {
+      if (Buffer3.isBuffer(key)) {
         return;
       }
       if (typeof key === "string") {
@@ -38437,7 +39967,7 @@ var require_jwa = __commonJS({
       return new TypeError(errMsg);
     }
     function bufferOrString(obj) {
-      return Buffer2.isBuffer(obj) || typeof obj === "string";
+      return Buffer3.isBuffer(obj) || typeof obj === "string";
     }
     function normalizeInput(thing) {
       if (!bufferOrString(thing))
@@ -38448,17 +39978,17 @@ var require_jwa = __commonJS({
       return function sign(thing, secret) {
         checkIsSecretKey(secret);
         thing = normalizeInput(thing);
-        var hmac = crypto13.createHmac("sha" + bits, secret);
+        var hmac = crypto14.createHmac("sha" + bits, secret);
         var sig = (hmac.update(thing), hmac.digest("base64"));
         return fromBase64(sig);
       };
     }
     var bufferEqual;
-    var timingSafeEqual = "timingSafeEqual" in crypto13 ? function timingSafeEqual2(a, b) {
+    var timingSafeEqual = "timingSafeEqual" in crypto14 ? function timingSafeEqual2(a, b) {
       if (a.byteLength !== b.byteLength) {
         return false;
       }
-      return crypto13.timingSafeEqual(a, b);
+      return crypto14.timingSafeEqual(a, b);
     } : function timingSafeEqual2(a, b) {
       if (!bufferEqual) {
         bufferEqual = require_buffer_equal_constant_time();
@@ -38468,14 +39998,14 @@ var require_jwa = __commonJS({
     function createHmacVerifier(bits) {
       return function verify(thing, signature, secret) {
         var computedSig = createHmacSigner(bits)(thing, secret);
-        return timingSafeEqual(Buffer2.from(signature), Buffer2.from(computedSig));
+        return timingSafeEqual(Buffer3.from(signature), Buffer3.from(computedSig));
       };
     }
     function createKeySigner(bits) {
       return function sign(thing, privateKey) {
         checkIsPrivateKey(privateKey);
         thing = normalizeInput(thing);
-        var signer = crypto13.createSign("RSA-SHA" + bits);
+        var signer = crypto14.createSign("RSA-SHA" + bits);
         var sig = (signer.update(thing), signer.sign(privateKey, "base64"));
         return fromBase64(sig);
       };
@@ -38485,7 +40015,7 @@ var require_jwa = __commonJS({
         checkIsPublicKey(publicKey);
         thing = normalizeInput(thing);
         signature = toBase64(signature);
-        var verifier = crypto13.createVerify("RSA-SHA" + bits);
+        var verifier = crypto14.createVerify("RSA-SHA" + bits);
         verifier.update(thing);
         return verifier.verify(publicKey, signature, "base64");
       };
@@ -38494,11 +40024,11 @@ var require_jwa = __commonJS({
       return function sign(thing, privateKey) {
         checkIsPrivateKey(privateKey);
         thing = normalizeInput(thing);
-        var signer = crypto13.createSign("RSA-SHA" + bits);
+        var signer = crypto14.createSign("RSA-SHA" + bits);
         var sig = (signer.update(thing), signer.sign({
           key: privateKey,
-          padding: crypto13.constants.RSA_PKCS1_PSS_PADDING,
-          saltLength: crypto13.constants.RSA_PSS_SALTLEN_DIGEST
+          padding: crypto14.constants.RSA_PKCS1_PSS_PADDING,
+          saltLength: crypto14.constants.RSA_PSS_SALTLEN_DIGEST
         }, "base64"));
         return fromBase64(sig);
       };
@@ -38508,12 +40038,12 @@ var require_jwa = __commonJS({
         checkIsPublicKey(publicKey);
         thing = normalizeInput(thing);
         signature = toBase64(signature);
-        var verifier = crypto13.createVerify("RSA-SHA" + bits);
+        var verifier = crypto14.createVerify("RSA-SHA" + bits);
         verifier.update(thing);
         return verifier.verify({
           key: publicKey,
-          padding: crypto13.constants.RSA_PKCS1_PSS_PADDING,
-          saltLength: crypto13.constants.RSA_PSS_SALTLEN_DIGEST
+          padding: crypto14.constants.RSA_PKCS1_PSS_PADDING,
+          saltLength: crypto14.constants.RSA_PSS_SALTLEN_DIGEST
         }, signature, "base64");
       };
     }
@@ -38574,11 +40104,11 @@ var require_jwa = __commonJS({
 // node_modules/jws/lib/tostring.js
 var require_tostring = __commonJS({
   "node_modules/jws/lib/tostring.js"(exports2, module2) {
-    var Buffer2 = require("buffer").Buffer;
+    var Buffer3 = require("buffer").Buffer;
     module2.exports = function toString(obj) {
       if (typeof obj === "string")
         return obj;
-      if (typeof obj === "number" || Buffer2.isBuffer(obj))
+      if (typeof obj === "number" || Buffer3.isBuffer(obj))
         return obj.toString();
       return JSON.stringify(obj);
     };
@@ -38588,14 +40118,14 @@ var require_tostring = __commonJS({
 // node_modules/jws/lib/sign-stream.js
 var require_sign_stream = __commonJS({
   "node_modules/jws/lib/sign-stream.js"(exports2, module2) {
-    var Buffer2 = require_safe_buffer().Buffer;
+    var Buffer3 = require_safe_buffer().Buffer;
     var DataStream = require_data_stream();
     var jwa = require_jwa();
     var Stream = require("stream");
     var toString = require_tostring();
     var util2 = require("util");
     function base64url(string, encoding) {
-      return Buffer2.from(string, encoding).toString("base64").replace(/=/g, "").replace(/\+/g, "-").replace(/\//g, "_");
+      return Buffer3.from(string, encoding).toString("base64").replace(/=/g, "").replace(/\+/g, "-").replace(/\//g, "_");
     }
     function jwsSecuredInput(header, payload, encoding) {
       encoding = encoding || "utf8";
@@ -38663,7 +40193,7 @@ var require_sign_stream = __commonJS({
 // node_modules/jws/lib/verify-stream.js
 var require_verify_stream = __commonJS({
   "node_modules/jws/lib/verify-stream.js"(exports2, module2) {
-    var Buffer2 = require_safe_buffer().Buffer;
+    var Buffer3 = require_safe_buffer().Buffer;
     var DataStream = require_data_stream();
     var jwa = require_jwa();
     var Stream = require("stream");
@@ -38684,7 +40214,7 @@ var require_verify_stream = __commonJS({
     }
     function headerFromJWS(jwsSig) {
       var encodedHeader = jwsSig.split(".", 1)[0];
-      return safeJsonParse(Buffer2.from(encodedHeader, "base64").toString("binary"));
+      return safeJsonParse(Buffer3.from(encodedHeader, "base64").toString("binary"));
     }
     function securedInputFromJWS(jwsSig) {
       return jwsSig.split(".", 2).join(".");
@@ -38695,7 +40225,7 @@ var require_verify_stream = __commonJS({
     function payloadFromJWS(jwsSig, encoding) {
       encoding = encoding || "utf8";
       var payload = jwsSig.split(".")[1];
-      return Buffer2.from(payload, "base64").toString(encoding);
+      return Buffer3.from(payload, "base64").toString(encoding);
     }
     function isValidJws(string) {
       return JWS_REGEX.test(string) && !!headerFromJWS(string);
@@ -40671,14 +42201,14 @@ var require_awsrequestsigner = __commonJS({
       }
     };
     exports2.AwsRequestSigner = AwsRequestSigner;
-    async function sign(crypto13, key, msg) {
-      return await crypto13.signWithHmacSha256(key, msg);
+    async function sign(crypto14, key, msg) {
+      return await crypto14.signWithHmacSha256(key, msg);
     }
-    async function getSigningKey(crypto13, key, dateStamp, region, serviceName) {
-      const kDate = await sign(crypto13, `AWS4${key}`, dateStamp);
-      const kRegion = await sign(crypto13, kDate, region);
-      const kService = await sign(crypto13, kRegion, serviceName);
-      const kSigning = await sign(crypto13, kService, "aws4_request");
+    async function getSigningKey(crypto14, key, dateStamp, region, serviceName) {
+      const kDate = await sign(crypto14, `AWS4${key}`, dateStamp);
+      const kRegion = await sign(crypto14, kDate, region);
+      const kService = await sign(crypto14, kRegion, serviceName);
+      const kSigning = await sign(crypto14, kService, "aws4_request");
       return kSigning;
     }
     async function generateAuthenticationHeaderMap(options) {
@@ -42263,24 +43793,24 @@ var require_googleauth = __commonJS({
           const signed = await client.sign(data);
           return signed.signedBlob;
         }
-        const crypto13 = (0, crypto_1.createCrypto)();
+        const crypto14 = (0, crypto_1.createCrypto)();
         if (client instanceof jwtclient_1.JWT && client.key) {
-          const sign = await crypto13.sign(client.key, data);
+          const sign = await crypto14.sign(client.key, data);
           return sign;
         }
         const creds = await this.getCredentials();
         if (!creds.client_email) {
           throw new Error("Cannot sign data without `client_email`.");
         }
-        return this.signBlob(crypto13, creds.client_email, data, endpoint);
+        return this.signBlob(crypto14, creds.client_email, data, endpoint);
       }
-      async signBlob(crypto13, emailOrUniqueId, data, endpoint) {
+      async signBlob(crypto14, emailOrUniqueId, data, endpoint) {
         const url2 = new URL(endpoint + `${emailOrUniqueId}:signBlob`);
         const res = await this.request({
           method: "POST",
           url: url2.href,
           data: {
-            payload: crypto13.encodeBase64StringUtf8(data)
+            payload: crypto14.encodeBase64StringUtf8(data)
           },
           retry: true,
           retryConfig: {
@@ -42958,15 +44488,15 @@ var require_retry_request = __commonJS({
 // node_modules/teeny-request/node_modules/uuid/dist/esm-node/rng.js
 function rng3() {
   if (poolPtr3 > rnds8Pool3.length - 16) {
-    import_crypto6.default.randomFillSync(rnds8Pool3);
+    import_crypto9.default.randomFillSync(rnds8Pool3);
     poolPtr3 = 0;
   }
   return rnds8Pool3.slice(poolPtr3, poolPtr3 += 16);
 }
-var import_crypto6, rnds8Pool3, poolPtr3;
+var import_crypto9, rnds8Pool3, poolPtr3;
 var init_rng2 = __esm({
   "node_modules/teeny-request/node_modules/uuid/dist/esm-node/rng.js"() {
-    import_crypto6 = __toESM(require("crypto"));
+    import_crypto9 = __toESM(require("crypto"));
     rnds8Pool3 = new Uint8Array(256);
     poolPtr3 = rnds8Pool3.length;
   }
@@ -43169,12 +44699,12 @@ function md52(bytes) {
   } else if (typeof bytes === "string") {
     bytes = Buffer.from(bytes, "utf8");
   }
-  return import_crypto7.default.createHash("md5").update(bytes).digest();
+  return import_crypto10.default.createHash("md5").update(bytes).digest();
 }
-var import_crypto7, md5_default2;
+var import_crypto10, md5_default2;
 var init_md52 = __esm({
   "node_modules/teeny-request/node_modules/uuid/dist/esm-node/md5.js"() {
-    import_crypto7 = __toESM(require("crypto"));
+    import_crypto10 = __toESM(require("crypto"));
     md5_default2 = md52;
   }
 });
@@ -43191,12 +44721,12 @@ var init_v32 = __esm({
 });
 
 // node_modules/teeny-request/node_modules/uuid/dist/esm-node/native.js
-var import_crypto8, native_default2;
+var import_crypto11, native_default2;
 var init_native2 = __esm({
   "node_modules/teeny-request/node_modules/uuid/dist/esm-node/native.js"() {
-    import_crypto8 = __toESM(require("crypto"));
+    import_crypto11 = __toESM(require("crypto"));
     native_default2 = {
-      randomUUID: import_crypto8.default.randomUUID
+      randomUUID: import_crypto11.default.randomUUID
     };
   }
 });
@@ -43236,12 +44766,12 @@ function sha12(bytes) {
   } else if (typeof bytes === "string") {
     bytes = Buffer.from(bytes, "utf8");
   }
-  return import_crypto9.default.createHash("sha1").update(bytes).digest();
+  return import_crypto12.default.createHash("sha1").update(bytes).digest();
 }
-var import_crypto9, sha1_default2;
+var import_crypto12, sha1_default2;
 var init_sha12 = __esm({
   "node_modules/teeny-request/node_modules/uuid/dist/esm-node/sha1.js"() {
-    import_crypto9 = __toESM(require("crypto"));
+    import_crypto12 = __toESM(require("crypto"));
     sha1_default2 = sha12;
   }
 });
@@ -44781,12 +46311,12 @@ var require_buffer_list = __commonJS({
       return (hint === "string" ? String : Number)(input);
     }
     var _require = require("buffer");
-    var Buffer2 = _require.Buffer;
+    var Buffer3 = _require.Buffer;
     var _require2 = require("util");
     var inspect = _require2.inspect;
     var custom = inspect && inspect.custom || "inspect";
     function copyBuffer(src, target, offset) {
-      Buffer2.prototype.copy.call(src, target, offset);
+      Buffer3.prototype.copy.call(src, target, offset);
     }
     module2.exports = /* @__PURE__ */ (function() {
       function BufferList() {
@@ -44846,8 +46376,8 @@ var require_buffer_list = __commonJS({
       }, {
         key: "concat",
         value: function concat(n) {
-          if (this.length === 0) return Buffer2.alloc(0);
-          var ret = Buffer2.allocUnsafe(n >>> 0);
+          if (this.length === 0) return Buffer3.alloc(0);
+          var ret = Buffer3.allocUnsafe(n >>> 0);
           var p = this.head;
           var i = 0;
           while (p) {
@@ -44911,7 +46441,7 @@ var require_buffer_list = __commonJS({
       }, {
         key: "_getBuffer",
         value: function _getBuffer(n) {
-          var ret = Buffer2.allocUnsafe(n);
+          var ret = Buffer3.allocUnsafe(n);
           var p = this.head;
           var c = 1;
           p.data.copy(ret);
@@ -45194,14 +46724,14 @@ var require_stream_writable = __commonJS({
       deprecate: require_node2()
     };
     var Stream = require_stream2();
-    var Buffer2 = require("buffer").Buffer;
+    var Buffer3 = require("buffer").Buffer;
     var OurUint8Array = (typeof global !== "undefined" ? global : typeof window !== "undefined" ? window : typeof self !== "undefined" ? self : {}).Uint8Array || function() {
     };
     function _uint8ArrayToBuffer(chunk) {
-      return Buffer2.from(chunk);
+      return Buffer3.from(chunk);
     }
     function _isUint8Array(obj) {
-      return Buffer2.isBuffer(obj) || obj instanceof OurUint8Array;
+      return Buffer3.isBuffer(obj) || obj instanceof OurUint8Array;
     }
     var destroyImpl = require_destroy();
     var _require = require_state();
@@ -45329,7 +46859,7 @@ var require_stream_writable = __commonJS({
       var state = this._writableState;
       var ret = false;
       var isBuf = !state.objectMode && _isUint8Array(chunk);
-      if (isBuf && !Buffer2.isBuffer(chunk)) {
+      if (isBuf && !Buffer3.isBuffer(chunk)) {
         chunk = _uint8ArrayToBuffer(chunk);
       }
       if (typeof encoding === "function") {
@@ -45373,7 +46903,7 @@ var require_stream_writable = __commonJS({
     });
     function decodeChunk(state, chunk, encoding) {
       if (!state.objectMode && state.decodeStrings !== false && typeof chunk === "string") {
-        chunk = Buffer2.from(chunk, encoding);
+        chunk = Buffer3.from(chunk, encoding);
       }
       return chunk;
     }
@@ -45743,8 +47273,8 @@ var require_stream_duplex = __commonJS({
 var require_string_decoder = __commonJS({
   "node_modules/string_decoder/lib/string_decoder.js"(exports2) {
     "use strict";
-    var Buffer2 = require_safe_buffer().Buffer;
-    var isEncoding = Buffer2.isEncoding || function(encoding) {
+    var Buffer3 = require_safe_buffer().Buffer;
+    var isEncoding = Buffer3.isEncoding || function(encoding) {
       encoding = "" + encoding;
       switch (encoding && encoding.toLowerCase()) {
         case "hex":
@@ -45792,7 +47322,7 @@ var require_string_decoder = __commonJS({
     }
     function normalizeEncoding(enc) {
       var nenc = _normalizeEncoding(enc);
-      if (typeof nenc !== "string" && (Buffer2.isEncoding === isEncoding || !isEncoding(enc))) throw new Error("Unknown encoding: " + enc);
+      if (typeof nenc !== "string" && (Buffer3.isEncoding === isEncoding || !isEncoding(enc))) throw new Error("Unknown encoding: " + enc);
       return nenc || enc;
     }
     exports2.StringDecoder = StringDecoder;
@@ -45821,7 +47351,7 @@ var require_string_decoder = __commonJS({
       }
       this.lastNeed = 0;
       this.lastTotal = 0;
-      this.lastChar = Buffer2.allocUnsafe(nb);
+      this.lastChar = Buffer3.allocUnsafe(nb);
     }
     StringDecoder.prototype.write = function(buf) {
       if (buf.length === 0) return "";
@@ -45987,8 +47517,8 @@ var require_end_of_stream = __commonJS({
       return function() {
         if (called) return;
         called = true;
-        for (var _len = arguments.length, args = new Array(_len), _key = 0; _key < _len; _key++) {
-          args[_key] = arguments[_key];
+        for (var _len = arguments.length, args = new Array(_len), _key2 = 0; _key2 < _len; _key2++) {
+          args[_key2] = arguments[_key2];
         }
         callback.apply(this, args);
       };
@@ -46382,14 +47912,14 @@ var require_stream_readable = __commonJS({
       return emitter.listeners(type).length;
     };
     var Stream = require_stream2();
-    var Buffer2 = require("buffer").Buffer;
+    var Buffer3 = require("buffer").Buffer;
     var OurUint8Array = (typeof global !== "undefined" ? global : typeof window !== "undefined" ? window : typeof self !== "undefined" ? self : {}).Uint8Array || function() {
     };
     function _uint8ArrayToBuffer(chunk) {
-      return Buffer2.from(chunk);
+      return Buffer3.from(chunk);
     }
     function _isUint8Array(obj) {
-      return Buffer2.isBuffer(obj) || obj instanceof OurUint8Array;
+      return Buffer3.isBuffer(obj) || obj instanceof OurUint8Array;
     }
     var debugUtil = require("util");
     var debug;
@@ -46497,7 +48027,7 @@ var require_stream_readable = __commonJS({
         if (typeof chunk === "string") {
           encoding = encoding || state.defaultEncoding;
           if (encoding !== state.encoding) {
-            chunk = Buffer2.from(chunk, encoding);
+            chunk = Buffer3.from(chunk, encoding);
             encoding = "";
           }
           skipChunkCheck = true;
@@ -46522,7 +48052,7 @@ var require_stream_readable = __commonJS({
         if (er) {
           errorOrDestroy(stream, er);
         } else if (state.objectMode || chunk && chunk.length > 0) {
-          if (typeof chunk !== "string" && !state.objectMode && Object.getPrototypeOf(chunk) !== Buffer2.prototype) {
+          if (typeof chunk !== "string" && !state.objectMode && Object.getPrototypeOf(chunk) !== Buffer3.prototype) {
             chunk = _uint8ArrayToBuffer(chunk);
           }
           if (addToFront) {
@@ -47280,8 +48810,8 @@ var require_pipeline = __commonJS({
       return streams.pop();
     }
     function pipeline2() {
-      for (var _len = arguments.length, streams = new Array(_len), _key = 0; _key < _len; _key++) {
-        streams[_key] = arguments[_key];
+      for (var _len = arguments.length, streams = new Array(_len), _key2 = 0; _key2 < _len; _key2++) {
+        streams[_key2] = arguments[_key2];
       }
       var callback = popCallback(streams);
       if (Array.isArray(streams[0])) streams = streams[0];
@@ -50836,8 +52366,10 @@ var import_fs2 = __toESM(require("fs"), 1);
 // shared/schema.ts
 var schema_exports = {};
 __export(schema_exports, {
+  appSettings: () => appSettings,
   attachments: () => attachments,
   attachmentsRelations: () => attachmentsRelations,
+  backups: () => backups,
   customFieldDefinitions: () => customFieldDefinitions,
   masterProducts: () => masterProducts,
   masterProductsRelations: () => masterProductsRelations,
@@ -50848,7 +52380,8 @@ __export(schema_exports, {
   suppliers: () => suppliers,
   suppliersRelations: () => suppliersRelations,
   treeNodes: () => treeNodes,
-  treeNodesRelations: () => treeNodesRelations
+  treeNodesRelations: () => treeNodesRelations,
+  users: () => users
 });
 
 // node_modules/drizzle-orm/entity.js
@@ -57309,7 +58842,7 @@ var NoopCache = class extends Cache {
     return "all";
   }
   static [entityKind] = "NoopCache";
-  async get(_key) {
+  async get(_key2) {
     return void 0;
   }
   async put(_hashedQuery, _response, _tables, _config) {
@@ -57519,6 +59052,15 @@ var NoopLogger = class {
 };
 
 // shared/schema.ts
+var users = pgTable("users", {
+  id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
+  username: varchar("username", { length: 100 }).notNull().unique(),
+  passwordHash: text("password_hash").notNull(),
+  role: varchar("role", { length: 20 }).notNull().default("user"),
+  isFirstLogin: boolean("is_first_login").default(true),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow()
+});
 var suppliers = pgTable("suppliers", {
   id: serial("id").primaryKey(),
   supplierId: varchar("supplier_id", { length: 100 }).notNull().unique(),
@@ -57548,7 +59090,7 @@ var masterProducts = pgTable("master_products", {
 var supplierProducts = pgTable("supplier_products", {
   id: serial("id").primaryKey(),
   supplierProductId: varchar("supplier_product_id", { length: 100 }).notNull().unique(),
-  masterProductId: varchar("master_product_id", { length: 100 }).notNull(),
+  masterProductId: varchar("master_product_id", { length: 100 }),
   supplierId: varchar("supplier_id", { length: 100 }).notNull(),
   productName: varchar("product_name", { length: 255 }),
   formFactor: varchar("form_factor", { length: 100 }),
@@ -57634,6 +59176,28 @@ var attachments = pgTable("attachments", {
   category: varchar("category", { length: 100 }),
   uploadedAt: timestamp("uploaded_at").defaultNow()
 });
+var appSettings = pgTable("app_settings", {
+  id: serial("id").primaryKey(),
+  key: varchar("key", { length: 100 }).notNull().unique(),
+  value: jsonb("value").notNull(),
+  updatedAt: timestamp("updated_at").defaultNow()
+});
+var backups = pgTable("backups", {
+  id: serial("id").primaryKey(),
+  versionNumber: integer("version_number").notNull(),
+  createdAt: timestamp("created_at").defaultNow(),
+  triggerType: varchar("trigger_type", { length: 20 }).notNull(),
+  // AUTO | MANUAL | SYSTEM
+  description: text("description"),
+  compressedData: text("compressed_data").notNull(),
+  // Base64 encoded gzip data
+  originalSize: integer("original_size").notNull(),
+  compressedSize: integer("compressed_size").notNull(),
+  checksum: varchar("checksum", { length: 64 }).notNull(),
+  // SHA-256 hash
+  entityCounts: jsonb("entity_counts").default({})
+  // { products: n, suppliers: n, treeNodes: n, ... }
+});
 var suppliersRelations = relations(suppliers, ({ many }) => ({
   supplierProducts: many(supplierProducts)
 }));
@@ -57645,10 +59209,6 @@ var masterProductsRelations = relations(masterProducts, ({ many, one }) => ({
   })
 }));
 var supplierProductsRelations = relations(supplierProducts, ({ one, many }) => ({
-  masterProduct: one(masterProducts, {
-    fields: [supplierProducts.masterProductId],
-    references: [masterProducts.masterProductId]
-  }),
   supplier: one(suppliers, {
     fields: [supplierProducts.supplierId],
     references: [suppliers.supplierId]
@@ -58065,35 +59625,12 @@ var DatabaseStorage = class {
     const result = await db.delete(suppliers).where(eq(suppliers.supplierId, supplierId)).returning();
     return result.length > 0;
   }
-  async getMasterProducts() {
-    return await db.select().from(masterProducts).orderBy(masterProducts.name);
-  }
-  async getMasterProduct(masterProductId) {
-    const [mp] = await db.select().from(masterProducts).where(eq(masterProducts.masterProductId, masterProductId));
-    return mp || void 0;
-  }
-  async createMasterProduct(mp) {
-    const [created] = await db.insert(masterProducts).values(mp).returning();
-    return created;
-  }
-  async updateMasterProduct(masterProductId, updates) {
-    const [updated] = await db.update(masterProducts).set({ ...updates, updatedAt: /* @__PURE__ */ new Date() }).where(eq(masterProducts.masterProductId, masterProductId)).returning();
-    return updated || void 0;
-  }
-  async deleteMasterProduct(masterProductId) {
-    await db.delete(supplierProducts).where(eq(supplierProducts.masterProductId, masterProductId));
-    const result = await db.delete(masterProducts).where(eq(masterProducts.masterProductId, masterProductId)).returning();
-    return result.length > 0;
-  }
   async getSupplierProducts() {
     return await db.select().from(supplierProducts).orderBy(supplierProducts.createdAt);
   }
   async getSupplierProduct(supplierProductId) {
     const [sp] = await db.select().from(supplierProducts).where(eq(supplierProducts.supplierProductId, supplierProductId));
     return sp || void 0;
-  }
-  async getSupplierProductsByMasterId(masterProductId) {
-    return await db.select().from(supplierProducts).where(eq(supplierProducts.masterProductId, masterProductId));
   }
   async getSupplierProductsBySupplierId(supplierId) {
     return await db.select().from(supplierProducts).where(eq(supplierProducts.supplierId, supplierId));
@@ -58133,11 +59670,3240 @@ var DatabaseStorage = class {
     const result = await db.delete(attachments).where(eq(attachments.attachmentId, attachmentId)).returning();
     return result.length > 0;
   }
+  async getUsageAreas() {
+    const [setting] = await db.select().from(appSettings).where(eq(appSettings.key, "usage_areas"));
+    if (setting && Array.isArray(setting.value)) {
+      return setting.value;
+    }
+    const defaultAreas = [
+      "Commercial",
+      "Food & Beverage",
+      "Healthcare",
+      "Industrial",
+      "Infrastructure",
+      "Parking",
+      "Residential",
+      "Sports"
+    ];
+    await db.insert(appSettings).values({ key: "usage_areas", value: defaultAreas }).onConflictDoNothing();
+    return defaultAreas;
+  }
+  async setUsageAreas(areas) {
+    const [existing] = await db.select().from(appSettings).where(eq(appSettings.key, "usage_areas"));
+    if (existing) {
+      await db.update(appSettings).set({ value: areas, updatedAt: /* @__PURE__ */ new Date() }).where(eq(appSettings.key, "usage_areas"));
+    } else {
+      await db.insert(appSettings).values({ key: "usage_areas", value: areas });
+    }
+    return areas;
+  }
 };
 var storage = new DatabaseStorage();
 
+// server/backupService.ts
+var import_crypto = require("crypto");
+var import_zlib = require("zlib");
+var BACKUP_VERSION = "1.0.0";
+var BACKUP_SETTINGS_KEY = "backup_settings";
+var maxBackups = 50;
+var autoBackupIntervalHours = 6;
+var scheduledBackupTimer = null;
+async function loadSettingsFromDb() {
+  try {
+    const [setting] = await db.select().from(appSettings).where(eq(appSettings.key, BACKUP_SETTINGS_KEY));
+    if (setting && setting.value) {
+      const savedSettings = setting.value;
+      if (savedSettings.maxBackups) maxBackups = savedSettings.maxBackups;
+      if (savedSettings.autoBackupIntervalHours) autoBackupIntervalHours = savedSettings.autoBackupIntervalHours;
+      console.log(`[Backup] Loaded settings: maxBackups=${maxBackups}, interval=${autoBackupIntervalHours}h`);
+    }
+  } catch (error) {
+    console.error("[Backup] Failed to load settings, using defaults:", error);
+  }
+}
+async function saveSettingsToDb() {
+  try {
+    const settingsValue = { maxBackups, autoBackupIntervalHours };
+    const existing = await db.select().from(appSettings).where(eq(appSettings.key, BACKUP_SETTINGS_KEY));
+    if (existing.length > 0) {
+      await db.update(appSettings).set({ value: settingsValue, updatedAt: /* @__PURE__ */ new Date() }).where(eq(appSettings.key, BACKUP_SETTINGS_KEY));
+    } else {
+      await db.insert(appSettings).values({
+        key: BACKUP_SETTINGS_KEY,
+        value: settingsValue
+      });
+    }
+  } catch (error) {
+    console.error("[Backup] Failed to save settings:", error);
+  }
+}
+function getBackupSettings() {
+  return { maxBackups, autoBackupIntervalHours };
+}
+async function updateBackupSettings(settings) {
+  let maxBackupsChanged = false;
+  if (settings.maxBackups !== void 0 && settings.maxBackups >= 5 && settings.maxBackups <= 100) {
+    if (settings.maxBackups !== maxBackups) {
+      maxBackups = settings.maxBackups;
+      maxBackupsChanged = true;
+    }
+  }
+  if (settings.autoBackupIntervalHours !== void 0 && settings.autoBackupIntervalHours >= 1 && settings.autoBackupIntervalHours <= 24) {
+    autoBackupIntervalHours = settings.autoBackupIntervalHours;
+    restartScheduledBackups();
+  }
+  await saveSettingsToDb();
+  if (maxBackupsChanged) {
+    await cleanupOldBackups();
+  }
+  return getBackupSettings();
+}
+function restartScheduledBackups() {
+  if (scheduledBackupTimer) {
+    clearInterval(scheduledBackupTimer);
+    scheduledBackupTimer = null;
+  }
+  const intervalMs = autoBackupIntervalHours * 60 * 60 * 1e3;
+  scheduledBackupTimer = setInterval(runScheduledBackup, intervalMs);
+  console.log(`[Backup] Scheduled backups updated (every ${autoBackupIntervalHours} hours)`);
+}
+async function initializeBackupService() {
+  await loadSettingsFromDb();
+}
+function computeChecksum(data) {
+  return (0, import_crypto.createHash)("sha256").update(data).digest("hex");
+}
+function compressData(jsonString) {
+  const compressed = (0, import_zlib.gzipSync)(Buffer.from(jsonString, "utf-8"), { level: 9 });
+  return compressed.toString("base64");
+}
+function decompressData(base64Data) {
+  const buffer = Buffer.from(base64Data, "base64");
+  const decompressed = (0, import_zlib.gunzipSync)(buffer);
+  return decompressed.toString("utf-8");
+}
+async function getNextVersionNumber() {
+  const result = await db.select({ maxVersion: sql`COALESCE(MAX(version_number), 0)` }).from(backups);
+  return (result[0]?.maxVersion || 0) + 1;
+}
+async function cleanupOldBackups() {
+  const allBackups = await db.select({ id: backups.id }).from(backups).orderBy(desc(backups.versionNumber));
+  if (allBackups.length > maxBackups) {
+    const toDelete = allBackups.slice(maxBackups);
+    for (const backup of toDelete) {
+      await db.delete(backups).where(eq(backups.id, backup.id));
+    }
+  }
+}
+async function createBackup(triggerType, description) {
+  const [allProducts, allSuppliers, allTreeNodes, allCustomFields, allSettings] = await Promise.all([
+    db.select().from(products),
+    db.select().from(suppliers),
+    db.select().from(treeNodes),
+    db.select().from(customFieldDefinitions),
+    db.select().from(appSettings)
+  ]);
+  const backupData = {
+    version: BACKUP_VERSION,
+    createdAt: (/* @__PURE__ */ new Date()).toISOString(),
+    data: {
+      products: allProducts,
+      suppliers: allSuppliers,
+      treeNodes: allTreeNodes,
+      customFieldDefinitions: allCustomFields,
+      appSettings: allSettings
+    }
+  };
+  const jsonString = JSON.stringify(backupData);
+  const originalSize = Buffer.byteLength(jsonString, "utf-8");
+  const compressedData = compressData(jsonString);
+  const compressedSize = Buffer.byteLength(compressedData, "utf-8");
+  const checksum = computeChecksum(jsonString);
+  const versionNumber = await getNextVersionNumber();
+  const entityCounts = {
+    products: allProducts.length,
+    suppliers: allSuppliers.length,
+    treeNodes: allTreeNodes.length,
+    customFieldDefinitions: allCustomFields.length,
+    appSettings: allSettings.length
+  };
+  const [inserted] = await db.insert(backups).values({
+    versionNumber,
+    triggerType,
+    description: description || `${triggerType} backup`,
+    compressedData,
+    originalSize,
+    compressedSize,
+    checksum,
+    entityCounts
+  }).returning();
+  await cleanupOldBackups();
+  return {
+    id: inserted.id,
+    versionNumber: inserted.versionNumber,
+    createdAt: inserted.createdAt,
+    triggerType: inserted.triggerType,
+    description: inserted.description,
+    originalSize: inserted.originalSize,
+    compressedSize: inserted.compressedSize,
+    compressionRatio: Math.round((1 - compressedSize / originalSize) * 100),
+    entityCounts
+  };
+}
+async function listBackups() {
+  const allBackups = await db.select({
+    id: backups.id,
+    versionNumber: backups.versionNumber,
+    createdAt: backups.createdAt,
+    triggerType: backups.triggerType,
+    description: backups.description,
+    originalSize: backups.originalSize,
+    compressedSize: backups.compressedSize,
+    entityCounts: backups.entityCounts
+  }).from(backups).orderBy(desc(backups.versionNumber));
+  return allBackups.map((b) => ({
+    ...b,
+    compressionRatio: Math.round((1 - b.compressedSize / b.originalSize) * 100),
+    entityCounts: b.entityCounts || {}
+  }));
+}
+async function getBackupById(id) {
+  const [backup] = await db.select().from(backups).where(eq(backups.id, id));
+  if (!backup) return null;
+  const jsonString = decompressData(backup.compressedData);
+  const storedChecksum = backup.checksum;
+  const computedChecksum = computeChecksum(jsonString);
+  if (storedChecksum !== computedChecksum) {
+    throw new Error("Backup integrity check failed: checksum mismatch");
+  }
+  return JSON.parse(jsonString);
+}
+async function exportBackup(id) {
+  const [backup] = await db.select().from(backups).where(eq(backups.id, id));
+  if (!backup) throw new Error("Backup not found");
+  const jsonString = decompressData(backup.compressedData);
+  const computedChecksum = computeChecksum(jsonString);
+  if (backup.checksum !== computedChecksum) {
+    throw new Error("Backup integrity check failed");
+  }
+  const exportData = {
+    metadata: {
+      versionNumber: backup.versionNumber,
+      createdAt: backup.createdAt,
+      triggerType: backup.triggerType,
+      description: backup.description,
+      checksum: backup.checksum
+    },
+    data: JSON.parse(jsonString)
+  };
+  const exportBuffer = (0, import_zlib.gzipSync)(Buffer.from(JSON.stringify(exportData), "utf-8"), { level: 9 });
+  const filename = `backup_v${backup.versionNumber}_${(/* @__PURE__ */ new Date()).toISOString().split("T")[0]}.backup`;
+  return { filename, data: exportBuffer };
+}
+async function getRestorePreview(id) {
+  const backupData = await getBackupById(id);
+  if (!backupData) throw new Error("Backup not found");
+  return {
+    products: backupData.data.products.length,
+    suppliers: backupData.data.suppliers.length,
+    treeNodes: backupData.data.treeNodes.length,
+    customFieldDefinitions: backupData.data.customFieldDefinitions.length,
+    appSettings: backupData.data.appSettings.length
+  };
+}
+async function restoreBackup(id) {
+  const backupData = await getBackupById(id);
+  if (!backupData) throw new Error("Backup not found");
+  await createBackup("SYSTEM", `Pre-restore safety backup (restoring from v${id})`);
+  try {
+    await db.transaction(async (tx) => {
+      await tx.delete(products);
+      await tx.delete(suppliers);
+      await tx.delete(treeNodes);
+      await tx.delete(customFieldDefinitions);
+      await tx.delete(appSettings);
+      if (backupData.data.treeNodes.length > 0) {
+        await tx.insert(treeNodes).values(
+          backupData.data.treeNodes.map((n) => ({
+            ...n,
+            createdAt: n.createdAt ? new Date(n.createdAt) : /* @__PURE__ */ new Date(),
+            updatedAt: n.updatedAt ? new Date(n.updatedAt) : /* @__PURE__ */ new Date()
+          }))
+        );
+      }
+      if (backupData.data.suppliers.length > 0) {
+        await tx.insert(suppliers).values(
+          backupData.data.suppliers.map((s) => ({
+            ...s,
+            createdAt: s.createdAt ? new Date(s.createdAt) : /* @__PURE__ */ new Date(),
+            updatedAt: s.updatedAt ? new Date(s.updatedAt) : /* @__PURE__ */ new Date()
+          }))
+        );
+      }
+      if (backupData.data.products.length > 0) {
+        await tx.insert(products).values(
+          backupData.data.products.map((p) => ({
+            ...p,
+            dateAdded: p.dateAdded ? new Date(p.dateAdded) : /* @__PURE__ */ new Date(),
+            lastUpdated: p.lastUpdated ? new Date(p.lastUpdated) : /* @__PURE__ */ new Date()
+          }))
+        );
+      }
+      if (backupData.data.customFieldDefinitions.length > 0) {
+        await tx.insert(customFieldDefinitions).values(
+          backupData.data.customFieldDefinitions.map((c) => ({
+            ...c,
+            createdAt: c.createdAt ? new Date(c.createdAt) : /* @__PURE__ */ new Date()
+          }))
+        );
+      }
+      if (backupData.data.appSettings.length > 0) {
+        await tx.insert(appSettings).values(
+          backupData.data.appSettings.map((a) => ({
+            ...a,
+            updatedAt: a.updatedAt ? new Date(a.updatedAt) : /* @__PURE__ */ new Date()
+          }))
+        );
+      }
+    });
+    return { success: true, message: "Restore completed successfully" };
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Unknown error during restore";
+    return { success: false, message: `Restore failed: ${message}` };
+  }
+}
+async function importBackup(fileBuffer) {
+  try {
+    const decompressed = (0, import_zlib.gunzipSync)(fileBuffer);
+    const importData = JSON.parse(decompressed.toString("utf-8"));
+    if (!importData.metadata || !importData.data) {
+      throw new Error("Invalid backup file format");
+    }
+    const backupData = importData.data;
+    const jsonString = JSON.stringify(backupData);
+    const computedChecksum = computeChecksum(jsonString);
+    if (importData.metadata.checksum && importData.metadata.checksum !== computedChecksum) {
+      throw new Error("Imported backup checksum mismatch");
+    }
+    const originalSize = Buffer.byteLength(jsonString, "utf-8");
+    const compressedData = compressData(jsonString);
+    const compressedSize = Buffer.byteLength(compressedData, "utf-8");
+    const versionNumber = await getNextVersionNumber();
+    const entityCounts = {
+      products: backupData.data.products.length,
+      suppliers: backupData.data.suppliers.length,
+      treeNodes: backupData.data.treeNodes.length,
+      customFieldDefinitions: backupData.data.customFieldDefinitions.length,
+      appSettings: backupData.data.appSettings.length
+    };
+    const [inserted] = await db.insert(backups).values({
+      versionNumber,
+      triggerType: "MANUAL",
+      description: `Imported backup (original v${importData.metadata.versionNumber || "unknown"})`,
+      compressedData,
+      originalSize,
+      compressedSize,
+      checksum: computedChecksum,
+      entityCounts
+    }).returning();
+    return {
+      success: true,
+      backupId: inserted.id,
+      message: `Backup imported successfully as version ${versionNumber}`
+    };
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Unknown error during import";
+    return { success: false, message: `Import failed: ${message}` };
+  }
+}
+async function deleteBackup(id) {
+  await db.delete(backups).where(eq(backups.id, id));
+}
+async function triggerAutoBackup(reason) {
+  return createBackup("AUTO", reason);
+}
+async function runScheduledBackup() {
+  try {
+    console.log("[Backup] Running scheduled backup...");
+    await createBackup("AUTO", "Scheduled periodic backup");
+    console.log("[Backup] Scheduled backup completed successfully");
+  } catch (error) {
+    console.error("[Backup] Scheduled backup failed:", error);
+  }
+}
+function startScheduledBackups() {
+  if (scheduledBackupTimer) {
+    clearInterval(scheduledBackupTimer);
+  }
+  const intervalMs = autoBackupIntervalHours * 60 * 60 * 1e3;
+  scheduledBackupTimer = setInterval(runScheduledBackup, intervalMs);
+  console.log(`[Backup] Scheduled backups enabled (every ${autoBackupIntervalHours} hours)`);
+}
+
+// node_modules/express-rate-limit/dist/index.mjs
+var import_node_net = require("node:net");
+var import_ip_address = __toESM(require_ip_address(), 1);
+var import_node_net2 = require("node:net");
+var import_node_buffer = require("node:buffer");
+var import_node_crypto = require("node:crypto");
+var import_node_net3 = require("node:net");
+function ipKeyGenerator(ip, ipv6Subnet = 56) {
+  if (ipv6Subnet && (0, import_node_net.isIPv6)(ip)) {
+    return `${new import_ip_address.Address6(`${ip}/${ipv6Subnet}`).startAddress().correctForm()}/${ipv6Subnet}`;
+  }
+  return ip;
+}
+var MemoryStore = class {
+  constructor(validations2) {
+    this.validations = validations2;
+    this.previous = /* @__PURE__ */ new Map();
+    this.current = /* @__PURE__ */ new Map();
+    this.localKeys = true;
+  }
+  /**
+   * Method that initializes the store.
+   *
+   * @param options {Options} - The options used to setup the middleware.
+   */
+  init(options) {
+    this.windowMs = options.windowMs;
+    this.validations?.windowMs(this.windowMs);
+    if (this.interval) clearInterval(this.interval);
+    this.interval = setInterval(() => {
+      this.clearExpired();
+    }, this.windowMs);
+    this.interval.unref?.();
+  }
+  /**
+   * Method to fetch a client's hit count and reset time.
+   *
+   * @param key {string} - The identifier for a client.
+   *
+   * @returns {ClientRateLimitInfo | undefined} - The number of hits and reset time for that client.
+   *
+   * @public
+   */
+  async get(key) {
+    return this.current.get(key) ?? this.previous.get(key);
+  }
+  /**
+   * Method to increment a client's hit counter.
+   *
+   * @param key {string} - The identifier for a client.
+   *
+   * @returns {ClientRateLimitInfo} - The number of hits and reset time for that client.
+   *
+   * @public
+   */
+  async increment(key) {
+    const client = this.getClient(key);
+    const now = Date.now();
+    if (client.resetTime.getTime() <= now) {
+      this.resetClient(client, now);
+    }
+    client.totalHits++;
+    return client;
+  }
+  /**
+   * Method to decrement a client's hit counter.
+   *
+   * @param key {string} - The identifier for a client.
+   *
+   * @public
+   */
+  async decrement(key) {
+    const client = this.getClient(key);
+    if (client.totalHits > 0) client.totalHits--;
+  }
+  /**
+   * Method to reset a client's hit counter.
+   *
+   * @param key {string} - The identifier for a client.
+   *
+   * @public
+   */
+  async resetKey(key) {
+    this.current.delete(key);
+    this.previous.delete(key);
+  }
+  /**
+   * Method to reset everyone's hit counter.
+   *
+   * @public
+   */
+  async resetAll() {
+    this.current.clear();
+    this.previous.clear();
+  }
+  /**
+   * Method to stop the timer (if currently running) and prevent any memory
+   * leaks.
+   *
+   * @public
+   */
+  shutdown() {
+    clearInterval(this.interval);
+    void this.resetAll();
+  }
+  /**
+   * Recycles a client by setting its hit count to zero, and reset time to
+   * `windowMs` milliseconds from now.
+   *
+   * NOT to be confused with `#resetKey()`, which removes a client from both the
+   * `current` and `previous` maps.
+   *
+   * @param client {Client} - The client to recycle.
+   * @param now {number} - The current time, to which the `windowMs` is added to get the `resetTime` for the client.
+   *
+   * @return {Client} - The modified client that was passed in, to allow for chaining.
+   */
+  resetClient(client, now = Date.now()) {
+    client.totalHits = 0;
+    client.resetTime.setTime(now + this.windowMs);
+    return client;
+  }
+  /**
+   * Retrieves or creates a client, given a key. Also ensures that the client being
+   * returned is in the `current` map.
+   *
+   * @param key {string} - The key under which the client is (or is to be) stored.
+   *
+   * @returns {Client} - The requested client.
+   */
+  getClient(key) {
+    if (this.current.has(key)) return this.current.get(key);
+    let client;
+    if (this.previous.has(key)) {
+      client = this.previous.get(key);
+      this.previous.delete(key);
+    } else {
+      client = { totalHits: 0, resetTime: /* @__PURE__ */ new Date() };
+      this.resetClient(client);
+    }
+    this.current.set(key, client);
+    return client;
+  }
+  /**
+   * Move current clients to previous, create a new map for current.
+   *
+   * This function is called every `windowMs`.
+   */
+  clearExpired() {
+    this.previous = this.current;
+    this.current = /* @__PURE__ */ new Map();
+  }
+};
+var SUPPORTED_DRAFT_VERSIONS = [
+  "draft-6",
+  "draft-7",
+  "draft-8"
+];
+var getResetSeconds = (windowMs, resetTime) => {
+  let resetSeconds;
+  if (resetTime) {
+    const deltaSeconds = Math.ceil((resetTime.getTime() - Date.now()) / 1e3);
+    resetSeconds = Math.max(0, deltaSeconds);
+  } else {
+    resetSeconds = Math.ceil(windowMs / 1e3);
+  }
+  return resetSeconds;
+};
+var getPartitionKey = (key) => {
+  const hash2 = (0, import_node_crypto.createHash)("sha256");
+  hash2.update(key);
+  const partitionKey = hash2.digest("hex").slice(0, 12);
+  return import_node_buffer.Buffer.from(partitionKey).toString("base64");
+};
+var setLegacyHeaders = (response, info) => {
+  if (response.headersSent) return;
+  response.setHeader("X-RateLimit-Limit", info.limit.toString());
+  response.setHeader("X-RateLimit-Remaining", info.remaining.toString());
+  if (info.resetTime instanceof Date) {
+    response.setHeader("Date", (/* @__PURE__ */ new Date()).toUTCString());
+    response.setHeader(
+      "X-RateLimit-Reset",
+      Math.ceil(info.resetTime.getTime() / 1e3).toString()
+    );
+  }
+};
+var setDraft6Headers = (response, info, windowMs) => {
+  if (response.headersSent) return;
+  const windowSeconds = Math.ceil(windowMs / 1e3);
+  const resetSeconds = getResetSeconds(windowMs, info.resetTime);
+  response.setHeader("RateLimit-Policy", `${info.limit};w=${windowSeconds}`);
+  response.setHeader("RateLimit-Limit", info.limit.toString());
+  response.setHeader("RateLimit-Remaining", info.remaining.toString());
+  if (typeof resetSeconds === "number")
+    response.setHeader("RateLimit-Reset", resetSeconds.toString());
+};
+var setDraft7Headers = (response, info, windowMs) => {
+  if (response.headersSent) return;
+  const windowSeconds = Math.ceil(windowMs / 1e3);
+  const resetSeconds = getResetSeconds(windowMs, info.resetTime);
+  response.setHeader("RateLimit-Policy", `${info.limit};w=${windowSeconds}`);
+  response.setHeader(
+    "RateLimit",
+    `limit=${info.limit}, remaining=${info.remaining}, reset=${resetSeconds}`
+  );
+};
+var setDraft8Headers = (response, info, windowMs, name, key) => {
+  if (response.headersSent) return;
+  const windowSeconds = Math.ceil(windowMs / 1e3);
+  const resetSeconds = getResetSeconds(windowMs, info.resetTime);
+  const partitionKey = getPartitionKey(key);
+  const header = `r=${info.remaining}; t=${resetSeconds}`;
+  const policy = `q=${info.limit}; w=${windowSeconds}; pk=:${partitionKey}:`;
+  response.append("RateLimit", `"${name}"; ${header}`);
+  response.append("RateLimit-Policy", `"${name}"; ${policy}`);
+};
+var setRetryAfterHeader = (response, info, windowMs) => {
+  if (response.headersSent) return;
+  const resetSeconds = getResetSeconds(windowMs, info.resetTime);
+  response.setHeader("Retry-After", resetSeconds.toString());
+};
+var omitUndefinedProperties = (passedOptions) => {
+  const omittedOptions = {};
+  for (const k of Object.keys(passedOptions)) {
+    const key = k;
+    if (passedOptions[key] !== void 0) {
+      omittedOptions[key] = passedOptions[key];
+    }
+  }
+  return omittedOptions;
+};
+var ValidationError = class extends Error {
+  /**
+   * The code must be a string, in snake case and all capital, that starts with
+   * the substring `ERR_ERL_`.
+   *
+   * The message must be a string, starting with an uppercase character,
+   * describing the issue in detail.
+   */
+  constructor(code, message) {
+    const url2 = `https://express-rate-limit.github.io/${code}/`;
+    super(`${message} See ${url2} for more information.`);
+    this.name = this.constructor.name;
+    this.code = code;
+    this.help = url2;
+  }
+};
+var ChangeWarning = class extends ValidationError {
+};
+var usedStores = /* @__PURE__ */ new Set();
+var singleCountKeys = /* @__PURE__ */ new WeakMap();
+var validations = {
+  enabled: {
+    default: true
+  },
+  // Should be EnabledValidations type, but that's a circular reference
+  disable() {
+    for (const k of Object.keys(this.enabled)) this.enabled[k] = false;
+  },
+  /**
+   * Checks whether the IP address is valid, and that it does not have a port
+   * number in it.
+   *
+   * See https://github.com/express-rate-limit/express-rate-limit/wiki/Error-Codes#err_erl_invalid_ip_address.
+   *
+   * @param ip {string | undefined} - The IP address provided by Express as request.ip.
+   *
+   * @returns {void}
+   */
+  ip(ip) {
+    if (ip === void 0) {
+      throw new ValidationError(
+        "ERR_ERL_UNDEFINED_IP_ADDRESS",
+        `An undefined 'request.ip' was detected. This might indicate a misconfiguration or the connection being destroyed prematurely.`
+      );
+    }
+    if (!(0, import_node_net3.isIP)(ip)) {
+      throw new ValidationError(
+        "ERR_ERL_INVALID_IP_ADDRESS",
+        `An invalid 'request.ip' (${ip}) was detected. Consider passing a custom 'keyGenerator' function to the rate limiter.`
+      );
+    }
+  },
+  /**
+   * Makes sure the trust proxy setting is not set to `true`.
+   *
+   * See https://github.com/express-rate-limit/express-rate-limit/wiki/Error-Codes#err_erl_permissive_trust_proxy.
+   *
+   * @param request {Request} - The Express request object.
+   *
+   * @returns {void}
+   */
+  trustProxy(request) {
+    if (request.app.get("trust proxy") === true) {
+      throw new ValidationError(
+        "ERR_ERL_PERMISSIVE_TRUST_PROXY",
+        `The Express 'trust proxy' setting is true, which allows anyone to trivially bypass IP-based rate limiting.`
+      );
+    }
+  },
+  /**
+   * Makes sure the trust proxy setting is set in case the `X-Forwarded-For`
+   * header is present.
+   *
+   * See https://github.com/express-rate-limit/express-rate-limit/wiki/Error-Codes#err_erl_unset_trust_proxy.
+   *
+   * @param request {Request} - The Express request object.
+   *
+   * @returns {void}
+   */
+  xForwardedForHeader(request) {
+    if (request.headers["x-forwarded-for"] && request.app.get("trust proxy") === false) {
+      throw new ValidationError(
+        "ERR_ERL_UNEXPECTED_X_FORWARDED_FOR",
+        `The 'X-Forwarded-For' header is set but the Express 'trust proxy' setting is false (default). This could indicate a misconfiguration which would prevent express-rate-limit from accurately identifying users.`
+      );
+    }
+  },
+  /**
+   * Alert the user if the Forwarded header is set (standardized version of X-Forwarded-For - not supported by express as of version 5.1.0)
+   *
+   * @param request {Request} - The Express request object.
+   *
+   * @returns {void}
+   */
+  forwardedHeader(request) {
+    if (request.headers.forwarded && request.ip === request.socket?.remoteAddress) {
+      throw new ValidationError(
+        "ERR_ERL_FORWARDED_HEADER",
+        `The 'Forwarded' header (standardized X-Forwarded-For) is set but currently being ignored. Add a custom keyGenerator to use a value from this header.`
+      );
+    }
+  },
+  /**
+   * Ensures totalHits value from store is a positive integer.
+   *
+   * @param hits {any} - The `totalHits` returned by the store.
+   */
+  positiveHits(hits) {
+    if (typeof hits !== "number" || hits < 1 || hits !== Math.round(hits)) {
+      throw new ValidationError(
+        "ERR_ERL_INVALID_HITS",
+        `The totalHits value returned from the store must be a positive integer, got ${hits}`
+      );
+    }
+  },
+  /**
+   * Ensures a single store instance is not used with multiple express-rate-limit instances
+   */
+  unsharedStore(store) {
+    if (usedStores.has(store)) {
+      const maybeUniquePrefix = store?.localKeys ? "" : " (with a unique prefix)";
+      throw new ValidationError(
+        "ERR_ERL_STORE_REUSE",
+        `A Store instance must not be shared across multiple rate limiters. Create a new instance of ${store.constructor.name}${maybeUniquePrefix} for each limiter instead.`
+      );
+    }
+    usedStores.add(store);
+  },
+  /**
+   * Ensures a given key is incremented only once per request.
+   *
+   * @param request {Request} - The Express request object.
+   * @param store {Store} - The store class.
+   * @param key {string} - The key used to store the client's hit count.
+   *
+   * @returns {void}
+   */
+  singleCount(request, store, key) {
+    let storeKeys = singleCountKeys.get(request);
+    if (!storeKeys) {
+      storeKeys = /* @__PURE__ */ new Map();
+      singleCountKeys.set(request, storeKeys);
+    }
+    const storeKey = store.localKeys ? store : store.constructor.name;
+    let keys = storeKeys.get(storeKey);
+    if (!keys) {
+      keys = [];
+      storeKeys.set(storeKey, keys);
+    }
+    const prefixedKey = `${store.prefix ?? ""}${key}`;
+    if (keys.includes(prefixedKey)) {
+      throw new ValidationError(
+        "ERR_ERL_DOUBLE_COUNT",
+        `The hit count for ${key} was incremented more than once for a single request.`
+      );
+    }
+    keys.push(prefixedKey);
+  },
+  /**
+   * Warns the user that the behaviour for `max: 0` / `limit: 0` is
+   * changing in the next major release.
+   *
+   * @param limit {number} - The maximum number of hits per client.
+   *
+   * @returns {void}
+   */
+  limit(limit) {
+    if (limit === 0) {
+      throw new ChangeWarning(
+        "WRN_ERL_MAX_ZERO",
+        "Setting limit or max to 0 disables rate limiting in express-rate-limit v6 and older, but will cause all requests to be blocked in v7"
+      );
+    }
+  },
+  /**
+   * Warns the user that the `draft_polli_ratelimit_headers` option is deprecated
+   * and will be removed in the next major release.
+   *
+   * @param draft_polli_ratelimit_headers {any | undefined} - The now-deprecated setting that was used to enable standard headers.
+   *
+   * @returns {void}
+   */
+  draftPolliHeaders(draft_polli_ratelimit_headers) {
+    if (draft_polli_ratelimit_headers) {
+      throw new ChangeWarning(
+        "WRN_ERL_DEPRECATED_DRAFT_POLLI_HEADERS",
+        `The draft_polli_ratelimit_headers configuration option is deprecated and has been removed in express-rate-limit v7, please set standardHeaders: 'draft-6' instead.`
+      );
+    }
+  },
+  /**
+   * Warns the user that the `onLimitReached` option is deprecated and
+   * will be removed in the next major release.
+   *
+   * @param onLimitReached {any | undefined} - The maximum number of hits per client.
+   *
+   * @returns {void}
+   */
+  onLimitReached(onLimitReached) {
+    if (onLimitReached) {
+      throw new ChangeWarning(
+        "WRN_ERL_DEPRECATED_ON_LIMIT_REACHED",
+        "The onLimitReached configuration option is deprecated and has been removed in express-rate-limit v7."
+      );
+    }
+  },
+  /**
+   * Warns the user when an invalid/unsupported version of the draft spec is passed.
+   *
+   * @param version {any | undefined} - The version passed by the user.
+   *
+   * @returns {void}
+   */
+  headersDraftVersion(version4) {
+    if (typeof version4 !== "string" || // @ts-expect-error This is fine. If version is not in the array, it will just return false.
+    !SUPPORTED_DRAFT_VERSIONS.includes(version4)) {
+      const versionString = SUPPORTED_DRAFT_VERSIONS.join(", ");
+      throw new ValidationError(
+        "ERR_ERL_HEADERS_UNSUPPORTED_DRAFT_VERSION",
+        `standardHeaders: only the following versions of the IETF draft specification are supported: ${versionString}.`
+      );
+    }
+  },
+  /**
+   * Warns the user when the selected headers option requires a reset time but
+   * the store does not provide one.
+   *
+   * @param resetTime {Date | undefined} - The timestamp when the client's hit count will be reset.
+   *
+   * @returns {void}
+   */
+  headersResetTime(resetTime) {
+    if (!resetTime) {
+      throw new ValidationError(
+        "ERR_ERL_HEADERS_NO_RESET",
+        `standardHeaders:  'draft-7' requires a 'resetTime', but the store did not provide one. The 'windowMs' value will be used instead, which may cause clients to wait longer than necessary.`
+      );
+    }
+  },
+  knownOptions(passedOptions) {
+    if (!passedOptions) return;
+    const optionsMap = {
+      windowMs: true,
+      limit: true,
+      message: true,
+      statusCode: true,
+      legacyHeaders: true,
+      standardHeaders: true,
+      identifier: true,
+      requestPropertyName: true,
+      skipFailedRequests: true,
+      skipSuccessfulRequests: true,
+      keyGenerator: true,
+      ipv6Subnet: true,
+      handler: true,
+      skip: true,
+      requestWasSuccessful: true,
+      store: true,
+      validate: true,
+      headers: true,
+      max: true,
+      passOnStoreError: true
+    };
+    const validOptions = Object.keys(optionsMap).concat(
+      "draft_polli_ratelimit_headers",
+      // not a valid option anymore, but we have a more specific check for this one, so don't warn for it here
+      // from express-slow-down - https://github.com/express-rate-limit/express-slow-down/blob/main/source/types.ts#L65
+      "delayAfter",
+      "delayMs",
+      "maxDelayMs"
+    );
+    for (const key of Object.keys(passedOptions)) {
+      if (!validOptions.includes(key)) {
+        throw new ValidationError(
+          "ERR_ERL_UNKNOWN_OPTION",
+          `Unexpected configuration option: ${key}`
+          // todo: suggest a valid option with a short levenstein distance?
+        );
+      }
+    }
+  },
+  /**
+   * Checks the options.validate setting to ensure that only recognized
+   * validations are enabled or disabled.
+   *
+   * If any unrecognized values are found, an error is logged that
+   * includes the list of supported validations.
+   */
+  validationsConfig() {
+    const supportedValidations = Object.keys(this).filter(
+      (k) => !["enabled", "disable"].includes(k)
+    );
+    supportedValidations.push("default");
+    for (const key of Object.keys(this.enabled)) {
+      if (!supportedValidations.includes(key)) {
+        throw new ValidationError(
+          "ERR_ERL_UNKNOWN_VALIDATION",
+          `options.validate.${key} is not recognized. Supported validate options are: ${supportedValidations.join(
+            ", "
+          )}.`
+        );
+      }
+    }
+  },
+  /**
+   * Checks to see if the instance was created inside of a request handler,
+   * which would prevent it from working correctly, with the default memory
+   * store (or any other store with localKeys.)
+   */
+  creationStack(store) {
+    const { stack } = new Error(
+      "express-rate-limit validation check (set options.validate.creationStack=false to disable)"
+    );
+    if (stack?.includes("Layer.handle [as handle_request]") || // express v4
+    stack?.includes("Layer.handleRequest")) {
+      if (!store.localKeys) {
+        throw new ValidationError(
+          "ERR_ERL_CREATED_IN_REQUEST_HANDLER",
+          "express-rate-limit instance should *usually* be created at app initialization, not when responding to a request."
+        );
+      }
+      throw new ValidationError(
+        "ERR_ERL_CREATED_IN_REQUEST_HANDLER",
+        "express-rate-limit instance should be created at app initialization, not when responding to a request."
+      );
+    }
+  },
+  ipv6Subnet(ipv6Subnet) {
+    if (ipv6Subnet === false) {
+      return;
+    }
+    if (!Number.isInteger(ipv6Subnet) || ipv6Subnet < 32 || ipv6Subnet > 64) {
+      throw new ValidationError(
+        "ERR_ERL_IPV6_SUBNET",
+        `Unexpected ipv6Subnet value: ${ipv6Subnet}. Expected an integer between 32 and 64 (usually 48-64).`
+      );
+    }
+  },
+  ipv6SubnetOrKeyGenerator(options) {
+    if (options.ipv6Subnet !== void 0 && options.keyGenerator) {
+      throw new ValidationError(
+        "ERR_ERL_IPV6SUBNET_OR_KEYGENERATOR",
+        `Incompatible options: the 'ipv6Subnet' option is ignored when a custom 'keyGenerator' function is also set.`
+      );
+    }
+  },
+  keyGeneratorIpFallback(keyGenerator) {
+    if (!keyGenerator) {
+      return;
+    }
+    const src = keyGenerator.toString();
+    if ((src.includes("req.ip") || src.includes("request.ip")) && !src.includes("ipKeyGenerator")) {
+      throw new ValidationError(
+        "ERR_ERL_KEY_GEN_IPV6",
+        "Custom keyGenerator appears to use request IP without calling the ipKeyGenerator helper function for IPv6 addresses. This could allow IPv6 users to bypass limits."
+      );
+    }
+  },
+  /**
+   * Checks to see if the window duration is greater than 2^32 - 1. This is only
+   * called by the default MemoryStore, since it uses Node's setInterval method.
+   *
+   * See https://nodejs.org/api/timers.html#setintervalcallback-delay-args.
+   */
+  windowMs(windowMs) {
+    const SET_TIMEOUT_MAX = 2 ** 31 - 1;
+    if (typeof windowMs !== "number" || Number.isNaN(windowMs) || windowMs < 1 || windowMs > SET_TIMEOUT_MAX) {
+      throw new ValidationError(
+        "ERR_ERL_WINDOW_MS",
+        `Invalid windowMs value: ${windowMs}${typeof windowMs !== "number" ? ` (${typeof windowMs})` : ""}, must be a number between 1 and ${SET_TIMEOUT_MAX} when using the default MemoryStore`
+      );
+    }
+  }
+};
+var getValidations = (_enabled) => {
+  let enabled;
+  if (typeof _enabled === "boolean") {
+    enabled = {
+      default: _enabled
+    };
+  } else {
+    enabled = {
+      default: true,
+      ..._enabled
+    };
+  }
+  const wrappedValidations = { enabled };
+  for (const [name, validation] of Object.entries(validations)) {
+    if (typeof validation === "function")
+      wrappedValidations[name] = (...args) => {
+        if (!(enabled[name] ?? enabled.default)) {
+          return;
+        }
+        try {
+          ;
+          validation.apply(
+            wrappedValidations,
+            args
+          );
+        } catch (error) {
+          if (error instanceof ChangeWarning) console.warn(error);
+          else console.error(error);
+        }
+      };
+  }
+  return wrappedValidations;
+};
+var isLegacyStore = (store) => (
+  // Check that `incr` exists but `increment` does not - store authors might want
+  // to keep both around for backwards compatibility.
+  typeof store.incr === "function" && typeof store.increment !== "function"
+);
+var promisifyStore = (passedStore) => {
+  if (!isLegacyStore(passedStore)) {
+    return passedStore;
+  }
+  const legacyStore = passedStore;
+  class PromisifiedStore {
+    async increment(key) {
+      return new Promise((resolve, reject) => {
+        legacyStore.incr(
+          key,
+          (error, totalHits, resetTime) => {
+            if (error) reject(error);
+            resolve({ totalHits, resetTime });
+          }
+        );
+      });
+    }
+    async decrement(key) {
+      return legacyStore.decrement(key);
+    }
+    async resetKey(key) {
+      return legacyStore.resetKey(key);
+    }
+    /* istanbul ignore next */
+    async resetAll() {
+      if (typeof legacyStore.resetAll === "function")
+        return legacyStore.resetAll();
+    }
+  }
+  return new PromisifiedStore();
+};
+var getOptionsFromConfig = (config) => {
+  const { validations: validations2, ...directlyPassableEntries } = config;
+  return {
+    ...directlyPassableEntries,
+    validate: validations2.enabled
+  };
+};
+var parseOptions = (passedOptions) => {
+  const notUndefinedOptions = omitUndefinedProperties(passedOptions);
+  const validations2 = getValidations(notUndefinedOptions?.validate ?? true);
+  validations2.validationsConfig();
+  validations2.knownOptions(passedOptions);
+  validations2.draftPolliHeaders(
+    // @ts-expect-error see the note above.
+    notUndefinedOptions.draft_polli_ratelimit_headers
+  );
+  validations2.onLimitReached(notUndefinedOptions.onLimitReached);
+  if (notUndefinedOptions.ipv6Subnet !== void 0 && typeof notUndefinedOptions.ipv6Subnet !== "function") {
+    validations2.ipv6Subnet(notUndefinedOptions.ipv6Subnet);
+  }
+  validations2.keyGeneratorIpFallback(notUndefinedOptions.keyGenerator);
+  validations2.ipv6SubnetOrKeyGenerator(notUndefinedOptions);
+  let standardHeaders = notUndefinedOptions.standardHeaders ?? false;
+  if (standardHeaders === true) standardHeaders = "draft-6";
+  const config = {
+    windowMs: 60 * 1e3,
+    limit: passedOptions.max ?? 5,
+    // `max` is deprecated, but support it anyways.
+    message: "Too many requests, please try again later.",
+    statusCode: 429,
+    legacyHeaders: passedOptions.headers ?? true,
+    identifier(request, _response) {
+      let duration = "";
+      const property = config.requestPropertyName;
+      const { limit } = request[property];
+      const seconds = config.windowMs / 1e3;
+      const minutes = config.windowMs / (1e3 * 60);
+      const hours = config.windowMs / (1e3 * 60 * 60);
+      const days = config.windowMs / (1e3 * 60 * 60 * 24);
+      if (seconds < 60) duration = `${seconds}sec`;
+      else if (minutes < 60) duration = `${minutes}min`;
+      else if (hours < 24) duration = `${hours}hr${hours > 1 ? "s" : ""}`;
+      else duration = `${days}day${days > 1 ? "s" : ""}`;
+      return `${limit}-in-${duration}`;
+    },
+    requestPropertyName: "rateLimit",
+    skipFailedRequests: false,
+    skipSuccessfulRequests: false,
+    requestWasSuccessful: (_request, response) => response.statusCode < 400,
+    skip: (_request, _response) => false,
+    async keyGenerator(request, response) {
+      validations2.ip(request.ip);
+      validations2.trustProxy(request);
+      validations2.xForwardedForHeader(request);
+      validations2.forwardedHeader(request);
+      const ip = request.ip;
+      let subnet = 56;
+      if ((0, import_node_net2.isIPv6)(ip)) {
+        subnet = typeof config.ipv6Subnet === "function" ? await config.ipv6Subnet(request, response) : config.ipv6Subnet;
+        if (typeof config.ipv6Subnet === "function")
+          validations2.ipv6Subnet(subnet);
+      }
+      return ipKeyGenerator(ip, subnet);
+    },
+    ipv6Subnet: 56,
+    async handler(request, response, _next, _optionsUsed) {
+      response.status(config.statusCode);
+      const message = typeof config.message === "function" ? await config.message(
+        request,
+        response
+      ) : config.message;
+      if (!response.writableEnded) response.send(message);
+    },
+    passOnStoreError: false,
+    // Allow the default options to be overridden by the passed options.
+    ...notUndefinedOptions,
+    // `standardHeaders` is resolved into a draft version above, use that.
+    standardHeaders,
+    // Note that this field is declared after the user's options are spread in,
+    // so that this field doesn't get overridden with an un-promisified store!
+    store: promisifyStore(
+      notUndefinedOptions.store ?? new MemoryStore(validations2)
+    ),
+    // Print an error to the console if a few known misconfigurations are detected.
+    validations: validations2
+  };
+  if (typeof config.store.increment !== "function" || typeof config.store.decrement !== "function" || typeof config.store.resetKey !== "function" || config.store.resetAll !== void 0 && typeof config.store.resetAll !== "function" || config.store.init !== void 0 && typeof config.store.init !== "function") {
+    throw new TypeError(
+      "An invalid store was passed. Please ensure that the store is a class that implements the `Store` interface."
+    );
+  }
+  return config;
+};
+var handleAsyncErrors = (fn) => async (request, response, next) => {
+  try {
+    await Promise.resolve(fn(request, response, next)).catch(next);
+  } catch (error) {
+    next(error);
+  }
+};
+var rateLimit = (passedOptions) => {
+  const config = parseOptions(passedOptions ?? {});
+  const options = getOptionsFromConfig(config);
+  config.validations.creationStack(config.store);
+  config.validations.unsharedStore(config.store);
+  if (typeof config.store.init === "function") config.store.init(options);
+  const middleware = handleAsyncErrors(
+    async (request, response, next) => {
+      const skip = await config.skip(request, response);
+      if (skip) {
+        next();
+        return;
+      }
+      const augmentedRequest = request;
+      const key = await config.keyGenerator(request, response);
+      let totalHits = 0;
+      let resetTime;
+      try {
+        const incrementResult = await config.store.increment(key);
+        totalHits = incrementResult.totalHits;
+        resetTime = incrementResult.resetTime;
+      } catch (error) {
+        if (config.passOnStoreError) {
+          console.error(
+            "express-rate-limit: error from store, allowing request without rate-limiting.",
+            error
+          );
+          next();
+          return;
+        }
+        throw error;
+      }
+      config.validations.positiveHits(totalHits);
+      config.validations.singleCount(request, config.store, key);
+      const retrieveLimit = typeof config.limit === "function" ? config.limit(request, response) : config.limit;
+      const limit = await retrieveLimit;
+      config.validations.limit(limit);
+      const info = {
+        limit,
+        used: totalHits,
+        remaining: Math.max(limit - totalHits, 0),
+        resetTime,
+        key
+      };
+      Object.defineProperty(info, "current", {
+        configurable: false,
+        enumerable: false,
+        value: totalHits
+      });
+      augmentedRequest[config.requestPropertyName] = info;
+      if (config.legacyHeaders && !response.headersSent) {
+        setLegacyHeaders(response, info);
+      }
+      if (config.standardHeaders && !response.headersSent) {
+        switch (config.standardHeaders) {
+          case "draft-6": {
+            setDraft6Headers(response, info, config.windowMs);
+            break;
+          }
+          case "draft-7": {
+            config.validations.headersResetTime(info.resetTime);
+            setDraft7Headers(response, info, config.windowMs);
+            break;
+          }
+          case "draft-8": {
+            const retrieveName = typeof config.identifier === "function" ? config.identifier(request, response) : config.identifier;
+            const name = await retrieveName;
+            config.validations.headersResetTime(info.resetTime);
+            setDraft8Headers(response, info, config.windowMs, name, key);
+            break;
+          }
+          default: {
+            config.validations.headersDraftVersion(config.standardHeaders);
+            break;
+          }
+        }
+      }
+      if (config.skipFailedRequests || config.skipSuccessfulRequests) {
+        let decremented = false;
+        const decrementKey = async () => {
+          if (!decremented) {
+            await config.store.decrement(key);
+            decremented = true;
+          }
+        };
+        if (config.skipFailedRequests) {
+          response.on("finish", async () => {
+            if (!await config.requestWasSuccessful(request, response))
+              await decrementKey();
+          });
+          response.on("close", async () => {
+            if (!response.writableEnded) await decrementKey();
+          });
+          response.on("error", async () => {
+            await decrementKey();
+          });
+        }
+        if (config.skipSuccessfulRequests) {
+          response.on("finish", async () => {
+            if (await config.requestWasSuccessful(request, response))
+              await decrementKey();
+          });
+        }
+      }
+      config.validations.disable();
+      if (totalHits > limit) {
+        if (config.legacyHeaders || config.standardHeaders) {
+          setRetryAfterHeader(response, info, config.windowMs);
+        }
+        config.handler(request, response, next, options);
+        return;
+      }
+      next();
+    }
+  );
+  const getThrowFn = () => {
+    throw new Error("The current store does not support the get/getKey method");
+  };
+  middleware.resetKey = config.store.resetKey.bind(config.store);
+  middleware.getKey = typeof config.store.get === "function" ? config.store.get.bind(config.store) : getThrowFn;
+  return middleware;
+};
+var rate_limit_default = rateLimit;
+
+// server/authRoutes.ts
+var import_crypto3 = __toESM(require("crypto"), 1);
+
+// node_modules/bcryptjs/index.js
+var import_crypto2 = __toESM(require("crypto"), 1);
+var randomFallback = null;
+function randomBytes(len) {
+  try {
+    return crypto.getRandomValues(new Uint8Array(len));
+  } catch {
+  }
+  try {
+    return import_crypto2.default.randomBytes(len);
+  } catch {
+  }
+  if (!randomFallback) {
+    throw Error(
+      "Neither WebCryptoAPI nor a crypto module is available. Use bcrypt.setRandomFallback to set an alternative"
+    );
+  }
+  return randomFallback(len);
+}
+function setRandomFallback(random) {
+  randomFallback = random;
+}
+function genSaltSync(rounds, seed_length) {
+  rounds = rounds || GENSALT_DEFAULT_LOG2_ROUNDS;
+  if (typeof rounds !== "number")
+    throw Error(
+      "Illegal arguments: " + typeof rounds + ", " + typeof seed_length
+    );
+  if (rounds < 4) rounds = 4;
+  else if (rounds > 31) rounds = 31;
+  var salt = [];
+  salt.push("$2b$");
+  if (rounds < 10) salt.push("0");
+  salt.push(rounds.toString());
+  salt.push("$");
+  salt.push(base64_encode(randomBytes(BCRYPT_SALT_LEN), BCRYPT_SALT_LEN));
+  return salt.join("");
+}
+function genSalt(rounds, seed_length, callback) {
+  if (typeof seed_length === "function")
+    callback = seed_length, seed_length = void 0;
+  if (typeof rounds === "function") callback = rounds, rounds = void 0;
+  if (typeof rounds === "undefined") rounds = GENSALT_DEFAULT_LOG2_ROUNDS;
+  else if (typeof rounds !== "number")
+    throw Error("illegal arguments: " + typeof rounds);
+  function _async(callback2) {
+    nextTick(function() {
+      try {
+        callback2(null, genSaltSync(rounds));
+      } catch (err) {
+        callback2(err);
+      }
+    });
+  }
+  if (callback) {
+    if (typeof callback !== "function")
+      throw Error("Illegal callback: " + typeof callback);
+    _async(callback);
+  } else
+    return new Promise(function(resolve, reject) {
+      _async(function(err, res) {
+        if (err) {
+          reject(err);
+          return;
+        }
+        resolve(res);
+      });
+    });
+}
+function hashSync(password, salt) {
+  if (typeof salt === "undefined") salt = GENSALT_DEFAULT_LOG2_ROUNDS;
+  if (typeof salt === "number") salt = genSaltSync(salt);
+  if (typeof password !== "string" || typeof salt !== "string")
+    throw Error("Illegal arguments: " + typeof password + ", " + typeof salt);
+  return _hash(password, salt);
+}
+function hash(password, salt, callback, progressCallback) {
+  function _async(callback2) {
+    if (typeof password === "string" && typeof salt === "number")
+      genSalt(salt, function(err, salt2) {
+        _hash(password, salt2, callback2, progressCallback);
+      });
+    else if (typeof password === "string" && typeof salt === "string")
+      _hash(password, salt, callback2, progressCallback);
+    else
+      nextTick(
+        callback2.bind(
+          this,
+          Error("Illegal arguments: " + typeof password + ", " + typeof salt)
+        )
+      );
+  }
+  if (callback) {
+    if (typeof callback !== "function")
+      throw Error("Illegal callback: " + typeof callback);
+    _async(callback);
+  } else
+    return new Promise(function(resolve, reject) {
+      _async(function(err, res) {
+        if (err) {
+          reject(err);
+          return;
+        }
+        resolve(res);
+      });
+    });
+}
+function safeStringCompare(known, unknown) {
+  var diff = known.length ^ unknown.length;
+  for (var i = 0; i < known.length; ++i) {
+    diff |= known.charCodeAt(i) ^ unknown.charCodeAt(i);
+  }
+  return diff === 0;
+}
+function compareSync(password, hash2) {
+  if (typeof password !== "string" || typeof hash2 !== "string")
+    throw Error("Illegal arguments: " + typeof password + ", " + typeof hash2);
+  if (hash2.length !== 60) return false;
+  return safeStringCompare(
+    hashSync(password, hash2.substring(0, hash2.length - 31)),
+    hash2
+  );
+}
+function compare(password, hashValue, callback, progressCallback) {
+  function _async(callback2) {
+    if (typeof password !== "string" || typeof hashValue !== "string") {
+      nextTick(
+        callback2.bind(
+          this,
+          Error(
+            "Illegal arguments: " + typeof password + ", " + typeof hashValue
+          )
+        )
+      );
+      return;
+    }
+    if (hashValue.length !== 60) {
+      nextTick(callback2.bind(this, null, false));
+      return;
+    }
+    hash(
+      password,
+      hashValue.substring(0, 29),
+      function(err, comp) {
+        if (err) callback2(err);
+        else callback2(null, safeStringCompare(comp, hashValue));
+      },
+      progressCallback
+    );
+  }
+  if (callback) {
+    if (typeof callback !== "function")
+      throw Error("Illegal callback: " + typeof callback);
+    _async(callback);
+  } else
+    return new Promise(function(resolve, reject) {
+      _async(function(err, res) {
+        if (err) {
+          reject(err);
+          return;
+        }
+        resolve(res);
+      });
+    });
+}
+function getRounds(hash2) {
+  if (typeof hash2 !== "string")
+    throw Error("Illegal arguments: " + typeof hash2);
+  return parseInt(hash2.split("$")[2], 10);
+}
+function getSalt(hash2) {
+  if (typeof hash2 !== "string")
+    throw Error("Illegal arguments: " + typeof hash2);
+  if (hash2.length !== 60)
+    throw Error("Illegal hash length: " + hash2.length + " != 60");
+  return hash2.substring(0, 29);
+}
+function truncates(password) {
+  if (typeof password !== "string")
+    throw Error("Illegal arguments: " + typeof password);
+  return utf8Length(password) > 72;
+}
+var nextTick = typeof setImmediate === "function" ? setImmediate : typeof scheduler === "object" && typeof scheduler.postTask === "function" ? scheduler.postTask.bind(scheduler) : setTimeout;
+function utf8Length(string) {
+  var len = 0, c = 0;
+  for (var i = 0; i < string.length; ++i) {
+    c = string.charCodeAt(i);
+    if (c < 128) len += 1;
+    else if (c < 2048) len += 2;
+    else if ((c & 64512) === 55296 && (string.charCodeAt(i + 1) & 64512) === 56320) {
+      ++i;
+      len += 4;
+    } else len += 3;
+  }
+  return len;
+}
+function utf8Array(string) {
+  var offset = 0, c1, c2;
+  var buffer = new Array(utf8Length(string));
+  for (var i = 0, k = string.length; i < k; ++i) {
+    c1 = string.charCodeAt(i);
+    if (c1 < 128) {
+      buffer[offset++] = c1;
+    } else if (c1 < 2048) {
+      buffer[offset++] = c1 >> 6 | 192;
+      buffer[offset++] = c1 & 63 | 128;
+    } else if ((c1 & 64512) === 55296 && ((c2 = string.charCodeAt(i + 1)) & 64512) === 56320) {
+      c1 = 65536 + ((c1 & 1023) << 10) + (c2 & 1023);
+      ++i;
+      buffer[offset++] = c1 >> 18 | 240;
+      buffer[offset++] = c1 >> 12 & 63 | 128;
+      buffer[offset++] = c1 >> 6 & 63 | 128;
+      buffer[offset++] = c1 & 63 | 128;
+    } else {
+      buffer[offset++] = c1 >> 12 | 224;
+      buffer[offset++] = c1 >> 6 & 63 | 128;
+      buffer[offset++] = c1 & 63 | 128;
+    }
+  }
+  return buffer;
+}
+var BASE64_CODE = "./ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789".split("");
+var BASE64_INDEX = [
+  -1,
+  -1,
+  -1,
+  -1,
+  -1,
+  -1,
+  -1,
+  -1,
+  -1,
+  -1,
+  -1,
+  -1,
+  -1,
+  -1,
+  -1,
+  -1,
+  -1,
+  -1,
+  -1,
+  -1,
+  -1,
+  -1,
+  -1,
+  -1,
+  -1,
+  -1,
+  -1,
+  -1,
+  -1,
+  -1,
+  -1,
+  -1,
+  -1,
+  -1,
+  -1,
+  -1,
+  -1,
+  -1,
+  -1,
+  -1,
+  -1,
+  -1,
+  -1,
+  -1,
+  -1,
+  -1,
+  0,
+  1,
+  54,
+  55,
+  56,
+  57,
+  58,
+  59,
+  60,
+  61,
+  62,
+  63,
+  -1,
+  -1,
+  -1,
+  -1,
+  -1,
+  -1,
+  -1,
+  2,
+  3,
+  4,
+  5,
+  6,
+  7,
+  8,
+  9,
+  10,
+  11,
+  12,
+  13,
+  14,
+  15,
+  16,
+  17,
+  18,
+  19,
+  20,
+  21,
+  22,
+  23,
+  24,
+  25,
+  26,
+  27,
+  -1,
+  -1,
+  -1,
+  -1,
+  -1,
+  -1,
+  28,
+  29,
+  30,
+  31,
+  32,
+  33,
+  34,
+  35,
+  36,
+  37,
+  38,
+  39,
+  40,
+  41,
+  42,
+  43,
+  44,
+  45,
+  46,
+  47,
+  48,
+  49,
+  50,
+  51,
+  52,
+  53,
+  -1,
+  -1,
+  -1,
+  -1,
+  -1
+];
+function base64_encode(b, len) {
+  var off = 0, rs = [], c1, c2;
+  if (len <= 0 || len > b.length) throw Error("Illegal len: " + len);
+  while (off < len) {
+    c1 = b[off++] & 255;
+    rs.push(BASE64_CODE[c1 >> 2 & 63]);
+    c1 = (c1 & 3) << 4;
+    if (off >= len) {
+      rs.push(BASE64_CODE[c1 & 63]);
+      break;
+    }
+    c2 = b[off++] & 255;
+    c1 |= c2 >> 4 & 15;
+    rs.push(BASE64_CODE[c1 & 63]);
+    c1 = (c2 & 15) << 2;
+    if (off >= len) {
+      rs.push(BASE64_CODE[c1 & 63]);
+      break;
+    }
+    c2 = b[off++] & 255;
+    c1 |= c2 >> 6 & 3;
+    rs.push(BASE64_CODE[c1 & 63]);
+    rs.push(BASE64_CODE[c2 & 63]);
+  }
+  return rs.join("");
+}
+function base64_decode(s, len) {
+  var off = 0, slen = s.length, olen = 0, rs = [], c1, c2, c3, c4, o, code;
+  if (len <= 0) throw Error("Illegal len: " + len);
+  while (off < slen - 1 && olen < len) {
+    code = s.charCodeAt(off++);
+    c1 = code < BASE64_INDEX.length ? BASE64_INDEX[code] : -1;
+    code = s.charCodeAt(off++);
+    c2 = code < BASE64_INDEX.length ? BASE64_INDEX[code] : -1;
+    if (c1 == -1 || c2 == -1) break;
+    o = c1 << 2 >>> 0;
+    o |= (c2 & 48) >> 4;
+    rs.push(String.fromCharCode(o));
+    if (++olen >= len || off >= slen) break;
+    code = s.charCodeAt(off++);
+    c3 = code < BASE64_INDEX.length ? BASE64_INDEX[code] : -1;
+    if (c3 == -1) break;
+    o = (c2 & 15) << 4 >>> 0;
+    o |= (c3 & 60) >> 2;
+    rs.push(String.fromCharCode(o));
+    if (++olen >= len || off >= slen) break;
+    code = s.charCodeAt(off++);
+    c4 = code < BASE64_INDEX.length ? BASE64_INDEX[code] : -1;
+    o = (c3 & 3) << 6 >>> 0;
+    o |= c4;
+    rs.push(String.fromCharCode(o));
+    ++olen;
+  }
+  var res = [];
+  for (off = 0; off < olen; off++) res.push(rs[off].charCodeAt(0));
+  return res;
+}
+var BCRYPT_SALT_LEN = 16;
+var GENSALT_DEFAULT_LOG2_ROUNDS = 10;
+var BLOWFISH_NUM_ROUNDS = 16;
+var MAX_EXECUTION_TIME = 100;
+var P_ORIG = [
+  608135816,
+  2242054355,
+  320440878,
+  57701188,
+  2752067618,
+  698298832,
+  137296536,
+  3964562569,
+  1160258022,
+  953160567,
+  3193202383,
+  887688300,
+  3232508343,
+  3380367581,
+  1065670069,
+  3041331479,
+  2450970073,
+  2306472731
+];
+var S_ORIG = [
+  3509652390,
+  2564797868,
+  805139163,
+  3491422135,
+  3101798381,
+  1780907670,
+  3128725573,
+  4046225305,
+  614570311,
+  3012652279,
+  134345442,
+  2240740374,
+  1667834072,
+  1901547113,
+  2757295779,
+  4103290238,
+  227898511,
+  1921955416,
+  1904987480,
+  2182433518,
+  2069144605,
+  3260701109,
+  2620446009,
+  720527379,
+  3318853667,
+  677414384,
+  3393288472,
+  3101374703,
+  2390351024,
+  1614419982,
+  1822297739,
+  2954791486,
+  3608508353,
+  3174124327,
+  2024746970,
+  1432378464,
+  3864339955,
+  2857741204,
+  1464375394,
+  1676153920,
+  1439316330,
+  715854006,
+  3033291828,
+  289532110,
+  2706671279,
+  2087905683,
+  3018724369,
+  1668267050,
+  732546397,
+  1947742710,
+  3462151702,
+  2609353502,
+  2950085171,
+  1814351708,
+  2050118529,
+  680887927,
+  999245976,
+  1800124847,
+  3300911131,
+  1713906067,
+  1641548236,
+  4213287313,
+  1216130144,
+  1575780402,
+  4018429277,
+  3917837745,
+  3693486850,
+  3949271944,
+  596196993,
+  3549867205,
+  258830323,
+  2213823033,
+  772490370,
+  2760122372,
+  1774776394,
+  2652871518,
+  566650946,
+  4142492826,
+  1728879713,
+  2882767088,
+  1783734482,
+  3629395816,
+  2517608232,
+  2874225571,
+  1861159788,
+  326777828,
+  3124490320,
+  2130389656,
+  2716951837,
+  967770486,
+  1724537150,
+  2185432712,
+  2364442137,
+  1164943284,
+  2105845187,
+  998989502,
+  3765401048,
+  2244026483,
+  1075463327,
+  1455516326,
+  1322494562,
+  910128902,
+  469688178,
+  1117454909,
+  936433444,
+  3490320968,
+  3675253459,
+  1240580251,
+  122909385,
+  2157517691,
+  634681816,
+  4142456567,
+  3825094682,
+  3061402683,
+  2540495037,
+  79693498,
+  3249098678,
+  1084186820,
+  1583128258,
+  426386531,
+  1761308591,
+  1047286709,
+  322548459,
+  995290223,
+  1845252383,
+  2603652396,
+  3431023940,
+  2942221577,
+  3202600964,
+  3727903485,
+  1712269319,
+  422464435,
+  3234572375,
+  1170764815,
+  3523960633,
+  3117677531,
+  1434042557,
+  442511882,
+  3600875718,
+  1076654713,
+  1738483198,
+  4213154764,
+  2393238008,
+  3677496056,
+  1014306527,
+  4251020053,
+  793779912,
+  2902807211,
+  842905082,
+  4246964064,
+  1395751752,
+  1040244610,
+  2656851899,
+  3396308128,
+  445077038,
+  3742853595,
+  3577915638,
+  679411651,
+  2892444358,
+  2354009459,
+  1767581616,
+  3150600392,
+  3791627101,
+  3102740896,
+  284835224,
+  4246832056,
+  1258075500,
+  768725851,
+  2589189241,
+  3069724005,
+  3532540348,
+  1274779536,
+  3789419226,
+  2764799539,
+  1660621633,
+  3471099624,
+  4011903706,
+  913787905,
+  3497959166,
+  737222580,
+  2514213453,
+  2928710040,
+  3937242737,
+  1804850592,
+  3499020752,
+  2949064160,
+  2386320175,
+  2390070455,
+  2415321851,
+  4061277028,
+  2290661394,
+  2416832540,
+  1336762016,
+  1754252060,
+  3520065937,
+  3014181293,
+  791618072,
+  3188594551,
+  3933548030,
+  2332172193,
+  3852520463,
+  3043980520,
+  413987798,
+  3465142937,
+  3030929376,
+  4245938359,
+  2093235073,
+  3534596313,
+  375366246,
+  2157278981,
+  2479649556,
+  555357303,
+  3870105701,
+  2008414854,
+  3344188149,
+  4221384143,
+  3956125452,
+  2067696032,
+  3594591187,
+  2921233993,
+  2428461,
+  544322398,
+  577241275,
+  1471733935,
+  610547355,
+  4027169054,
+  1432588573,
+  1507829418,
+  2025931657,
+  3646575487,
+  545086370,
+  48609733,
+  2200306550,
+  1653985193,
+  298326376,
+  1316178497,
+  3007786442,
+  2064951626,
+  458293330,
+  2589141269,
+  3591329599,
+  3164325604,
+  727753846,
+  2179363840,
+  146436021,
+  1461446943,
+  4069977195,
+  705550613,
+  3059967265,
+  3887724982,
+  4281599278,
+  3313849956,
+  1404054877,
+  2845806497,
+  146425753,
+  1854211946,
+  1266315497,
+  3048417604,
+  3681880366,
+  3289982499,
+  290971e4,
+  1235738493,
+  2632868024,
+  2414719590,
+  3970600049,
+  1771706367,
+  1449415276,
+  3266420449,
+  422970021,
+  1963543593,
+  2690192192,
+  3826793022,
+  1062508698,
+  1531092325,
+  1804592342,
+  2583117782,
+  2714934279,
+  4024971509,
+  1294809318,
+  4028980673,
+  1289560198,
+  2221992742,
+  1669523910,
+  35572830,
+  157838143,
+  1052438473,
+  1016535060,
+  1802137761,
+  1753167236,
+  1386275462,
+  3080475397,
+  2857371447,
+  1040679964,
+  2145300060,
+  2390574316,
+  1461121720,
+  2956646967,
+  4031777805,
+  4028374788,
+  33600511,
+  2920084762,
+  1018524850,
+  629373528,
+  3691585981,
+  3515945977,
+  2091462646,
+  2486323059,
+  586499841,
+  988145025,
+  935516892,
+  3367335476,
+  2599673255,
+  2839830854,
+  265290510,
+  3972581182,
+  2759138881,
+  3795373465,
+  1005194799,
+  847297441,
+  406762289,
+  1314163512,
+  1332590856,
+  1866599683,
+  4127851711,
+  750260880,
+  613907577,
+  1450815602,
+  3165620655,
+  3734664991,
+  3650291728,
+  3012275730,
+  3704569646,
+  1427272223,
+  778793252,
+  1343938022,
+  2676280711,
+  2052605720,
+  1946737175,
+  3164576444,
+  3914038668,
+  3967478842,
+  3682934266,
+  1661551462,
+  3294938066,
+  4011595847,
+  840292616,
+  3712170807,
+  616741398,
+  312560963,
+  711312465,
+  1351876610,
+  322626781,
+  1910503582,
+  271666773,
+  2175563734,
+  1594956187,
+  70604529,
+  3617834859,
+  1007753275,
+  1495573769,
+  4069517037,
+  2549218298,
+  2663038764,
+  504708206,
+  2263041392,
+  3941167025,
+  2249088522,
+  1514023603,
+  1998579484,
+  1312622330,
+  694541497,
+  2582060303,
+  2151582166,
+  1382467621,
+  776784248,
+  2618340202,
+  3323268794,
+  2497899128,
+  2784771155,
+  503983604,
+  4076293799,
+  907881277,
+  423175695,
+  432175456,
+  1378068232,
+  4145222326,
+  3954048622,
+  3938656102,
+  3820766613,
+  2793130115,
+  2977904593,
+  26017576,
+  3274890735,
+  3194772133,
+  1700274565,
+  1756076034,
+  4006520079,
+  3677328699,
+  720338349,
+  1533947780,
+  354530856,
+  688349552,
+  3973924725,
+  1637815568,
+  332179504,
+  3949051286,
+  53804574,
+  2852348879,
+  3044236432,
+  1282449977,
+  3583942155,
+  3416972820,
+  4006381244,
+  1617046695,
+  2628476075,
+  3002303598,
+  1686838959,
+  431878346,
+  2686675385,
+  1700445008,
+  1080580658,
+  1009431731,
+  832498133,
+  3223435511,
+  2605976345,
+  2271191193,
+  2516031870,
+  1648197032,
+  4164389018,
+  2548247927,
+  300782431,
+  375919233,
+  238389289,
+  3353747414,
+  2531188641,
+  2019080857,
+  1475708069,
+  455242339,
+  2609103871,
+  448939670,
+  3451063019,
+  1395535956,
+  2413381860,
+  1841049896,
+  1491858159,
+  885456874,
+  4264095073,
+  4001119347,
+  1565136089,
+  3898914787,
+  1108368660,
+  540939232,
+  1173283510,
+  2745871338,
+  3681308437,
+  4207628240,
+  3343053890,
+  4016749493,
+  1699691293,
+  1103962373,
+  3625875870,
+  2256883143,
+  3830138730,
+  1031889488,
+  3479347698,
+  1535977030,
+  4236805024,
+  3251091107,
+  2132092099,
+  1774941330,
+  1199868427,
+  1452454533,
+  157007616,
+  2904115357,
+  342012276,
+  595725824,
+  1480756522,
+  206960106,
+  497939518,
+  591360097,
+  863170706,
+  2375253569,
+  3596610801,
+  1814182875,
+  2094937945,
+  3421402208,
+  1082520231,
+  3463918190,
+  2785509508,
+  435703966,
+  3908032597,
+  1641649973,
+  2842273706,
+  3305899714,
+  1510255612,
+  2148256476,
+  2655287854,
+  3276092548,
+  4258621189,
+  236887753,
+  3681803219,
+  274041037,
+  1734335097,
+  3815195456,
+  3317970021,
+  1899903192,
+  1026095262,
+  4050517792,
+  356393447,
+  2410691914,
+  3873677099,
+  3682840055,
+  3913112168,
+  2491498743,
+  4132185628,
+  2489919796,
+  1091903735,
+  1979897079,
+  3170134830,
+  3567386728,
+  3557303409,
+  857797738,
+  1136121015,
+  1342202287,
+  507115054,
+  2535736646,
+  337727348,
+  3213592640,
+  1301675037,
+  2528481711,
+  1895095763,
+  1721773893,
+  3216771564,
+  62756741,
+  2142006736,
+  835421444,
+  2531993523,
+  1442658625,
+  3659876326,
+  2882144922,
+  676362277,
+  1392781812,
+  170690266,
+  3921047035,
+  1759253602,
+  3611846912,
+  1745797284,
+  664899054,
+  1329594018,
+  3901205900,
+  3045908486,
+  2062866102,
+  2865634940,
+  3543621612,
+  3464012697,
+  1080764994,
+  553557557,
+  3656615353,
+  3996768171,
+  991055499,
+  499776247,
+  1265440854,
+  648242737,
+  3940784050,
+  980351604,
+  3713745714,
+  1749149687,
+  3396870395,
+  4211799374,
+  3640570775,
+  1161844396,
+  3125318951,
+  1431517754,
+  545492359,
+  4268468663,
+  3499529547,
+  1437099964,
+  2702547544,
+  3433638243,
+  2581715763,
+  2787789398,
+  1060185593,
+  1593081372,
+  2418618748,
+  4260947970,
+  69676912,
+  2159744348,
+  86519011,
+  2512459080,
+  3838209314,
+  1220612927,
+  3339683548,
+  133810670,
+  1090789135,
+  1078426020,
+  1569222167,
+  845107691,
+  3583754449,
+  4072456591,
+  1091646820,
+  628848692,
+  1613405280,
+  3757631651,
+  526609435,
+  236106946,
+  48312990,
+  2942717905,
+  3402727701,
+  1797494240,
+  859738849,
+  992217954,
+  4005476642,
+  2243076622,
+  3870952857,
+  3732016268,
+  765654824,
+  3490871365,
+  2511836413,
+  1685915746,
+  3888969200,
+  1414112111,
+  2273134842,
+  3281911079,
+  4080962846,
+  172450625,
+  2569994100,
+  980381355,
+  4109958455,
+  2819808352,
+  2716589560,
+  2568741196,
+  3681446669,
+  3329971472,
+  1835478071,
+  660984891,
+  3704678404,
+  4045999559,
+  3422617507,
+  3040415634,
+  1762651403,
+  1719377915,
+  3470491036,
+  2693910283,
+  3642056355,
+  3138596744,
+  1364962596,
+  2073328063,
+  1983633131,
+  926494387,
+  3423689081,
+  2150032023,
+  4096667949,
+  1749200295,
+  3328846651,
+  309677260,
+  2016342300,
+  1779581495,
+  3079819751,
+  111262694,
+  1274766160,
+  443224088,
+  298511866,
+  1025883608,
+  3806446537,
+  1145181785,
+  168956806,
+  3641502830,
+  3584813610,
+  1689216846,
+  3666258015,
+  3200248200,
+  1692713982,
+  2646376535,
+  4042768518,
+  1618508792,
+  1610833997,
+  3523052358,
+  4130873264,
+  2001055236,
+  3610705100,
+  2202168115,
+  4028541809,
+  2961195399,
+  1006657119,
+  2006996926,
+  3186142756,
+  1430667929,
+  3210227297,
+  1314452623,
+  4074634658,
+  4101304120,
+  2273951170,
+  1399257539,
+  3367210612,
+  3027628629,
+  1190975929,
+  2062231137,
+  2333990788,
+  2221543033,
+  2438960610,
+  1181637006,
+  548689776,
+  2362791313,
+  3372408396,
+  3104550113,
+  3145860560,
+  296247880,
+  1970579870,
+  3078560182,
+  3769228297,
+  1714227617,
+  3291629107,
+  3898220290,
+  166772364,
+  1251581989,
+  493813264,
+  448347421,
+  195405023,
+  2709975567,
+  677966185,
+  3703036547,
+  1463355134,
+  2715995803,
+  1338867538,
+  1343315457,
+  2802222074,
+  2684532164,
+  233230375,
+  2599980071,
+  2000651841,
+  3277868038,
+  1638401717,
+  4028070440,
+  3237316320,
+  6314154,
+  819756386,
+  300326615,
+  590932579,
+  1405279636,
+  3267499572,
+  3150704214,
+  2428286686,
+  3959192993,
+  3461946742,
+  1862657033,
+  1266418056,
+  963775037,
+  2089974820,
+  2263052895,
+  1917689273,
+  448879540,
+  3550394620,
+  3981727096,
+  150775221,
+  3627908307,
+  1303187396,
+  508620638,
+  2975983352,
+  2726630617,
+  1817252668,
+  1876281319,
+  1457606340,
+  908771278,
+  3720792119,
+  3617206836,
+  2455994898,
+  1729034894,
+  1080033504,
+  976866871,
+  3556439503,
+  2881648439,
+  1522871579,
+  1555064734,
+  1336096578,
+  3548522304,
+  2579274686,
+  3574697629,
+  3205460757,
+  3593280638,
+  3338716283,
+  3079412587,
+  564236357,
+  2993598910,
+  1781952180,
+  1464380207,
+  3163844217,
+  3332601554,
+  1699332808,
+  1393555694,
+  1183702653,
+  3581086237,
+  1288719814,
+  691649499,
+  2847557200,
+  2895455976,
+  3193889540,
+  2717570544,
+  1781354906,
+  1676643554,
+  2592534050,
+  3230253752,
+  1126444790,
+  2770207658,
+  2633158820,
+  2210423226,
+  2615765581,
+  2414155088,
+  3127139286,
+  673620729,
+  2805611233,
+  1269405062,
+  4015350505,
+  3341807571,
+  4149409754,
+  1057255273,
+  2012875353,
+  2162469141,
+  2276492801,
+  2601117357,
+  993977747,
+  3918593370,
+  2654263191,
+  753973209,
+  36408145,
+  2530585658,
+  25011837,
+  3520020182,
+  2088578344,
+  530523599,
+  2918365339,
+  1524020338,
+  1518925132,
+  3760827505,
+  3759777254,
+  1202760957,
+  3985898139,
+  3906192525,
+  674977740,
+  4174734889,
+  2031300136,
+  2019492241,
+  3983892565,
+  4153806404,
+  3822280332,
+  352677332,
+  2297720250,
+  60907813,
+  90501309,
+  3286998549,
+  1016092578,
+  2535922412,
+  2839152426,
+  457141659,
+  509813237,
+  4120667899,
+  652014361,
+  1966332200,
+  2975202805,
+  55981186,
+  2327461051,
+  676427537,
+  3255491064,
+  2882294119,
+  3433927263,
+  1307055953,
+  942726286,
+  933058658,
+  2468411793,
+  3933900994,
+  4215176142,
+  1361170020,
+  2001714738,
+  2830558078,
+  3274259782,
+  1222529897,
+  1679025792,
+  2729314320,
+  3714953764,
+  1770335741,
+  151462246,
+  3013232138,
+  1682292957,
+  1483529935,
+  471910574,
+  1539241949,
+  458788160,
+  3436315007,
+  1807016891,
+  3718408830,
+  978976581,
+  1043663428,
+  3165965781,
+  1927990952,
+  4200891579,
+  2372276910,
+  3208408903,
+  3533431907,
+  1412390302,
+  2931980059,
+  4132332400,
+  1947078029,
+  3881505623,
+  4168226417,
+  2941484381,
+  1077988104,
+  1320477388,
+  886195818,
+  18198404,
+  3786409e3,
+  2509781533,
+  112762804,
+  3463356488,
+  1866414978,
+  891333506,
+  18488651,
+  661792760,
+  1628790961,
+  3885187036,
+  3141171499,
+  876946877,
+  2693282273,
+  1372485963,
+  791857591,
+  2686433993,
+  3759982718,
+  3167212022,
+  3472953795,
+  2716379847,
+  445679433,
+  3561995674,
+  3504004811,
+  3574258232,
+  54117162,
+  3331405415,
+  2381918588,
+  3769707343,
+  4154350007,
+  1140177722,
+  4074052095,
+  668550556,
+  3214352940,
+  367459370,
+  261225585,
+  2610173221,
+  4209349473,
+  3468074219,
+  3265815641,
+  314222801,
+  3066103646,
+  3808782860,
+  282218597,
+  3406013506,
+  3773591054,
+  379116347,
+  1285071038,
+  846784868,
+  2669647154,
+  3771962079,
+  3550491691,
+  2305946142,
+  453669953,
+  1268987020,
+  3317592352,
+  3279303384,
+  3744833421,
+  2610507566,
+  3859509063,
+  266596637,
+  3847019092,
+  517658769,
+  3462560207,
+  3443424879,
+  370717030,
+  4247526661,
+  2224018117,
+  4143653529,
+  4112773975,
+  2788324899,
+  2477274417,
+  1456262402,
+  2901442914,
+  1517677493,
+  1846949527,
+  2295493580,
+  3734397586,
+  2176403920,
+  1280348187,
+  1908823572,
+  3871786941,
+  846861322,
+  1172426758,
+  3287448474,
+  3383383037,
+  1655181056,
+  3139813346,
+  901632758,
+  1897031941,
+  2986607138,
+  3066810236,
+  3447102507,
+  1393639104,
+  373351379,
+  950779232,
+  625454576,
+  3124240540,
+  4148612726,
+  2007998917,
+  544563296,
+  2244738638,
+  2330496472,
+  2058025392,
+  1291430526,
+  424198748,
+  50039436,
+  29584100,
+  3605783033,
+  2429876329,
+  2791104160,
+  1057563949,
+  3255363231,
+  3075367218,
+  3463963227,
+  1469046755,
+  985887462
+];
+var C_ORIG = [
+  1332899944,
+  1700884034,
+  1701343084,
+  1684370003,
+  1668446532,
+  1869963892
+];
+function _encipher(lr, off, P, S) {
+  var n, l = lr[off], r = lr[off + 1];
+  l ^= P[0];
+  n = S[l >>> 24];
+  n += S[256 | l >> 16 & 255];
+  n ^= S[512 | l >> 8 & 255];
+  n += S[768 | l & 255];
+  r ^= n ^ P[1];
+  n = S[r >>> 24];
+  n += S[256 | r >> 16 & 255];
+  n ^= S[512 | r >> 8 & 255];
+  n += S[768 | r & 255];
+  l ^= n ^ P[2];
+  n = S[l >>> 24];
+  n += S[256 | l >> 16 & 255];
+  n ^= S[512 | l >> 8 & 255];
+  n += S[768 | l & 255];
+  r ^= n ^ P[3];
+  n = S[r >>> 24];
+  n += S[256 | r >> 16 & 255];
+  n ^= S[512 | r >> 8 & 255];
+  n += S[768 | r & 255];
+  l ^= n ^ P[4];
+  n = S[l >>> 24];
+  n += S[256 | l >> 16 & 255];
+  n ^= S[512 | l >> 8 & 255];
+  n += S[768 | l & 255];
+  r ^= n ^ P[5];
+  n = S[r >>> 24];
+  n += S[256 | r >> 16 & 255];
+  n ^= S[512 | r >> 8 & 255];
+  n += S[768 | r & 255];
+  l ^= n ^ P[6];
+  n = S[l >>> 24];
+  n += S[256 | l >> 16 & 255];
+  n ^= S[512 | l >> 8 & 255];
+  n += S[768 | l & 255];
+  r ^= n ^ P[7];
+  n = S[r >>> 24];
+  n += S[256 | r >> 16 & 255];
+  n ^= S[512 | r >> 8 & 255];
+  n += S[768 | r & 255];
+  l ^= n ^ P[8];
+  n = S[l >>> 24];
+  n += S[256 | l >> 16 & 255];
+  n ^= S[512 | l >> 8 & 255];
+  n += S[768 | l & 255];
+  r ^= n ^ P[9];
+  n = S[r >>> 24];
+  n += S[256 | r >> 16 & 255];
+  n ^= S[512 | r >> 8 & 255];
+  n += S[768 | r & 255];
+  l ^= n ^ P[10];
+  n = S[l >>> 24];
+  n += S[256 | l >> 16 & 255];
+  n ^= S[512 | l >> 8 & 255];
+  n += S[768 | l & 255];
+  r ^= n ^ P[11];
+  n = S[r >>> 24];
+  n += S[256 | r >> 16 & 255];
+  n ^= S[512 | r >> 8 & 255];
+  n += S[768 | r & 255];
+  l ^= n ^ P[12];
+  n = S[l >>> 24];
+  n += S[256 | l >> 16 & 255];
+  n ^= S[512 | l >> 8 & 255];
+  n += S[768 | l & 255];
+  r ^= n ^ P[13];
+  n = S[r >>> 24];
+  n += S[256 | r >> 16 & 255];
+  n ^= S[512 | r >> 8 & 255];
+  n += S[768 | r & 255];
+  l ^= n ^ P[14];
+  n = S[l >>> 24];
+  n += S[256 | l >> 16 & 255];
+  n ^= S[512 | l >> 8 & 255];
+  n += S[768 | l & 255];
+  r ^= n ^ P[15];
+  n = S[r >>> 24];
+  n += S[256 | r >> 16 & 255];
+  n ^= S[512 | r >> 8 & 255];
+  n += S[768 | r & 255];
+  l ^= n ^ P[16];
+  lr[off] = r ^ P[BLOWFISH_NUM_ROUNDS + 1];
+  lr[off + 1] = l;
+  return lr;
+}
+function _streamtoword(data, offp) {
+  for (var i = 0, word = 0; i < 4; ++i)
+    word = word << 8 | data[offp] & 255, offp = (offp + 1) % data.length;
+  return { key: word, offp };
+}
+function _key(key, P, S) {
+  var offset = 0, lr = [0, 0], plen = P.length, slen = S.length, sw;
+  for (var i = 0; i < plen; i++)
+    sw = _streamtoword(key, offset), offset = sw.offp, P[i] = P[i] ^ sw.key;
+  for (i = 0; i < plen; i += 2)
+    lr = _encipher(lr, 0, P, S), P[i] = lr[0], P[i + 1] = lr[1];
+  for (i = 0; i < slen; i += 2)
+    lr = _encipher(lr, 0, P, S), S[i] = lr[0], S[i + 1] = lr[1];
+}
+function _ekskey(data, key, P, S) {
+  var offp = 0, lr = [0, 0], plen = P.length, slen = S.length, sw;
+  for (var i = 0; i < plen; i++)
+    sw = _streamtoword(key, offp), offp = sw.offp, P[i] = P[i] ^ sw.key;
+  offp = 0;
+  for (i = 0; i < plen; i += 2)
+    sw = _streamtoword(data, offp), offp = sw.offp, lr[0] ^= sw.key, sw = _streamtoword(data, offp), offp = sw.offp, lr[1] ^= sw.key, lr = _encipher(lr, 0, P, S), P[i] = lr[0], P[i + 1] = lr[1];
+  for (i = 0; i < slen; i += 2)
+    sw = _streamtoword(data, offp), offp = sw.offp, lr[0] ^= sw.key, sw = _streamtoword(data, offp), offp = sw.offp, lr[1] ^= sw.key, lr = _encipher(lr, 0, P, S), S[i] = lr[0], S[i + 1] = lr[1];
+}
+function _crypt(b, salt, rounds, callback, progressCallback) {
+  var cdata = C_ORIG.slice(), clen = cdata.length, err;
+  if (rounds < 4 || rounds > 31) {
+    err = Error("Illegal number of rounds (4-31): " + rounds);
+    if (callback) {
+      nextTick(callback.bind(this, err));
+      return;
+    } else throw err;
+  }
+  if (salt.length !== BCRYPT_SALT_LEN) {
+    err = Error(
+      "Illegal salt length: " + salt.length + " != " + BCRYPT_SALT_LEN
+    );
+    if (callback) {
+      nextTick(callback.bind(this, err));
+      return;
+    } else throw err;
+  }
+  rounds = 1 << rounds >>> 0;
+  var P, S, i = 0, j;
+  if (typeof Int32Array === "function") {
+    P = new Int32Array(P_ORIG);
+    S = new Int32Array(S_ORIG);
+  } else {
+    P = P_ORIG.slice();
+    S = S_ORIG.slice();
+  }
+  _ekskey(salt, b, P, S);
+  function next() {
+    if (progressCallback) progressCallback(i / rounds);
+    if (i < rounds) {
+      var start = Date.now();
+      for (; i < rounds; ) {
+        i = i + 1;
+        _key(b, P, S);
+        _key(salt, P, S);
+        if (Date.now() - start > MAX_EXECUTION_TIME) break;
+      }
+    } else {
+      for (i = 0; i < 64; i++)
+        for (j = 0; j < clen >> 1; j++) _encipher(cdata, j << 1, P, S);
+      var ret = [];
+      for (i = 0; i < clen; i++)
+        ret.push((cdata[i] >> 24 & 255) >>> 0), ret.push((cdata[i] >> 16 & 255) >>> 0), ret.push((cdata[i] >> 8 & 255) >>> 0), ret.push((cdata[i] & 255) >>> 0);
+      if (callback) {
+        callback(null, ret);
+        return;
+      } else return ret;
+    }
+    if (callback) nextTick(next);
+  }
+  if (typeof callback !== "undefined") {
+    next();
+  } else {
+    var res;
+    while (true) if (typeof (res = next()) !== "undefined") return res || [];
+  }
+}
+function _hash(password, salt, callback, progressCallback) {
+  var err;
+  if (typeof password !== "string" || typeof salt !== "string") {
+    err = Error("Invalid string / salt: Not a string");
+    if (callback) {
+      nextTick(callback.bind(this, err));
+      return;
+    } else throw err;
+  }
+  var minor, offset;
+  if (salt.charAt(0) !== "$" || salt.charAt(1) !== "2") {
+    err = Error("Invalid salt version: " + salt.substring(0, 2));
+    if (callback) {
+      nextTick(callback.bind(this, err));
+      return;
+    } else throw err;
+  }
+  if (salt.charAt(2) === "$") minor = String.fromCharCode(0), offset = 3;
+  else {
+    minor = salt.charAt(2);
+    if (minor !== "a" && minor !== "b" && minor !== "y" || salt.charAt(3) !== "$") {
+      err = Error("Invalid salt revision: " + salt.substring(2, 4));
+      if (callback) {
+        nextTick(callback.bind(this, err));
+        return;
+      } else throw err;
+    }
+    offset = 4;
+  }
+  if (salt.charAt(offset + 2) > "$") {
+    err = Error("Missing salt rounds");
+    if (callback) {
+      nextTick(callback.bind(this, err));
+      return;
+    } else throw err;
+  }
+  var r1 = parseInt(salt.substring(offset, offset + 1), 10) * 10, r2 = parseInt(salt.substring(offset + 1, offset + 2), 10), rounds = r1 + r2, real_salt = salt.substring(offset + 3, offset + 25);
+  password += minor >= "a" ? "\0" : "";
+  var passwordb = utf8Array(password), saltb = base64_decode(real_salt, BCRYPT_SALT_LEN);
+  function finish(bytes) {
+    var res = [];
+    res.push("$2");
+    if (minor >= "a") res.push(minor);
+    res.push("$");
+    if (rounds < 10) res.push("0");
+    res.push(rounds.toString());
+    res.push("$");
+    res.push(base64_encode(saltb, saltb.length));
+    res.push(base64_encode(bytes, C_ORIG.length * 4 - 1));
+    return res.join("");
+  }
+  if (typeof callback == "undefined")
+    return finish(_crypt(passwordb, saltb, rounds));
+  else {
+    _crypt(
+      passwordb,
+      saltb,
+      rounds,
+      function(err2, bytes) {
+        if (err2) callback(err2, null);
+        else callback(null, finish(bytes));
+      },
+      progressCallback
+    );
+  }
+}
+function encodeBase64(bytes, length) {
+  return base64_encode(bytes, length);
+}
+function decodeBase64(string, length) {
+  return base64_decode(string, length);
+}
+var bcryptjs_default = {
+  setRandomFallback,
+  genSaltSync,
+  genSalt,
+  hashSync,
+  hash,
+  compareSync,
+  compare,
+  getRounds,
+  getSalt,
+  truncates,
+  encodeBase64,
+  decodeBase64
+};
+
+// server/authService.ts
+var SALT_ROUNDS = 12;
+var DEFAULT_ADMIN_USERNAME = "admin";
+var DEFAULT_ADMIN_PASSWORD = "1111";
+async function hashPassword(password) {
+  return bcryptjs_default.hash(password, SALT_ROUNDS);
+}
+async function verifyPassword(password, hash2) {
+  return bcryptjs_default.compare(password, hash2);
+}
+async function bootstrapAdminUser() {
+  try {
+    const existingAdmin = await db.select().from(users).where(eq(users.username, DEFAULT_ADMIN_USERNAME));
+    if (existingAdmin.length === 0) {
+      const passwordHash = await hashPassword(DEFAULT_ADMIN_PASSWORD);
+      await db.insert(users).values({
+        username: DEFAULT_ADMIN_USERNAME,
+        passwordHash,
+        role: "admin",
+        isFirstLogin: true
+      });
+      console.log("[Auth] Default admin user created");
+    } else {
+      console.log("[Auth] Admin user already exists");
+    }
+  } catch (error) {
+    console.error("[Auth] Failed to bootstrap admin user:", error);
+  }
+}
+async function findUserByUsername(username) {
+  const [user] = await db.select().from(users).where(eq(users.username, username));
+  return user || null;
+}
+async function findUserById(id) {
+  const [user] = await db.select().from(users).where(eq(users.id, id));
+  return user || null;
+}
+async function validateCredentials(username, password) {
+  const user = await findUserByUsername(username);
+  if (!user) return null;
+  const isValid = await verifyPassword(password, user.passwordHash);
+  if (!isValid) return null;
+  return {
+    id: user.id,
+    username: user.username,
+    role: user.role,
+    isFirstLogin: user.isFirstLogin ?? true
+  };
+}
+async function changePassword(userId, oldPassword, newPassword) {
+  const user = await findUserById(userId);
+  if (!user) {
+    return { success: false, error: "User not found" };
+  }
+  const isOldPasswordValid = await verifyPassword(oldPassword, user.passwordHash);
+  if (!isOldPasswordValid) {
+    return { success: false, error: "Current password is incorrect" };
+  }
+  if (newPassword.length < 6) {
+    return { success: false, error: "New password must be at least 6 characters" };
+  }
+  const newPasswordHash = await hashPassword(newPassword);
+  await db.update(users).set({
+    passwordHash: newPasswordHash,
+    isFirstLogin: false,
+    updatedAt: /* @__PURE__ */ new Date()
+  }).where(eq(users.id, userId));
+  return { success: true };
+}
+function sanitizeUser(user) {
+  return {
+    id: user.id,
+    username: user.username,
+    role: user.role,
+    isFirstLogin: user.isFirstLogin
+  };
+}
+
+// server/authRoutes.ts
+var sessions = {};
+var SESSION_DURATION_MS = 24 * 60 * 60 * 1e3;
+function generateToken() {
+  return import_crypto3.default.randomBytes(32).toString("hex");
+}
+function createSession(user) {
+  const token = generateToken();
+  sessions[token] = {
+    userId: user.id,
+    username: user.username,
+    role: user.role,
+    isFirstLogin: user.isFirstLogin,
+    expiresAt: Date.now() + SESSION_DURATION_MS
+  };
+  return token;
+}
+function getSession(token) {
+  const session = sessions[token];
+  if (!session) return null;
+  if (Date.now() > session.expiresAt) {
+    delete sessions[token];
+    return null;
+  }
+  return session;
+}
+function destroySession(token) {
+  delete sessions[token];
+}
+function updateSessionFirstLogin(token, isFirstLogin) {
+  if (sessions[token]) {
+    sessions[token].isFirstLogin = isFirstLogin;
+  }
+}
+var loginLimiter = rate_limit_default({
+  windowMs: 15 * 60 * 1e3,
+  max: 10,
+  message: { error: "Too many login attempts. Please try again later." },
+  standardHeaders: true,
+  legacyHeaders: false
+});
+function authMiddleware(req, res, next) {
+  const authHeader = req.headers.authorization;
+  if (!authHeader || !authHeader.startsWith("Bearer ")) {
+    res.status(401).json({ error: "Authentication required" });
+    return;
+  }
+  const token = authHeader.substring(7);
+  const session = getSession(token);
+  if (!session) {
+    res.status(401).json({ error: "Invalid or expired session" });
+    return;
+  }
+  req.user = {
+    id: session.userId,
+    username: session.username,
+    role: session.role,
+    isFirstLogin: session.isFirstLogin
+  };
+  next();
+}
+function requirePasswordChange(req, res, next) {
+  if (req.user?.isFirstLogin) {
+    res.status(403).json({ error: "Password change required", code: "FIRST_LOGIN_REQUIRED" });
+    return;
+  }
+  next();
+}
+function registerAuthRoutes(app2) {
+  app2.post("/api/auth/login", loginLimiter, async (req, res) => {
+    try {
+      const { username, password } = req.body;
+      if (!username || !password) {
+        res.status(400).json({ error: "Username and password are required" });
+        return;
+      }
+      const user = await validateCredentials(username, password);
+      if (!user) {
+        res.status(401).json({ error: "Invalid credentials" });
+        return;
+      }
+      const token = createSession(user);
+      res.json({
+        token,
+        user: sanitizeUser(user)
+      });
+    } catch (error) {
+      console.error("Login error:", error);
+      res.status(500).json({ error: "Authentication failed" });
+    }
+  });
+  app2.post("/api/auth/logout", authMiddleware, (req, res) => {
+    const authHeader = req.headers.authorization;
+    if (authHeader && authHeader.startsWith("Bearer ")) {
+      const token = authHeader.substring(7);
+      destroySession(token);
+    }
+    res.json({ success: true });
+  });
+  app2.post("/api/auth/change-password", authMiddleware, async (req, res) => {
+    try {
+      const { oldPassword, newPassword } = req.body;
+      const userId = req.user?.id;
+      if (!userId) {
+        res.status(401).json({ error: "Not authenticated" });
+        return;
+      }
+      if (!oldPassword || !newPassword) {
+        res.status(400).json({ error: "Old and new passwords are required" });
+        return;
+      }
+      const result = await changePassword(userId, oldPassword, newPassword);
+      if (!result.success) {
+        res.status(400).json({ error: result.error });
+        return;
+      }
+      const authHeader = req.headers.authorization;
+      if (authHeader && authHeader.startsWith("Bearer ")) {
+        const token = authHeader.substring(7);
+        updateSessionFirstLogin(token, false);
+      }
+      res.json({ success: true });
+    } catch (error) {
+      console.error("Change password error:", error);
+      res.status(500).json({ error: "Failed to change password" });
+    }
+  });
+  app2.get("/api/auth/me", authMiddleware, async (req, res) => {
+    try {
+      if (!req.user) {
+        res.status(401).json({ error: "Not authenticated" });
+        return;
+      }
+      const user = await findUserById(req.user.id);
+      if (!user) {
+        res.status(404).json({ error: "User not found" });
+        return;
+      }
+      res.json({
+        id: user.id,
+        username: user.username,
+        role: user.role,
+        isFirstLogin: user.isFirstLogin
+      });
+    } catch (error) {
+      console.error("Get user error:", error);
+      res.status(500).json({ error: "Failed to get user info" });
+    }
+  });
+}
+
 // server/routes.ts
 function registerRoutes(app2) {
+  app2.use("/api/tree-nodes", authMiddleware, requirePasswordChange);
+  app2.use("/api/products", authMiddleware, requirePasswordChange);
+  app2.use("/api/suppliers", authMiddleware, requirePasswordChange);
+  app2.use("/api/custom-fields", authMiddleware, requirePasswordChange);
+  app2.use("/api/usage-areas", authMiddleware, requirePasswordChange);
+  app2.use("/api/seed", authMiddleware, requirePasswordChange);
+  app2.use("/api/backups", authMiddleware, requirePasswordChange);
+  app2.use("/api/supplier-products", authMiddleware, requirePasswordChange);
+  app2.use("/api/settings", authMiddleware, requirePasswordChange);
   app2.get("/api/tree-nodes", async (req, res) => {
     try {
       const nodes = await storage.getTreeNodes();
@@ -58417,38 +63183,6 @@ function registerRoutes(app2) {
           await storage.createSupplier(supplier);
         }
       }
-      const existingMasterProducts = await storage.getMasterProducts();
-      if (existingMasterProducts.length === 0) {
-        const initialMasterProducts = [
-          {
-            masterProductId: "P-0001",
-            name: "Industrial Epoxy Resin",
-            nodeId: "node-3",
-            description: "High-performance epoxy resin for industrial bonding and coating applications",
-            imageUrl: "https://picsum.photos/seed/resin/400/300",
-            isActive: true
-          },
-          {
-            masterProductId: "P-0002",
-            name: "Organic Cotton Fabric",
-            nodeId: "node-6",
-            description: "Sustainable organic cotton fabric for apparel and home textiles",
-            imageUrl: "https://picsum.photos/seed/cotton/400/300",
-            isActive: true
-          },
-          {
-            masterProductId: "P-0003",
-            name: "Precision Microprocessor",
-            nodeId: "node-9",
-            description: "High-speed processing units for edge computing and IoT devices",
-            imageUrl: "https://picsum.photos/seed/chip/400/300",
-            isActive: true
-          }
-        ];
-        for (const mp of initialMasterProducts) {
-          await storage.createMasterProduct(mp);
-        }
-      }
       res.json({ message: "Database seeded successfully" });
     } catch (error) {
       console.error("Error seeding database:", error);
@@ -58506,57 +63240,6 @@ function registerRoutes(app2) {
       res.status(500).json({ error: "Failed to delete supplier" });
     }
   });
-  app2.get("/api/master-products", async (req, res) => {
-    try {
-      const masterProducts2 = await storage.getMasterProducts();
-      res.json(masterProducts2);
-    } catch (error) {
-      console.error("Error fetching master products:", error);
-      res.status(500).json({ error: "Failed to fetch master products" });
-    }
-  });
-  app2.get("/api/master-products/:masterProductId", async (req, res) => {
-    try {
-      const masterProduct = await storage.getMasterProduct(req.params.masterProductId);
-      if (!masterProduct) {
-        return res.status(404).json({ error: "Master product not found" });
-      }
-      res.json(masterProduct);
-    } catch (error) {
-      console.error("Error fetching master product:", error);
-      res.status(500).json({ error: "Failed to fetch master product" });
-    }
-  });
-  app2.post("/api/master-products", async (req, res) => {
-    try {
-      const masterProduct = await storage.createMasterProduct(req.body);
-      res.status(201).json(masterProduct);
-    } catch (error) {
-      console.error("Error creating master product:", error);
-      res.status(500).json({ error: "Failed to create master product" });
-    }
-  });
-  app2.patch("/api/master-products/:masterProductId", async (req, res) => {
-    try {
-      const masterProduct = await storage.updateMasterProduct(req.params.masterProductId, req.body);
-      if (!masterProduct) {
-        return res.status(404).json({ error: "Master product not found" });
-      }
-      res.json(masterProduct);
-    } catch (error) {
-      console.error("Error updating master product:", error);
-      res.status(500).json({ error: "Failed to update master product" });
-    }
-  });
-  app2.delete("/api/master-products/:masterProductId", async (req, res) => {
-    try {
-      await storage.deleteMasterProduct(req.params.masterProductId);
-      res.status(204).send();
-    } catch (error) {
-      console.error("Error deleting master product:", error);
-      res.status(500).json({ error: "Failed to delete master product" });
-    }
-  });
   app2.get("/api/supplier-products", async (req, res) => {
     try {
       const supplierProducts2 = await storage.getSupplierProducts();
@@ -58576,15 +63259,6 @@ function registerRoutes(app2) {
     } catch (error) {
       console.error("Error fetching supplier product:", error);
       res.status(500).json({ error: "Failed to fetch supplier product" });
-    }
-  });
-  app2.get("/api/supplier-products/by-master/:masterProductId", async (req, res) => {
-    try {
-      const products2 = await storage.getSupplierProductsByMasterId(req.params.masterProductId);
-      res.json(products2);
-    } catch (error) {
-      console.error("Error fetching supplier products by master:", error);
-      res.status(500).json({ error: "Failed to fetch supplier products" });
     }
   });
   app2.get("/api/supplier-products/by-supplier/:supplierId", async (req, res) => {
@@ -58686,18 +63360,267 @@ function registerRoutes(app2) {
       res.status(500).json({ error: "Failed to delete attachment" });
     }
   });
+  app2.get("/api/analytics/product-usage-heatmap", async (req, res) => {
+    try {
+      const { level = "category", categories, usageAreas, suppliers: suppliers2, manufacturers, minPrice, maxPrice } = req.query;
+      const products2 = await storage.getProducts();
+      const treeNodes2 = await storage.getTreeNodes();
+      const DEFAULT_USAGE_AREAS = [
+        "Industrial",
+        "Commercial",
+        "Residential",
+        "Infrastructure",
+        "Food & Beverage",
+        "Healthcare",
+        "Parking",
+        "Sports"
+      ];
+      const categoriesByLevel = treeNodes2.filter((n) => n.type === level);
+      const filteredCategories = categories ? categoriesByLevel.filter((c) => categories.split(",").includes(c.nodeId)) : categoriesByLevel;
+      const targetUsageAreas = usageAreas ? usageAreas.split(",") : DEFAULT_USAGE_AREAS;
+      const filteredProducts = products2.filter((p) => {
+        if (suppliers2 && !suppliers2.split(",").includes(p.supplier)) return false;
+        if (manufacturers && !manufacturers.split(",").includes(p.manufacturer)) return false;
+        if (minPrice && p.price < parseFloat(minPrice)) return false;
+        if (maxPrice && p.price > parseFloat(maxPrice)) return false;
+        return true;
+      });
+      const getProductCategory = (product) => {
+        const findCategoryAtLevel = (nodeId) => {
+          const node = treeNodes2.find((n) => n.nodeId === nodeId);
+          if (!node) return void 0;
+          if (node.type === level) return node;
+          if (node.parentId) return findCategoryAtLevel(node.parentId);
+          return void 0;
+        };
+        if (product.nodeId) {
+          const node = treeNodes2.find((n) => n.nodeId === product.nodeId);
+          if (node) return findCategoryAtLevel(node.nodeId);
+        }
+        if (product.category) {
+          const cat = treeNodes2.find((n) => n.nodeId === product.category || n.name === product.category);
+          if (cat) return findCategoryAtLevel(cat.nodeId);
+        }
+        return void 0;
+      };
+      const getProductUsageAreas = (product) => {
+        const usageField = product.customFields?.find(
+          (cf) => cf.fieldId?.toLowerCase().includes("usage") || cf.fieldId?.toLowerCase().includes("application")
+        );
+        if (usageField?.value) {
+          return String(usageField.value).split(",").map((v) => v.trim());
+        }
+        return DEFAULT_USAGE_AREAS.slice(0, 2);
+      };
+      const heatmapData = filteredCategories.map((cat) => {
+        const dataPoints = targetUsageAreas.map((area) => {
+          const matchingProducts = filteredProducts.filter((p) => {
+            const productCat = getProductCategory(p);
+            if (!productCat || productCat.nodeId !== cat.nodeId) return false;
+            return getProductUsageAreas(p).includes(area);
+          });
+          const prices = matchingProducts.map((p) => p.price).filter((p) => p > 0);
+          const suppliersSet = new Set(matchingProducts.map((p) => p.supplier));
+          const manufacturersSet = new Set(matchingProducts.map((p) => p.manufacturer).filter(Boolean));
+          return {
+            x: area,
+            y: matchingProducts.length,
+            meta: {
+              productIds: matchingProducts.map((p) => p.id),
+              suppliers: suppliersSet.size,
+              manufacturers: manufacturersSet.size,
+              avgPrice: prices.length > 0 ? prices.reduce((a, b) => a + b, 0) / prices.length : 0,
+              minPrice: prices.length > 0 ? Math.min(...prices) : 0,
+              maxPrice: prices.length > 0 ? Math.max(...prices) : 0
+            }
+          };
+        });
+        return {
+          id: cat.name,
+          categoryId: cat.nodeId,
+          data: dataPoints
+        };
+      });
+      res.json(heatmapData);
+    } catch (error) {
+      console.error("Error generating heatmap data:", error);
+      res.status(500).json({ error: "Failed to generate heatmap data" });
+    }
+  });
+  app2.get("/api/settings/usage-areas", async (req, res) => {
+    try {
+      const usageAreas = await storage.getUsageAreas();
+      res.json(usageAreas);
+    } catch (error) {
+      console.error("Error fetching usage areas:", error);
+      res.status(500).json({ error: "Failed to fetch usage areas" });
+    }
+  });
+  app2.put("/api/settings/usage-areas", async (req, res) => {
+    try {
+      const { areas } = req.body;
+      if (!Array.isArray(areas)) {
+        return res.status(400).json({ error: "Areas must be an array" });
+      }
+      const updatedAreas = await storage.setUsageAreas(areas);
+      res.json(updatedAreas);
+    } catch (error) {
+      console.error("Error updating usage areas:", error);
+      res.status(500).json({ error: "Failed to update usage areas" });
+    }
+  });
+  app2.post("/api/backups/create", async (req, res) => {
+    try {
+      const { description } = req.body;
+      const backup = await createBackup("MANUAL", description || "Manual backup");
+      res.status(201).json(backup);
+    } catch (error) {
+      console.error("Error creating backup:", error);
+      res.status(500).json({ error: "Failed to create backup" });
+    }
+  });
+  app2.get("/api/backups", async (req, res) => {
+    try {
+      const backups2 = await listBackups();
+      res.json(backups2);
+    } catch (error) {
+      console.error("Error listing backups:", error);
+      res.status(500).json({ error: "Failed to list backups" });
+    }
+  });
+  app2.get("/api/backups/:id/preview", async (req, res) => {
+    try {
+      const id = parseInt(req.params.id);
+      if (isNaN(id)) {
+        return res.status(400).json({ error: "Invalid backup ID" });
+      }
+      const preview = await getRestorePreview(id);
+      res.json(preview);
+    } catch (error) {
+      console.error("Error getting restore preview:", error);
+      res.status(500).json({ error: "Failed to get restore preview" });
+    }
+  });
+  app2.get("/api/backups/:id/export", async (req, res) => {
+    try {
+      const id = parseInt(req.params.id);
+      if (isNaN(id)) {
+        return res.status(400).json({ error: "Invalid backup ID" });
+      }
+      const { filename, data } = await exportBackup(id);
+      res.setHeader("Content-Disposition", `attachment; filename="${filename}"`);
+      res.setHeader("Content-Type", "application/octet-stream");
+      res.send(data);
+    } catch (error) {
+      console.error("Error exporting backup:", error);
+      res.status(500).json({ error: "Failed to export backup" });
+    }
+  });
+  app2.post("/api/backups/restore/:id", async (req, res) => {
+    try {
+      const id = parseInt(req.params.id);
+      if (isNaN(id)) {
+        return res.status(400).json({ error: "Invalid backup ID" });
+      }
+      const result = await restoreBackup(id);
+      if (result.success) {
+        res.json(result);
+      } else {
+        res.status(500).json(result);
+      }
+    } catch (error) {
+      console.error("Error restoring backup:", error);
+      res.status(500).json({ error: "Failed to restore backup" });
+    }
+  });
+  app2.post("/api/backups/import", async (req, res) => {
+    const MAX_IMPORT_SIZE = 50 * 1024 * 1024;
+    let totalSize = 0;
+    try {
+      const chunks = [];
+      req.on("data", (chunk) => {
+        totalSize += chunk.length;
+        if (totalSize > MAX_IMPORT_SIZE) {
+          req.destroy();
+          return res.status(413).json({ error: "Backup file too large (max 50MB)" });
+        }
+        chunks.push(chunk);
+      });
+      req.on("end", async () => {
+        try {
+          const buffer = Buffer.concat(chunks);
+          const result = await importBackup(buffer);
+          if (result.success) {
+            res.status(201).json(result);
+          } else {
+            res.status(400).json(result);
+          }
+        } catch (error) {
+          console.error("Error importing backup:", error);
+          res.status(500).json({ error: "Failed to import backup" });
+        }
+      });
+    } catch (error) {
+      console.error("Error importing backup:", error);
+      res.status(500).json({ error: "Failed to import backup" });
+    }
+  });
+  app2.delete("/api/backups/:id", async (req, res) => {
+    try {
+      const id = parseInt(req.params.id);
+      if (isNaN(id)) {
+        return res.status(400).json({ error: "Invalid backup ID" });
+      }
+      await deleteBackup(id);
+      res.status(204).send();
+    } catch (error) {
+      console.error("Error deleting backup:", error);
+      res.status(500).json({ error: "Failed to delete backup" });
+    }
+  });
+  app2.post("/api/backups/auto-trigger", async (req, res) => {
+    try {
+      const { reason } = req.body;
+      if (!reason || typeof reason !== "string") {
+        return res.status(400).json({ error: "Reason is required" });
+      }
+      const backup = await triggerAutoBackup(reason);
+      res.status(201).json(backup);
+    } catch (error) {
+      console.error("Error triggering auto-backup:", error);
+      res.status(500).json({ error: "Failed to trigger auto-backup" });
+    }
+  });
+  app2.get("/api/backups/settings", async (req, res) => {
+    try {
+      const settings = getBackupSettings();
+      res.json(settings);
+    } catch (error) {
+      console.error("Error getting backup settings:", error);
+      res.status(500).json({ error: "Failed to get backup settings" });
+    }
+  });
+  app2.put("/api/backups/settings", async (req, res) => {
+    try {
+      const settings = await updateBackupSettings(req.body);
+      res.json(settings);
+    } catch (error) {
+      console.error("Error updating backup settings:", error);
+      res.status(500).json({ error: "Failed to update backup settings" });
+    }
+  });
 }
 
 // node_modules/@google-cloud/storage/build/esm/src/nodejs-common/service.js
 var import_google_auth_library2 = __toESM(require_src6(), 1);
 
 // node_modules/uuid/dist/esm-node/rng.js
-var import_crypto5 = __toESM(require("crypto"));
+var import_crypto8 = __toESM(require("crypto"));
 var rnds8Pool2 = new Uint8Array(256);
 var poolPtr2 = rnds8Pool2.length;
 function rng2() {
   if (poolPtr2 > rnds8Pool2.length - 16) {
-    import_crypto5.default.randomFillSync(rnds8Pool2);
+    import_crypto8.default.randomFillSync(rnds8Pool2);
     poolPtr2 = 0;
   }
   return rnds8Pool2.slice(poolPtr2, poolPtr2 += 16);
@@ -60467,13 +65390,13 @@ var Acl = class extends AclRoleAccessorMethods {
 
 // node_modules/@google-cloud/storage/build/esm/src/file.js
 var import_promisify3 = __toESM(require_src11(), 1);
-var crypto12 = __toESM(require("crypto"), 1);
+var crypto13 = __toESM(require("crypto"), 1);
 var fs = __toESM(require("fs"), 1);
 var import_mime = __toESM(require_mime(), 1);
 
 // node_modules/@google-cloud/storage/build/esm/src/resumable-upload.js
 var import_abort_controller = __toESM(require_abort_controller(), 1);
-var import_crypto10 = require("crypto");
+var import_crypto13 = require("crypto");
 var gaxios = __toESM(require_src2(), 1);
 var import_google_auth_library3 = __toESM(require_src6(), 1);
 var import_stream3 = require("stream");
@@ -60570,13 +65493,13 @@ var Upload = class extends import_stream3.Writable {
         const base64Key = Buffer.from(cfg.key).toString("base64");
         this.encryption = {
           key: base64Key,
-          hash: (0, import_crypto10.createHash)("sha256").update(cfg.key).digest("base64")
+          hash: (0, import_crypto13.createHash)("sha256").update(cfg.key).digest("base64")
         };
       } else {
         const base64Key = cfg.key.toString("base64");
         this.encryption = {
           key: base64Key,
-          hash: (0, import_crypto10.createHash)("sha256").update(cfg.key).digest("base64")
+          hash: (0, import_crypto13.createHash)("sha256").update(cfg.key).digest("base64")
         };
       }
     }
@@ -61179,7 +66102,7 @@ var import_stream5 = require("stream");
 var zlib = __toESM(require("zlib"), 1);
 
 // node_modules/@google-cloud/storage/build/esm/src/signer.js
-var crypto11 = __toESM(require("crypto"), 1);
+var crypto12 = __toESM(require("crypto"), 1);
 var url = __toESM(require("url"), 1);
 var SignerExceptionMessages;
 (function(SignerExceptionMessages2) {
@@ -61313,12 +66236,12 @@ var URLSigner = class {
       };
       const canonicalQueryParams = this.getCanonicalQueryParams(queryParams);
       const canonicalRequest = this.getCanonicalRequest(config.method, this.getResourcePath(!!config.cname, config.bucket, config.file), canonicalQueryParams, extensionHeadersString, signedHeaders, contentSha256);
-      const hash = crypto11.createHash("sha256").update(canonicalRequest).digest("hex");
+      const hash2 = crypto12.createHash("sha256").update(canonicalRequest).digest("hex");
       const blobToSign = [
         "GOOG4-RSA-SHA256",
         dateISO,
         credentialScope,
-        hash
+        hash2
       ].join("\n");
       try {
         const signature = await this.auth.sign(blobToSign, (_a2 = config.signingEndpoint) === null || _a2 === void 0 ? void 0 : _a2.toString());
@@ -61845,7 +66768,7 @@ CRC32C.CRC32C_EXTENSIONS = CRC32C_EXTENSIONS;
 CRC32C.CRC32C_EXTENSION_TABLE = CRC32C_EXTENSION_TABLE;
 
 // node_modules/@google-cloud/storage/build/esm/src/hash-stream-validator.js
-var import_crypto11 = require("crypto");
+var import_crypto14 = require("crypto");
 var import_stream4 = require("stream");
 var __classPrivateFieldSet3 = function(receiver, state, value, kind, f) {
   if (kind === "m") throw new TypeError("Private method is not writable");
@@ -61882,7 +66805,7 @@ var HashStreamValidator = class extends import_stream4.Transform {
       }
     }
     if (this.md5Enabled) {
-      __classPrivateFieldSet3(this, _HashStreamValidator_md5Hash, (0, import_crypto11.createHash)("md5"), "f");
+      __classPrivateFieldSet3(this, _HashStreamValidator_md5Hash, (0, import_crypto14.createHash)("md5"), "f");
     }
   }
   /**
@@ -61927,12 +66850,12 @@ var HashStreamValidator = class extends import_stream4.Transform {
       callback(e);
     }
   }
-  test(hash, sum) {
+  test(hash2, sum) {
     const check = Buffer.isBuffer(sum) ? sum.toString("base64") : sum;
-    if (hash === "crc32c" && __classPrivateFieldGet3(this, _HashStreamValidator_crc32cHash, "f")) {
+    if (hash2 === "crc32c" && __classPrivateFieldGet3(this, _HashStreamValidator_crc32cHash, "f")) {
       return __classPrivateFieldGet3(this, _HashStreamValidator_crc32cHash, "f").validate(check);
     }
-    if (hash === "md5" && __classPrivateFieldGet3(this, _HashStreamValidator_md5Hash, "f")) {
+    if (hash2 === "md5" && __classPrivateFieldGet3(this, _HashStreamValidator_md5Hash, "f")) {
       return __classPrivateFieldGet3(this, _HashStreamValidator_md5Digest, "f") === check;
     }
     return false;
@@ -63524,7 +68447,7 @@ var File = class _File extends ServiceObject {
   setEncryptionKey(encryptionKey) {
     this.encryptionKey = encryptionKey;
     this.encryptionKeyBase64 = Buffer.from(encryptionKey).toString("base64");
-    this.encryptionKeyHash = crypto12.createHash("sha256").update(this.encryptionKeyBase64, "base64").digest("base64");
+    this.encryptionKeyHash = crypto13.createHash("sha256").update(this.encryptionKeyBase64, "base64").digest("base64");
     this.encryptionKeyInterceptor = {
       request: (reqOpts) => {
         reqOpts.headers = reqOpts.headers || {};
@@ -70114,7 +75037,7 @@ _XMLMultiPartUploadHelper_instances = /* @__PURE__ */ new WeakSet(), _XMLMultiPa
 };
 
 // server/replit_integrations/object_storage/objectStorage.ts
-var import_crypto12 = require("crypto");
+var import_crypto15 = require("crypto");
 
 // server/replit_integrations/object_storage/objectAcl.ts
 var ACL_POLICY_METADATA_KEY = "custom:aclPolicy";
@@ -70289,7 +75212,7 @@ var ObjectStorageService = class {
         "PRIVATE_OBJECT_DIR not set. Create a bucket in 'Object Storage' tool and set PRIVATE_OBJECT_DIR env var."
       );
     }
-    const objectId = (0, import_crypto12.randomUUID)();
+    const objectId = (0, import_crypto15.randomUUID)();
     const fullPath = `${privateObjectDir}/uploads/${objectId}`;
     const { bucketName, objectName } = parseObjectPath(fullPath);
     return signObjectURL({
@@ -70460,6 +75383,7 @@ console.log("Root directory:", rootDir);
 console.log("NODE_ENV:", process.env.NODE_ENV);
 var app = (0, import_express.default)();
 var PORT = parseInt(process.env.PORT || "3000", 10);
+app.set("trust proxy", 1);
 app.use((0, import_cors.default)({
   origin: true,
   credentials: true,
@@ -70478,6 +75402,7 @@ app.get("/", (req, res, next) => {
   }
   next();
 });
+registerAuthRoutes(app);
 registerObjectStorageRoutes(app);
 registerRoutes(app);
 function findDistPath() {
@@ -70518,6 +75443,15 @@ if (import_fs2.default.existsSync(distPath)) {
 }
 app.listen(PORT, "0.0.0.0", () => {
   console.log(`Server running on http://0.0.0.0:${PORT}`);
+  setImmediate(async () => {
+    try {
+      await bootstrapAdminUser();
+      await initializeBackupService();
+      startScheduledBackups();
+    } catch (error) {
+      console.error("[Startup] Background initialization error:", error);
+    }
+  });
 });
 /*! Bundled license information:
 

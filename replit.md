@@ -63,5 +63,5 @@ I prefer detailed explanations and thorough code comments. I value iterative dev
 - **Drizzle ORM**: TypeScript ORM for PostgreSQL.
 - **PostgreSQL**: Relational database.
 - **html2canvas**: Used for exporting taxonomy tree to image.
-- **bcrypt**: Password hashing library.
+- **bcryptjs**: Pure JavaScript password hashing library (production-compatible).
 - **express-rate-limit**: Rate limiting middleware for login protection.
