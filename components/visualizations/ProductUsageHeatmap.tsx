@@ -172,11 +172,17 @@ const ProductUsageHeatmap: React.FC<ProductUsageHeatmapProps> = ({
         
         const certifications: string[] = [];
         matchingProducts.forEach(p => {
-          p.customFields?.forEach(cf => {
-            if (cf.fieldId.toLowerCase().includes('cert') && cf.value) {
-              certifications.push(String(cf.value));
-            }
-          });
+          if (p.customFields && typeof p.customFields === 'object') {
+            Object.entries(p.customFields).forEach(([key, value]) => {
+              if (key.toLowerCase().includes('cert') && value) {
+                if (Array.isArray(value)) {
+                  certifications.push(...value.map(String));
+                } else {
+                  certifications.push(String(value));
+                }
+              }
+            });
+          }
         });
         const uniqueCerts = [...new Set(certifications)].slice(0, 3);
 
