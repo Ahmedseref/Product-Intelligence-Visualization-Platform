@@ -1291,12 +1291,12 @@ const ProductList: React.FC<ProductListProps> = ({
                     )}
                     {visibleColumns.has('taxonomyPath') && (
                       <td 
-                        className="px-3 py-3 overflow-hidden text-ellipsis relative" 
-                        style={{ width: columnWidths.taxonomyPath, minWidth: columnWidths.taxonomyPath, maxWidth: columnWidths.taxonomyPath }}
+                        className="px-3 py-3 overflow-visible" 
+                        style={{ width: columnWidths.taxonomyPath, minWidth: columnWidths.taxonomyPath, maxWidth: columnWidths.taxonomyPath, position: 'relative', zIndex: isEditing(p.id, 'taxonomyPath') ? 1000 : 'auto' }}
                         onClick={(e) => e.stopPropagation()}
                       >
                         {isEditing(p.id, 'taxonomyPath') ? (
-                          <div className="absolute z-50 left-0 top-full mt-1 w-80 shadow-xl">
+                          <div className="fixed bg-white border border-slate-300 rounded-lg shadow-2xl w-96 max-h-80 overflow-auto" style={{ zIndex: 9999 }}>
                             <TaxonomyNodeSelector
                               treeNodes={treeNodes}
                               selectedNodeId={p.nodeId}
