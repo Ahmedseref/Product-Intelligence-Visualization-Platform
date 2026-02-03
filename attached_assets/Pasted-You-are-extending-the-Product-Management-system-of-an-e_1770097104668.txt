@@ -1,0 +1,170 @@
+You are extending the Product Management system of an existing
+Product Intelligence Platform.
+
+Tech stack:
+- Frontend: React 19 + TypeScript + Vite + Tailwind
+- Backend: Express.js 5
+- Database: PostgreSQL
+- ORM: Drizzle
+- Existing feature: Taxonomy Builder with unlimited depth (tree_nodes)
+
+-------------------------------------------------
+1) CORE REQUIREMENT
+-------------------------------------------------
+
+Products MUST be assignable to ANY DEPTH in the taxonomy tree.
+
+There is NO fixed limit such as:
+Sector > Category > Subcategory
+
+Instead:
+Sector > Category > Subcategory > Custom > Custom > ...
+
+If a branch exists in the Taxonomy Builder, the user MUST be able to:
+- Select it
+- Assign products to it
+- Edit product placement later
+
+-------------------------------------------------
+2) DATA MODEL (CRITICAL)
+-------------------------------------------------
+
+Products should be linked to:
+- A SINGLE taxonomy node (node_id)
+- That node can be at ANY depth
+
+DO NOT:
+- Add hardcoded category levels to the products table
+- Add new columns for each depth
+
+USE:
+- node_id → tree_nodes.node_id (already exists)
+
+The tree defines depth, not the product schema.
+
+-------------------------------------------------
+3) ADD / EDIT PRODUCT UI
+-------------------------------------------------
+
+In:
+- Add New Product page
+- Edit Product modal
+- Inventory inline edit
+
+Replace cascading dropdowns with:
+
+### Taxonomy Tree Selector
+- Reusable component: TaxonomyNodeSelector.tsx
+- Displays the full expandable taxonomy tree
+- Shows unlimited depth
+- Highlights selectable nodes
+- Allows searching by node name
+- Allows expanding/collapsing branches
+
+User flow:
+- User navigates the tree
+- Selects ANY node (leaf or intermediate)
+- Product is assigned to that node_id
+
+Show selected path clearly:
+Example:
+Sector > Category > Subcategory > Custom Level
+
+-------------------------------------------------
+4) INVENTORY TABLE ENHANCEMENTS
+-------------------------------------------------
+
+### 4.1 Dynamic Taxonomy Columns
+Inventory table must support:
+
+- Displaying full taxonomy path as:
+  "Sector / Category / Subcategory / Custom / ..."
+
+- Optional:
+  - Split view:
+    - One column per depth (generated dynamically)
+    - OR single "Taxonomy Path" column (default)
+
+Columns must adapt automatically when taxonomy depth changes.
+
+-------------------------------------------------
+4.2 Inline Editing (IMPORTANT)
+-------------------------------------------------
+
+Allow inline editing of taxonomy assignment directly from Inventory:
+
+- Clicking taxonomy cell opens:
+  - Inline TaxonomyNodeSelector
+- User can:
+  - Reassign product to another branch
+- Save happens immediately or on blur
+
+After change:
+- Inventory updates
+- Heatmaps & analytics reflect new placement
+
+-------------------------------------------------
+5) FILTERING & SEARCH
+-------------------------------------------------
+
+Inventory filters must support:
+- Filter by ANY taxonomy node
+- Include all child nodes automatically
+
+Example:
+Filter by "Category A"
+→ Includes products assigned to:
+Category A > Subcategory > Custom...
+
+-------------------------------------------------
+6) BACKEND UPDATES
+-------------------------------------------------
+
+Ensure endpoints:
+- Accept node_id at any depth
+- Validate node existence
+- Return full taxonomy path with product payload
+
+Add helper:
+- Resolve taxonomy path from node_id
+- Return ordered array of node names
+
+-------------------------------------------------
+7) UX EXPECTATIONS
+-------------------------------------------------
+
+- No hardcoded category limits
+- Clear visual path display
+- Fast inline editing
+- No page reloads
+- Graceful handling of deep trees
+
+-------------------------------------------------
+8) PERFORMANCE
+-------------------------------------------------
+
+- Memoize taxonomy tree
+- Avoid recomputing paths per row
+- Use lookup maps for node_id → path
+- Debounce inline updates
+
+-------------------------------------------------
+9) DELIVERABLES
+-------------------------------------------------
+
+- Updated product assignment logic
+- TaxonomyNodeSelector component
+- Inventory table dynamic taxonomy support
+- Inline taxonomy editing
+- Backend path resolution helper
+- Example API response
+
+-------------------------------------------------
+10) NON-GOALS (DO NOT DO)
+-------------------------------------------------
+
+- Do NOT add fixed category columns
+- Do NOT duplicate taxonomy data inside products
+- Do NOT limit depth artificially
+
+This system must support FUTURE expansion without schema changes.

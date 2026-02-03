@@ -23,13 +23,19 @@ I prefer detailed explanations and thorough code comments. I value iterative dev
 - **Database**: PostgreSQL for data persistence, managed with Drizzle ORM.
 - **Key Features**:
     - Unlimited-level product taxonomy tree with CRUD operations.
+    - **TaxonomyNodeSelector**: Reusable component for selecting taxonomy nodes at any depth with search, expand/collapse, and path display.
+    - Products can be assigned to ANY depth in taxonomy (not limited to fixed levels).
     - Supplier management with contact details.
     - Product management with detailed forms, including custom fields and technical specifications.
     - Interactive product usage density heatmap.
     - Dashboard with analytics and visualizations.
     - Mass product import wizard (CSV, XLS, XLSX) with file upload and paste-from-Excel modes.
     - Global floating notes widget.
-    - Advanced product inventory table with dynamic columns, filtering, and export.
+    - Advanced product inventory table with:
+        - Dynamic Taxonomy Path column showing full hierarchy
+        - Inline taxonomy editing via tree selector
+        - Descendant-aware filtering (filter by any node includes all children)
+        - Column visibility controls and export.
     - Real-time database synchronization.
     - **Settings page with dynamic Usage Areas management** (add/edit/delete) stored in database.
     - Usage Areas are used system-wide in ProductForm, MassImportWizard, and ProductUsageHeatmap.

@@ -4,6 +4,7 @@ import { Upload, FileSpreadsheet, CheckCircle, AlertCircle, ArrowLeft, ArrowRigh
 import * as XLSX from 'xlsx';
 import Papa from 'papaparse';
 import { CURRENCIES, UNITS } from '../constants';
+import TaxonomyNodeSelector from './TaxonomyNodeSelector';
 
 type ImportMode = 'file' | 'paste';
 
@@ -69,6 +70,7 @@ const MassImportWizard: React.FC<MassImportWizardProps> = ({ onImport, onCancel,
       setPasteData({});
       setTechSpecColumns([]);
       setPasteAssignment({
+        selectedNodeId: '',
         selectedSector: '',
         selectedCategory: '',
         selectedSubcategory: '',
@@ -109,6 +111,7 @@ const MassImportWizard: React.FC<MassImportWizardProps> = ({ onImport, onCancel,
   const [techSpecColumns, setTechSpecColumns] = useState<{ id: string; name: string; unit: string; data: string }[]>([]);
   const [pasteStep, setPasteStep] = useState<1 | 2 | 3>(1);
   const [pasteAssignment, setPasteAssignment] = useState({
+    selectedNodeId: '',
     selectedSector: '',
     selectedCategory: '',
     selectedSubcategory: '',
@@ -123,14 +126,6 @@ const MassImportWizard: React.FC<MassImportWizardProps> = ({ onImport, onCancel,
   });
 
   const sectors = useMemo(() => treeNodes.filter(n => n.type === 'sector' && !n.parentId), [treeNodes]);
-  const pasteCategories = useMemo(() => 
-    treeNodes.filter(n => n.parentId === pasteAssignment.selectedSector), 
-    [treeNodes, pasteAssignment.selectedSector]
-  );
-  const pasteSubcategories = useMemo(() => 
-    treeNodes.filter(n => n.parentId === pasteAssignment.selectedCategory), 
-    [treeNodes, pasteAssignment.selectedCategory]
-  );
 
   const getFullNodePath = (nodeId: string): string => {
     const path: string[] = [];
@@ -409,7 +404,7 @@ const MassImportWizard: React.FC<MassImportWizardProps> = ({ onImport, onCancel,
 
     const products: Product[] = [];
     const supplier = suppliers.find(s => s.id === pasteAssignment.supplierId);
-    const nodeId = pasteAssignment.selectedSubcategory || pasteAssignment.selectedCategory || pasteAssignment.selectedSector;
+    const nodeId = pasteAssignment.selectedNodeId;
     const node = treeNodes.find(n => n.id === nodeId);
     
     let sectorName = '';
@@ -564,7 +559,7 @@ const MassImportWizard: React.FC<MassImportWizardProps> = ({ onImport, onCancel,
   };
 
   const canProceedPasteStep2 = (): boolean => {
-    return pasteAssignment.supplierId !== '' && pasteAssignment.selectedSector !== '';
+    return pasteAssignment.supplierId !== '' && pasteAssignment.selectedNodeId !== '';
   };
 
   const toggleUsageArea = (area: string) => {
@@ -768,19 +763,14 @@ const MassImportWizard: React.FC<MassImportWizardProps> = ({ onImport, onCancel,
           )}
           
           <div className="space-y-2">
-            <label className="text-sm font-bold text-slate-700">Default Category</label>
-            <select
-              value={defaults.nodeId}
-              onChange={e => setDefaults({...defaults, nodeId: e.target.value})}
-              className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:ring-2 focus:ring-blue-500 outline-none"
-            >
-              <option value="">Select Category...</option>
-              {treeNodes.map(node => (
-                <option key={node.id} value={node.id}>
-                  {getFullNodePath(node.id)}
-                </option>
-              ))}
-            </select>
+            <label className="text-sm font-bold text-slate-700">Default Category (Any Depth)</label>
+            <TaxonomyNodeSelector
+              treeNodes={treeNodes}
+              selectedNodeId={defaults.nodeId || null}
+              onSelect={(nodeId) => setDefaults({...defaults, nodeId})}
+              onClear={() => setDefaults({...defaults, nodeId: ''})}
+              placeholder="Select taxonomy node at any depth..."
+            />
           </div>
           
           <div className="grid grid-cols-2 gap-4">
@@ -1029,59 +1019,33 @@ const MassImportWizard: React.FC<MassImportWizardProps> = ({ onImport, onCancel,
           </select>
         </div>
 
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-          <div className="space-y-2">
-            <label className="text-sm font-bold text-slate-700">Sector *</label>
-            <select
-              value={pasteAssignment.selectedSector}
-              onChange={e => setPasteAssignment(prev => ({ 
+        <div className="space-y-2">
+          <label className="text-sm font-bold text-slate-700">Taxonomy Node * (Any Depth)</label>
+          <p className="text-xs text-slate-500">Select where these products belong in your taxonomy tree</p>
+          <TaxonomyNodeSelector
+            treeNodes={treeNodes}
+            selectedNodeId={pasteAssignment.selectedNodeId || null}
+            onSelect={(nodeId, path) => {
+              const sector = path[0] || '';
+              const category = path[1] || '';
+              const subcategory = path[2] || '';
+              setPasteAssignment(prev => ({ 
                 ...prev, 
-                selectedSector: e.target.value,
-                selectedCategory: '',
-                selectedSubcategory: ''
-              }))}
-              className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:ring-2 focus:ring-blue-500 outline-none"
-            >
-              <option value="">Select Sector...</option>
-              {sectors.map(s => (
-                <option key={s.id} value={s.id}>{s.name}</option>
-              ))}
-            </select>
-          </div>
-
-          <div className="space-y-2">
-            <label className="text-sm font-bold text-slate-700">Category</label>
-            <select
-              value={pasteAssignment.selectedCategory}
-              onChange={e => setPasteAssignment(prev => ({ 
-                ...prev, 
-                selectedCategory: e.target.value,
-                selectedSubcategory: ''
-              }))}
-              disabled={!pasteAssignment.selectedSector}
-              className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:ring-2 focus:ring-blue-500 outline-none disabled:opacity-50"
-            >
-              <option value="">Select Category...</option>
-              {pasteCategories.map(c => (
-                <option key={c.id} value={c.id}>{c.name}</option>
-              ))}
-            </select>
-          </div>
-
-          <div className="space-y-2">
-            <label className="text-sm font-bold text-slate-700">Sub-Category</label>
-            <select
-              value={pasteAssignment.selectedSubcategory}
-              onChange={e => setPasteAssignment(prev => ({ ...prev, selectedSubcategory: e.target.value }))}
-              disabled={!pasteAssignment.selectedCategory}
-              className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:ring-2 focus:ring-blue-500 outline-none disabled:opacity-50"
-            >
-              <option value="">Select Sub-Category...</option>
-              {pasteSubcategories.map(c => (
-                <option key={c.id} value={c.id}>{c.name}</option>
-              ))}
-            </select>
-          </div>
+                selectedNodeId: nodeId,
+                selectedSector: sector,
+                selectedCategory: category,
+                selectedSubcategory: subcategory
+              }));
+            }}
+            onClear={() => setPasteAssignment(prev => ({ 
+              ...prev, 
+              selectedNodeId: '',
+              selectedSector: '',
+              selectedCategory: '',
+              selectedSubcategory: ''
+            }))}
+            placeholder="Select taxonomy node at any depth..."
+          />
         </div>
 
         <div className="space-y-2">

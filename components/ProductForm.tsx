@@ -2,6 +2,7 @@ import React, { useState, useMemo } from 'react';
 import { Product, User, CustomField, TreeNode, TechnicalSpec, Supplier } from '../types';
 import { CURRENCIES, UNITS, ICONS } from '../constants';
 import { Plus, Trash2, X, Check } from 'lucide-react';
+import TaxonomyNodeSelector from './TaxonomyNodeSelector';
 
 interface ProductFormProps {
   onSubmit: (p: Product) => void;
@@ -468,64 +469,24 @@ const ProductForm: React.FC<ProductFormProps> = ({ onSubmit, onCancel, currentUs
 
               <div className="space-y-4">
                 <label className="text-xs font-bold text-slate-500 uppercase tracking-wider">Taxonomy Placement*</label>
-                <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-                  <div className="space-y-1">
-                    <label className="text-[10px] font-medium text-slate-400">Sector</label>
-                    <select 
-                      className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-sm outline-none focus:ring-2 focus:ring-blue-500"
-                      value={selectedSector}
-                      onChange={e => handleSectorChange(e.target.value)}
-                      required
-                    >
-                      <option value="">Select Sector...</option>
-                      {sectors.map(node => (
-                        <option key={node.id} value={node.id}>{node.name}</option>
-                      ))}
-                      <option value="__add_new__" className="text-blue-600 font-semibold">+ Add New Sector</option>
-                    </select>
-                  </div>
-                  
-                  <div className="space-y-1">
-                    <label className="text-[10px] font-medium text-slate-400">Category</label>
-                    <select 
-                      className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-sm outline-none focus:ring-2 focus:ring-blue-500"
-                      value={selectedCategory}
-                      onChange={e => handleCategoryChange(e.target.value)}
-                      disabled={!selectedSector}
-                    >
-                      <option value="">Select Category...</option>
-                      {categories.map(node => (
-                        <option key={node.id} value={node.id}>{node.name}</option>
-                      ))}
-                      {selectedSector && (
-                        <option value="__add_new__" className="text-blue-600 font-semibold">+ Add New Category</option>
-                      )}
-                    </select>
-                  </div>
-                  
-                  <div className="space-y-1">
-                    <label className="text-[10px] font-medium text-slate-400">Sub-Category</label>
-                    <select 
-                      className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-sm outline-none focus:ring-2 focus:ring-blue-500"
-                      value={selectedSubcategory}
-                      onChange={e => handleSubcategoryChange(e.target.value)}
-                      disabled={!selectedCategory}
-                    >
-                      <option value="">Select Sub-Category...</option>
-                      {subcategories.map(node => (
-                        <option key={node.id} value={node.id}>{node.name}</option>
-                      ))}
-                      {selectedCategory && (
-                        <option value="__add_new__" className="text-blue-600 font-semibold">+ Add New Sub-Category</option>
-                      )}
-                    </select>
-                  </div>
-                </div>
-                {formData.nodeId && (
-                  <p className="text-xs text-blue-600 bg-blue-50 px-3 py-2 rounded-lg">
-                    Selected: {getFullNodePathString(formData.nodeId)}
-                  </p>
-                )}
+                <p className="text-[10px] text-slate-400">Select where this product belongs in your taxonomy tree (supports unlimited depth)</p>
+                <TaxonomyNodeSelector
+                  treeNodes={treeNodes}
+                  selectedNodeId={formData.nodeId || null}
+                  onSelect={(nodeId, path) => {
+                    setFormData({ ...formData, nodeId });
+                    setSelectedSector(path[0] || '');
+                    setSelectedCategory(path[1] || '');
+                    setSelectedSubcategory(path[2] || '');
+                  }}
+                  onClear={() => {
+                    setFormData({ ...formData, nodeId: '' });
+                    setSelectedSector('');
+                    setSelectedCategory('');
+                    setSelectedSubcategory('');
+                  }}
+                  placeholder="Select taxonomy node..."
+                />
               </div>
 
               <div className="space-y-1">

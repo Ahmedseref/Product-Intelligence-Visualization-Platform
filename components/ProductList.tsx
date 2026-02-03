@@ -1,9 +1,10 @@
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useRef, useEffect, useMemo, useCallback } from 'react';
 import { Product, CustomField, TreeNode, Supplier, User } from '../types';
 import { ICONS, CURRENCIES, UNITS } from '../constants';
 import ProductDetailsModal from './ProductDetailsModal';
 import ProductForm from './ProductForm';
-import { Check, X, Download, Filter, FileText, ChevronDown, Copy, Trash2, Columns, Eye, EyeOff } from 'lucide-react';
+import TaxonomyNodeSelector from './TaxonomyNodeSelector';
+import { Check, X, Download, Filter, FileText, ChevronDown, Copy, Trash2, Columns, Eye, EyeOff, FolderTree } from 'lucide-react';
 
 interface ProductListProps {
   products: Product[];
@@ -27,6 +28,7 @@ interface EditingCell {
 interface FilterState {
   sector: string;
   category: string;
+  taxonomyNodeId: string;
   supplier: string;
   manufacturer: string;
   priceMin: string;
@@ -37,7 +39,7 @@ interface FilterState {
   moqMax: string;
 }
 
-type ColumnKey = 'id' | 'name' | 'supplier' | 'sector' | 'category' | 'subCategory' | 'price' | 'currency' | 'unit' | 'moq' | 'leadTime' | 'manufacturer' | 'location' | 'description' | 'usageAreas';
+type ColumnKey = 'id' | 'name' | 'supplier' | 'sector' | 'category' | 'subCategory' | 'taxonomyPath' | 'price' | 'currency' | 'unit' | 'moq' | 'leadTime' | 'manufacturer' | 'location' | 'description' | 'usageAreas';
 
 interface ColumnConfig {
   key: ColumnKey;
@@ -50,8 +52,9 @@ const ALL_COLUMNS: ColumnConfig[] = [
   { key: 'id', label: 'ID', sortable: true, defaultVisible: true },
   { key: 'name', label: 'Product Name', sortable: true, defaultVisible: true },
   { key: 'supplier', label: 'Supplier', sortable: true, defaultVisible: true },
-  { key: 'sector', label: 'Sector', sortable: true, defaultVisible: true },
-  { key: 'category', label: 'Category', sortable: true, defaultVisible: true },
+  { key: 'taxonomyPath', label: 'Taxonomy Path', sortable: true, defaultVisible: true },
+  { key: 'sector', label: 'Sector', sortable: true, defaultVisible: false },
+  { key: 'category', label: 'Category', sortable: true, defaultVisible: false },
   { key: 'subCategory', label: 'Sub-Category', sortable: true, defaultVisible: false },
   { key: 'price', label: 'Price', sortable: true, defaultVisible: true },
   { key: 'currency', label: 'Currency', sortable: true, defaultVisible: false },
@@ -178,6 +181,7 @@ const ProductList: React.FC<ProductListProps> = ({
   const [filters, setFilters] = useState<FilterState>({
     sector: '',
     category: '',
+    taxonomyNodeId: '',
     supplier: '',
     manufacturer: '',
     priceMin: '',
@@ -194,6 +198,7 @@ const ProductList: React.FC<ProductListProps> = ({
     id: 180,
     name: 300,
     supplier: 180,
+    taxonomyPath: 280,
     sector: 120,
     category: 120,
     subCategory: 120,
@@ -272,6 +277,7 @@ const ProductList: React.FC<ProductListProps> = ({
       id: Math.min(250, Math.max(headerWidth, getContentWidth('id', 7))),
       name: Math.min(400, Math.max(headerWidth, getContentWidth('name'))),
       supplier: Math.min(220, Math.max(headerWidth, getContentWidth('supplier'))),
+      taxonomyPath: Math.min(350, Math.max(headerWidth, 200)),
       sector: Math.min(180, Math.max(headerWidth, getContentWidth('sector'))),
       category: Math.min(180, Math.max(headerWidth, getContentWidth('category'))),
       subCategory: Math.max(headerWidth, 100),
@@ -496,8 +502,28 @@ const ProductList: React.FC<ProductListProps> = ({
   const uniqueSuppliers = [...new Set(products.map(p => p.supplier).filter(Boolean))];
   const manufacturers = [...new Set(products.map(p => p.manufacturer).filter(Boolean))];
 
+  const getNodeDescendants = useCallback((nodeId: string): Set<string> => {
+    const descendants = new Set<string>([nodeId]);
+    const findChildren = (parentId: string) => {
+      treeNodes.forEach(node => {
+        if (node.parentId === parentId) {
+          descendants.add(node.id);
+          findChildren(node.id);
+        }
+      });
+    };
+    findChildren(nodeId);
+    return descendants;
+  }, [treeNodes]);
+
+  const taxonomyFilterNodes = useMemo(() => {
+    if (!filters.taxonomyNodeId) return null;
+    return getNodeDescendants(filters.taxonomyNodeId);
+  }, [filters.taxonomyNodeId, getNodeDescendants]);
+
   const filteredProducts = products.filter(p => {
     const hierarchy = getHierarchyLevels(p.nodeId);
+    if (filters.taxonomyNodeId && taxonomyFilterNodes && !taxonomyFilterNodes.has(p.nodeId)) return false;
     if (filters.sector && hierarchy.sector !== filters.sector) return false;
     if (filters.category && hierarchy.category !== filters.category) return false;
     if (filters.supplier && p.supplier !== filters.supplier) return false;
@@ -517,6 +543,7 @@ const ProductList: React.FC<ProductListProps> = ({
       case 'id': return p.id;
       case 'name': return p.name || '';
       case 'supplier': return p.supplier;
+      case 'taxonomyPath': return hierarchy.fullPath;
       case 'sector': return hierarchy.sector;
       case 'category': return hierarchy.category;
       case 'subCategory': return hierarchy.subCategory;
@@ -903,8 +930,23 @@ const ProductList: React.FC<ProductListProps> = ({
             </button>
             
             {showFilterPanel && (
-              <div className="absolute top-full left-0 mt-2 bg-white border border-slate-200 rounded-xl shadow-lg p-4 z-20 w-80 max-h-[70vh] overflow-y-auto">
+              <div className="absolute top-full left-0 mt-2 bg-white border border-slate-200 rounded-xl shadow-lg p-4 z-20 w-96 max-h-[70vh] overflow-y-auto">
                 <div className="space-y-3">
+                  <div>
+                    <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Taxonomy Node (includes descendants)</label>
+                    <TaxonomyNodeSelector
+                      treeNodes={treeNodes}
+                      selectedNodeId={filters.taxonomyNodeId || null}
+                      onSelect={(nodeId) => setFilters({...filters, taxonomyNodeId: nodeId})}
+                      onClear={() => setFilters({...filters, taxonomyNodeId: ''})}
+                      placeholder="Filter by any taxonomy node..."
+                    />
+                    {filters.taxonomyNodeId && taxonomyFilterNodes && (
+                      <p className="text-xs text-blue-600 mt-1">
+                        Showing products in selected node and {taxonomyFilterNodes.size - 1} descendant(s)
+                      </p>
+                    )}
+                  </div>
                   <div className="grid grid-cols-2 gap-2">
                     <div>
                       <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Sector</label>
@@ -1244,6 +1286,52 @@ const ProductList: React.FC<ProductListProps> = ({
                           'supplier',
                           <span className="text-sm text-slate-600 truncate block">{p.supplier}</span>,
                           p.supplier
+                        )}
+                      </td>
+                    )}
+                    {visibleColumns.has('taxonomyPath') && (
+                      <td 
+                        className="px-3 py-3 overflow-hidden text-ellipsis relative" 
+                        style={{ width: columnWidths.taxonomyPath, minWidth: columnWidths.taxonomyPath, maxWidth: columnWidths.taxonomyPath }}
+                        onClick={(e) => e.stopPropagation()}
+                      >
+                        {isEditing(p.id, 'taxonomyPath') ? (
+                          <div className="absolute z-50 left-0 top-full mt-1 w-80 shadow-xl">
+                            <TaxonomyNodeSelector
+                              treeNodes={treeNodes}
+                              selectedNodeId={p.nodeId}
+                              onSelect={(nodeId, path) => {
+                                const updatedProduct = { ...p, nodeId };
+                                let sector = 'Unknown';
+                                let current = treeNodes.find(n => n.id === nodeId);
+                                while(current) {
+                                  if(!current.parentId) {
+                                    sector = current.name;
+                                    break;
+                                  }
+                                  current = treeNodes.find(n => n.id === current?.parentId);
+                                }
+                                updatedProduct.sector = sector;
+                                updatedProduct.category = path[path.length - 1] || 'Uncategorized';
+                                onUpdate(updatedProduct);
+                                setEditingCell(null);
+                              }}
+                              inline
+                              className="bg-white"
+                            />
+                          </div>
+                        ) : (
+                          <div 
+                            className="flex items-center gap-2 cursor-pointer hover:bg-blue-50 rounded px-1 py-0.5 -mx-1"
+                            onDoubleClick={() => {
+                              setEditingCell({ productId: p.id, field: 'taxonomyPath' });
+                            }}
+                          >
+                            <FolderTree className="w-3.5 h-3.5 text-slate-400 flex-shrink-0" />
+                            <span className="text-sm text-slate-600 truncate" title={hierarchy.fullPath}>
+                              {hierarchy.fullPath || '-'}
+                            </span>
+                          </div>
                         )}
                       </td>
                     )}

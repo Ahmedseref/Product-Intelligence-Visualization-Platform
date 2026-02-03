@@ -70,6 +70,66 @@ export function registerRoutes(app: Express): void {
     }
   });
 
+  app.get("/api/tree-nodes/:nodeId/path", async (req, res) => {
+    try {
+      const nodes = await storage.getTreeNodes();
+      const nodeId = req.params.nodeId;
+      const path: { id: string; name: string; type: string }[] = [];
+      
+      let current = nodes.find(n => n.nodeId === nodeId);
+      while (current) {
+        path.unshift({ id: current.nodeId, name: current.name, type: current.type });
+        current = nodes.find(n => n.nodeId === current?.parentId);
+      }
+      
+      if (path.length === 0) {
+        return res.status(404).json({ error: "Node not found" });
+      }
+      
+      res.json({
+        nodeId,
+        path,
+        pathString: path.map(p => p.name).join(' > ')
+      });
+    } catch (error) {
+      console.error("Error fetching node path:", error);
+      res.status(500).json({ error: "Failed to fetch node path" });
+    }
+  });
+
+  app.get("/api/tree-nodes/:nodeId/descendants", async (req, res) => {
+    try {
+      const nodes = await storage.getTreeNodes();
+      const nodeId = req.params.nodeId;
+      const descendants: string[] = [];
+      
+      const findDescendants = (parentId: string) => {
+        nodes.forEach(node => {
+          if (node.parentId === parentId) {
+            descendants.push(node.nodeId);
+            findDescendants(node.nodeId);
+          }
+        });
+      };
+      
+      const targetNode = nodes.find(n => n.nodeId === nodeId);
+      if (!targetNode) {
+        return res.status(404).json({ error: "Node not found" });
+      }
+      
+      findDescendants(nodeId);
+      
+      res.json({
+        nodeId,
+        descendants,
+        includesSelf: [nodeId, ...descendants]
+      });
+    } catch (error) {
+      console.error("Error fetching node descendants:", error);
+      res.status(500).json({ error: "Failed to fetch node descendants" });
+    }
+  });
+
   app.get("/api/products", async (req, res) => {
     try {
       const products = await storage.getProducts();
