@@ -1,5 +1,7 @@
 import type { Express } from "express";
 import { storage } from "./storage";
+import { db } from "./db";
+import { stockCodeHistory } from "@shared/schema";
 import * as backupService from "./backupService";
 import * as stockCodeService from "./stockCodeService";
 import { authMiddleware, requirePasswordChange } from "./authRoutes";
@@ -992,6 +994,98 @@ export function registerRoutes(app: Express): void {
     } catch (error) {
       console.error("Error fetching stock code history:", error);
       res.status(500).json({ error: "Failed to fetch stock code history" });
+    }
+  });
+
+  app.get("/api/stock-codes/branch-directory", async (req, res) => {
+    try {
+      const allNodes = await storage.getTreeNodes();
+      const allProducts = await storage.getProducts();
+
+      const productCountMap: Record<string, number> = {};
+      for (const p of allProducts) {
+        if (p.nodeId) {
+          productCountMap[p.nodeId] = (productCountMap[p.nodeId] || 0) + 1;
+        }
+      }
+
+      const directory = allNodes.map(node => {
+        const path: string[] = [];
+        let current: any = node;
+        while (current) {
+          path.unshift(current.name);
+          current = allNodes.find((n: any) => n.nodeId === current?.parentId);
+        }
+
+        return {
+          nodeId: node.nodeId,
+          name: node.name,
+          type: node.type,
+          branchCode: node.branchCode || null,
+          parentId: node.parentId,
+          path: path.join(' > '),
+          productCount: productCountMap[node.nodeId] || 0,
+        };
+      });
+
+      res.json(directory);
+    } catch (error) {
+      console.error("Error fetching branch directory:", error);
+      res.status(500).json({ error: "Failed to fetch branch directory" });
+    }
+  });
+
+  app.get("/api/stock-codes/stats", async (req, res) => {
+    try {
+      const allNodes = await storage.getTreeNodes();
+      const allProducts = await storage.getProducts();
+      const allColors = await storage.getColors();
+
+      const nodesWithBranchCode = allNodes.filter((n: any) => n.branchCode);
+      const productsWithStockCode = allProducts.filter((p: any) => p.stockCode);
+      const productsWithColor = allProducts.filter((p: any) => p.colorId);
+
+      res.json({
+        totalNodes: allNodes.length,
+        nodesWithBranchCode: nodesWithBranchCode.length,
+        nodesWithoutBranchCode: allNodes.length - nodesWithBranchCode.length,
+        totalProducts: allProducts.length,
+        productsWithStockCode: productsWithStockCode.length,
+        productsWithoutStockCode: allProducts.length - productsWithStockCode.length,
+        productsWithColor: productsWithColor.length,
+        totalColors: allColors.length,
+      });
+    } catch (error) {
+      console.error("Error fetching stock code stats:", error);
+      res.status(500).json({ error: "Failed to fetch stats" });
+    }
+  });
+
+  app.get("/api/stock-codes/history", async (req, res) => {
+    try {
+      const history = await db.select().from(stockCodeHistory)
+        .orderBy(stockCodeHistory.changedAt)
+        .limit(100);
+      res.json(history);
+    } catch (error) {
+      console.error("Error fetching stock code history:", error);
+      res.status(500).json({ error: "Failed to fetch stock code history" });
+    }
+  });
+
+  app.post("/api/stock-codes/suggest-branch-code", async (req, res) => {
+    try {
+      const { name, excludeNodeId } = req.body;
+      if (!name) return res.status(400).json({ error: "name is required" });
+      const allNodes = await storage.getTreeNodes();
+      const existingCodes = allNodes
+        .filter((n: any) => n.branchCode && n.nodeId !== excludeNodeId)
+        .map((n: any) => n.branchCode!);
+      const suggestion = stockCodeService.generateBranchCodeFromName(name, existingCodes);
+      res.json({ suggestion });
+    } catch (error) {
+      console.error("Error suggesting branch code:", error);
+      res.status(500).json({ error: "Failed to suggest branch code" });
     }
   });
 }

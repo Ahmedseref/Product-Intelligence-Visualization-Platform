@@ -860,6 +860,55 @@ const App: React.FC = () => {
                 usageAreas={usageAreas}
                 colors={colorsList}
                 onColorsChange={setColorsList}
+                onDataRefreshNeeded={async () => {
+                  try {
+                    const [productsData, nodesData] = await Promise.all([
+                      api.getProducts(),
+                      api.getTreeNodes(),
+                    ]);
+                    setProducts(productsData.map(p => ({
+                      id: p.productId,
+                      name: p.name,
+                      supplier: p.supplier || '',
+                      supplierId: p.supplierId || undefined,
+                      nodeId: p.nodeId,
+                      stockCode: p.stockCode || undefined,
+                      colorId: p.colorId || undefined,
+                      manufacturer: p.manufacturer || '',
+                      manufacturingLocation: p.manufacturingLocation || '',
+                      description: p.description || '',
+                      imageUrl: p.imageUrl || '',
+                      price: p.price || 0,
+                      currency: p.currency || 'USD',
+                      unit: p.unit || '',
+                      moq: p.moq || 0,
+                      leadTime: p.leadTime || '',
+                      packagingType: p.packagingType || '',
+                      hsCode: p.hsCode || '',
+                      certifications: (p.certifications as string[]) || [],
+                      shelfLife: p.shelfLife || '',
+                      storageConditions: p.storageConditions || '',
+                      category: p.category || '',
+                      sector: p.sector || '',
+                      customFields: (p.customFields as any) || {},
+                      technicalSpecs: (p.technicalSpecs as any[]) || [],
+                      lastUpdated: p.lastUpdated ? new Date(p.lastUpdated).toISOString() : new Date().toISOString(),
+                      createdBy: p.createdBy || '',
+                      history: (p.history as any[]) || [],
+                    })));
+                    setTreeNodes(nodesData.map(n => ({
+                      id: n.nodeId,
+                      name: n.name,
+                      type: n.type as any,
+                      parentId: n.parentId,
+                      description: n.description || undefined,
+                      metadata: n.metadata as any,
+                      branchCode: n.branchCode || undefined,
+                    })));
+                  } catch (e) {
+                    console.error('Failed to refresh data:', e);
+                  }
+                }}
                 onUpdateUsageAreas={async (areas: string[]) => {
                   try {
                     const updated = await api.updateUsageAreas(areas);

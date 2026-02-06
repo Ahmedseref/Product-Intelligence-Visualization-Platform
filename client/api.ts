@@ -346,6 +346,33 @@ export const api = {
     return res.json();
   },
 
+  async getAllStockCodeHistory(): Promise<any[]> {
+    const res = await authFetch(`${API_BASE}/stock-codes/history`);
+    if (!res.ok) throw new Error('Failed to fetch stock code history');
+    return res.json();
+  },
+
+  async getBranchDirectory(): Promise<any[]> {
+    const res = await authFetch(`${API_BASE}/stock-codes/branch-directory`);
+    if (!res.ok) throw new Error('Failed to fetch branch directory');
+    return res.json();
+  },
+
+  async getStockCodeStats(): Promise<any> {
+    const res = await authFetch(`${API_BASE}/stock-codes/stats`);
+    if (!res.ok) throw new Error('Failed to fetch stock code stats');
+    return res.json();
+  },
+
+  async suggestBranchCode(name: string, excludeNodeId?: string): Promise<{ suggestion: string }> {
+    const res = await authFetch(`${API_BASE}/stock-codes/suggest-branch-code`, {
+      method: 'POST',
+      body: JSON.stringify({ name, excludeNodeId }),
+    });
+    if (!res.ok) throw new Error('Failed to suggest branch code');
+    return res.json();
+  },
+
   async getUsageAreas(): Promise<string[]> {
     const res = await authFetch(`${API_BASE}/settings/usage-areas`);
     if (!res.ok) throw new Error('Failed to fetch usage areas');
