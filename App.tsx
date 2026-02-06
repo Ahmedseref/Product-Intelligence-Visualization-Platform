@@ -38,6 +38,7 @@ const App: React.FC = () => {
   const [isDbConnected, setIsDbConnected] = useState(false);
   const [addProductMode, setAddProductMode] = useState<'single' | 'mass'>('single');
   const [usageAreas, setUsageAreas] = useState<string[]>([]);
+  const [colorsList, setColorsList] = useState<any[]>([]);
   const [taxonomyPanelWidth, setTaxonomyPanelWidth] = useState(288);
   const [isResizingPanel, setIsResizingPanel] = useState(false);
   const panelResizeRef = React.useRef<HTMLDivElement>(null);
@@ -68,6 +69,10 @@ const App: React.FC = () => {
       if (response.user.isFirstLogin) {
         setShowChangePassword(true);
       }
+      try {
+        const colorsData = await api.getColors();
+        setColorsList(colorsData);
+      } catch {}
     } catch (err: any) {
       setAuthError(err.message || 'Login failed');
     } finally {
@@ -129,6 +134,7 @@ const App: React.FC = () => {
         parentId: n.parentId,
         description: n.description || undefined,
         metadata: n.metadata as any,
+        branchCode: n.branchCode || undefined,
       })));
 
       setProducts(productsData.map(p => ({
@@ -137,6 +143,8 @@ const App: React.FC = () => {
         supplier: p.supplier || '',
         supplierId: p.supplierId || undefined,
         nodeId: p.nodeId,
+        stockCode: p.stockCode || undefined,
+        colorId: p.colorId || undefined,
         manufacturer: p.manufacturer || '',
         manufacturingLocation: p.manufacturingLocation || '',
         description: p.description || '',
@@ -211,6 +219,13 @@ const App: React.FC = () => {
       } catch (e) {
         console.log('Failed to fetch usage areas, using defaults');
         setUsageAreas(['Commercial', 'Food & Beverage', 'Healthcare', 'Industrial', 'Infrastructure', 'Parking', 'Residential', 'Sports']);
+      }
+
+      try {
+        const colorsData = await api.getColors();
+        setColorsList(colorsData);
+      } catch (e) {
+        console.log('Failed to fetch colors');
       }
 
       setIsDbConnected(true);
@@ -749,6 +764,7 @@ const App: React.FC = () => {
                 onAddFieldDefinition={addCustomFieldDefinition}
                 onAddTreeNode={addTreeNode}
                 usageAreas={usageAreas}
+                colors={colorsList}
               />
             )}
             {viewMode === 'visualize' && (
@@ -803,6 +819,7 @@ const App: React.FC = () => {
                     treeNodes={treeNodes}
                     suppliers={suppliers}
                     usageAreas={usageAreas}
+                    colors={colorsList}
                     onAddFieldDefinition={addCustomFieldDefinition}
                     onAddTreeNode={addTreeNode}
                   />
@@ -837,6 +854,8 @@ const App: React.FC = () => {
             {viewMode === 'settings' && (
               <Settings
                 usageAreas={usageAreas}
+                colors={colorsList}
+                onColorsChange={setColorsList}
                 onUpdateUsageAreas={async (areas: string[]) => {
                   try {
                     const updated = await api.updateUsageAreas(areas);

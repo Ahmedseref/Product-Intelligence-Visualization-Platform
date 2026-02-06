@@ -1,8 +1,9 @@
-import React, { useState, useMemo } from 'react';
-import { Product, User, CustomField, TreeNode, TechnicalSpec, Supplier } from '../types';
+import React, { useState, useMemo, useEffect } from 'react';
+import { Product, User, CustomField, TreeNode, TechnicalSpec, Supplier, Color } from '../types';
 import { CURRENCIES, UNITS, ICONS } from '../constants';
-import { Plus, Trash2, X, Check } from 'lucide-react';
+import { Plus, Trash2, X, Check, Hash } from 'lucide-react';
 import TaxonomyNodeSelector from './TaxonomyNodeSelector';
+import { api } from '../client/api';
 
 interface ProductFormProps {
   onSubmit: (p: Product) => void;
@@ -12,13 +13,14 @@ interface ProductFormProps {
   treeNodes: TreeNode[];
   suppliers: Supplier[];
   usageAreas?: string[];
+  colors?: any[];
   onAddFieldDefinition: (field: CustomField) => void;
   onAddTreeNode: (node: TreeNode) => void;
   initialProduct?: Product;
   mode?: 'create' | 'edit';
 }
 
-const ProductForm: React.FC<ProductFormProps> = ({ onSubmit, onCancel, currentUser, customFields, treeNodes, suppliers = [], usageAreas = [], onAddFieldDefinition, onAddTreeNode, initialProduct, mode = 'create' }) => {
+const ProductForm: React.FC<ProductFormProps> = ({ onSubmit, onCancel, currentUser, customFields, treeNodes, suppliers = [], usageAreas = [], colors = [], onAddFieldDefinition, onAddTreeNode, initialProduct, mode = 'create' }) => {
   const isEditMode = mode === 'edit' && initialProduct;
   const USAGE_AREAS = usageAreas;
   
@@ -94,6 +96,22 @@ const ProductForm: React.FC<ProductFormProps> = ({ onSubmit, onCancel, currentUs
     createdBy: currentUser.name,
     history: []
   });
+
+  const [selectedColorId, setSelectedColorId] = useState<number | null>(
+    isEditMode && initialProduct?.colorId ? initialProduct.colorId : null
+  );
+  const [stockCodePreview, setStockCodePreview] = useState<string>('');
+
+  useEffect(() => {
+    if (formData.nodeId) {
+      const productId = isEditMode ? initialProduct?.id : undefined;
+      api.previewStockCode(formData.nodeId, selectedColorId || undefined, productId)
+        .then(res => setStockCodePreview(res.stockCode || ''))
+        .catch(() => setStockCodePreview(''));
+    } else {
+      setStockCodePreview('');
+    }
+  }, [formData.nodeId, selectedColorId]);
 
   const sectors = useMemo(() => 
     treeNodes.filter(n => n.type === 'sector' && !n.parentId), 
@@ -312,7 +330,8 @@ const ProductForm: React.FC<ProductFormProps> = ({ onSubmit, onCancel, currentUs
       technicalSpecs,
       customFields: updatedCustomFields,
       history: updatedHistory,
-      lastUpdated: new Date().toISOString()
+      lastUpdated: new Date().toISOString(),
+      colorId: selectedColorId
     };
 
     onSubmit(submission as Product);
@@ -487,6 +506,45 @@ const ProductForm: React.FC<ProductFormProps> = ({ onSubmit, onCancel, currentUs
                   }}
                   placeholder="Select taxonomy node..."
                 />
+              </div>
+
+              <div className="space-y-4">
+                <label className="text-xs font-bold text-slate-500 uppercase tracking-wider flex items-center gap-2">
+                  <Hash size={14} />
+                  Product Color
+                </label>
+                <p className="text-[10px] text-slate-400">Select a color for stock code generation</p>
+                <div className="flex flex-wrap gap-2">
+                  {colors.filter((c: any) => c.isActive !== false).map((color: any) => (
+                    <button
+                      key={color.id}
+                      type="button"
+                      onClick={() => setSelectedColorId(selectedColorId === color.id ? null : color.id)}
+                      className={`flex items-center gap-2 px-3 py-2 rounded-lg border text-sm transition-all ${
+                        selectedColorId === color.id
+                          ? 'border-blue-500 bg-blue-50 ring-2 ring-blue-200'
+                          : 'border-slate-200 hover:border-slate-300 bg-white'
+                      }`}
+                    >
+                      <div
+                        className="w-4 h-4 rounded-full border border-slate-300"
+                        style={{ backgroundColor: color.hexValue || '#ccc' }}
+                      />
+                      <span>{color.name}</span>
+                      <span className="text-[10px] text-slate-400">({color.code})</span>
+                    </button>
+                  ))}
+                  {colors.length === 0 && (
+                    <p className="text-xs text-slate-400 italic">No colors defined. Add colors in Settings.</p>
+                  )}
+                </div>
+                {stockCodePreview && (
+                  <div className="mt-2 flex items-center gap-2 bg-emerald-50 border border-emerald-200 rounded-lg px-3 py-2">
+                    <Hash size={14} className="text-emerald-600" />
+                    <span className="text-xs font-medium text-emerald-700">Stock Code Preview:</span>
+                    <span className="text-sm font-mono font-bold text-emerald-800">{stockCodePreview}</span>
+                  </div>
+                )}
               </div>
 
               <div className="space-y-1">

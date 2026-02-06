@@ -79,6 +79,26 @@ export interface TreeNode {
   parentId: string | null;
   description?: string;
   metadata?: Record<string, any>;
+  branchCode?: string;
+}
+
+export interface Color {
+  id: number;
+  name: string;
+  code: string;
+  hexValue?: string;
+  isActive: boolean;
+  sortOrder: number;
+}
+
+export interface StockCodeHistoryEntry {
+  id: number;
+  productId: string;
+  oldStockCode: string | null;
+  newStockCode: string;
+  reason: string;
+  changedBy: string | null;
+  changedAt: string;
 }
 
 export interface Product {
@@ -86,7 +106,9 @@ export interface Product {
   name: string;
   supplier: string;
   supplierId?: string;
-  nodeId: string; // Linked to the tree
+  nodeId: string;
+  stockCode?: string;
+  colorId?: number;
   manufacturer: string;
   manufacturingLocation: string;
   description: string;

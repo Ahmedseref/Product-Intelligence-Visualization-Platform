@@ -112,6 +112,8 @@ const TaxonomyBuilder: React.FC<TaxonomyBuilderProps> = ({
   const [showExportModal, setShowExportModal] = useState(false);
   const [exportLevel, setExportLevel] = useState<'sectors' | 'categories' | 'subcategories' | 'all'>('all');
   const [isExporting, setIsExporting] = useState(false);
+  const [newBranchCode, setNewBranchCode] = useState('');
+  const [branchCodeError, setBranchCodeError] = useState('');
   
   const editInputRef = useRef<HTMLInputElement>(null);
   const treeContainerRef = useRef<HTMLDivElement>(null);
@@ -256,9 +258,43 @@ const TaxonomyBuilder: React.FC<TaxonomyBuilderProps> = ({
     setExpandedNodes(ids);
   };
 
+  const generateBranchCodeSuggestion = useCallback((name: string): string => {
+    const existingCodes = treeNodes.filter(n => n.branchCode).map(n => n.branchCode!);
+    const words = name.trim().toUpperCase().split(/\s+/);
+    let code = '';
+    if (words.length === 1) {
+      const word = words[0];
+      const consonants = word.replace(/[AEIOU]/g, '');
+      code = consonants.length >= 2 ? consonants.substring(0, 2) : word.substring(0, 2);
+    } else {
+      code = words.map(w => w[0]).join('').substring(0, 5);
+    }
+    code = code.substring(0, 5);
+    if (!existingCodes.includes(code)) return code;
+    const base = code.substring(0, 4);
+    for (let i = 1; i <= 9; i++) {
+      const candidate = `${base}${i}`;
+      if (!existingCodes.includes(candidate)) return candidate;
+    }
+    return code;
+  }, [treeNodes]);
+
+  const validateBranchCode = useCallback((code: string): string => {
+    if (!code) return '';
+    if (code !== code.toUpperCase()) return 'Must be uppercase';
+    if (code.length > 5) return 'Max 5 characters';
+    if (/\s/.test(code)) return 'No spaces allowed';
+    if (!/^[A-Z0-9]+$/.test(code)) return 'Only uppercase letters and numbers';
+    const existingCodes = treeNodes.filter(n => n.branchCode).map(n => n.branchCode!);
+    if (existingCodes.includes(code)) return 'Code already in use';
+    return '';
+  }, [treeNodes]);
+
   const handleAddClick = (parentId: string | null, level: number) => {
     setAddParentId(parentId);
     setNewNodeName('');
+    setNewBranchCode('');
+    setBranchCodeError('');
     if (level === 0) setNewNodeType('sector');
     else if (level === 1) setNewNodeType('category');
     else if (level === 2) setNewNodeType('subcategory');
@@ -268,16 +304,27 @@ const TaxonomyBuilder: React.FC<TaxonomyBuilderProps> = ({
 
   const handleAddConfirm = () => {
     if (!newNodeName.trim()) return;
+    const code = newBranchCode.trim().toUpperCase();
+    if (code) {
+      const error = validateBranchCode(code);
+      if (error) {
+        setBranchCodeError(error);
+        return;
+      }
+    }
     const newNode: TreeNode = {
       id: `node-${Date.now()}`,
       name: newNodeName.trim(),
       type: newNodeType,
       parentId: addParentId,
       metadata: newNodeType === 'sector' ? { colorIndex: getNextColorIndex() } : undefined,
+      branchCode: code || generateBranchCodeSuggestion(newNodeName.trim()),
     };
     onAddNode(newNode);
     setShowAddModal(false);
     setNewNodeName('');
+    setNewBranchCode('');
+    setBranchCodeError('');
     if (addParentId) {
       setExpandedNodes(prev => new Set([...prev, addParentId]));
     }
@@ -667,6 +714,12 @@ const TaxonomyBuilder: React.FC<TaxonomyBuilderProps> = ({
               {config.label}
             </span>
 
+            {node.branchCode && (
+              <span className="px-2 py-0.5 rounded-full text-[10px] font-mono font-bold bg-indigo-50 text-indigo-600 border border-indigo-200 tracking-wider">
+                {node.branchCode}
+              </span>
+            )}
+
             {node.productCount > 0 && (
               <span className="flex items-center gap-1.5 text-xs text-slate-500 bg-white/80 px-2.5 py-1 rounded-full border border-slate-200">
                 <Package size={12} /> 
@@ -865,6 +918,40 @@ const TaxonomyBuilder: React.FC<TaxonomyBuilderProps> = ({
                     if (e.key === 'Escape') setShowAddModal(false);
                   }}
                 />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-slate-700 mb-1">Branch Code</label>
+                <div className="flex gap-2">
+                  <input
+                    type="text"
+                    value={newBranchCode}
+                    onChange={(e) => {
+                      const val = e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, '').substring(0, 5);
+                      setNewBranchCode(val);
+                      setBranchCodeError(validateBranchCode(val));
+                    }}
+                    placeholder={newNodeName.trim() ? generateBranchCodeSuggestion(newNodeName) : 'e.g. PU, EP, TC'}
+                    className={`flex-1 px-4 py-3 border ${branchCodeError ? 'border-red-400' : 'border-slate-300'} rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 font-mono uppercase tracking-wider transition-all`}
+                    maxLength={5}
+                  />
+                  {newNodeName.trim() && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const suggested = generateBranchCodeSuggestion(newNodeName);
+                        setNewBranchCode(suggested);
+                        setBranchCodeError('');
+                      }}
+                      className="px-3 py-3 bg-slate-100 text-slate-600 rounded-xl hover:bg-slate-200 text-xs font-medium whitespace-nowrap transition-colors"
+                    >
+                      Auto
+                    </button>
+                  )}
+                </div>
+                {branchCodeError && (
+                  <p className="text-xs text-red-500 mt-1">{branchCodeError}</p>
+                )}
+                <p className="text-xs text-slate-400 mt-1">2-5 uppercase characters, used in stock code generation</p>
               </div>
               <div>
                 <label className="block text-sm font-medium text-slate-700 mb-1">Type</label>

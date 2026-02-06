@@ -1,0 +1,290 @@
+Build a Systematic Dynamic Stock Code Engine to replace random product IDs with meaningful structured stock codes generated automatically from the product taxonomy and attributes.
+
+The stock code must update dynamically when taxonomy, branch, or attributes change.
+
+This system must integrate with:
+
+Existing Product Inventory
+
+Existing Taxonomy Builder
+
+Product Edit/Create Forms
+
+Inline Inventory Editing
+
+System Builder Module
+
+🧱 1. STOCK CODE STRUCTURE
+Base Format
+P.[CATEGORY].[SUBCATEGORY/BRANCH...].[COLOR_CODE].[PRODUCT_ID]
+
+
+Example:
+
+P.PU.TC.111.5424
+
+
+Meaning:
+
+Segment	Meaning
+P	Product prefix
+PU	Category (Polyurethane)
+TC	Branch (Top Coat)
+111	Color Code (White)
+5424	Unique Product Identifier
+Variable Length Support
+
+Stock code length depends on taxonomy depth.
+
+Examples:
+
+P.PU.5424
+P.PU.TC.5424
+P.PU.TC.INDUSTRIAL.5424
+P.EP.SL.BC.212.7741
+
+
+Rules:
+
+unlimited taxonomy depth
+
+no forced segments
+
+branch-based generation
+
+🌳 2. TAXONOMY LETTER SYSTEM
+
+Each taxonomy branch must have:
+
+branch_code (STRING UNIQUE)
+branch_name
+parent_id
+
+
+Examples:
+
+Branch	Code
+Polyurethane	PU
+Epoxy	EP
+Top Coat	TC
+Base Coat	BC
+Waterproofing	WP
+Branch Creation Rules
+
+When user creates new taxonomy branch:
+
+User must enter unique branch code.
+
+Validate:
+
+- uppercase
+- max 5 characters
+- unique globally
+- no spaces
+
+Existing Taxonomy Migration
+
+Automatically:
+
+scan all branches
+
+generate branch codes
+
+Generation Logic:
+
+take first letters of words
+remove vowels if needed
+ensure uniqueness
+append number if duplicate
+
+
+Example:
+
+Heavy Duty Waterproofing → HDW
+Polyurethane Injection → PI
+
+🎨 3. COLOR CODING SYSTEM
+
+Create Color Entity:
+
+color_id
+color_name
+color_code_number
+
+
+Example:
+
+Color	Code
+White	111
+Black	212
+Grey	310
+
+Rules:
+
+Optional field
+
+Only included if product has color
+
+Configurable by admin
+
+Managed via Settings Panel
+
+🔢 4. PRODUCT IDENTIFIER (LAST 4 DIGITS)
+
+Rules:
+
+auto increment per category or global
+
+always 4 digits
+
+padded with zeros
+
+Examples:
+
+0001
+0452
+5424
+
+⚙️ 5. STOCK CODE GENERATION ENGINE
+
+Trigger Events:
+
+Product Created
+
+Taxonomy Changed
+
+Product Moved in Taxonomy
+
+Color Changed
+
+Branch Edited
+
+Inline Inventory Editing
+
+Algorithm:
+
+1. Start with "P"
+2. Traverse taxonomy path
+3. collect branch_code for each node
+4. append color_code if exists
+5. append product_identifier
+6. join with "."
+
+🔄 6. AUTO UPDATE RULES
+
+When taxonomy changes:
+
+old: P.PU.TC.111.5424
+new: P.PU.BC.111.5424
+
+
+System must:
+
+regenerate stock code
+
+update inventory records
+
+update system builder references
+
+update export reports
+
+maintain stock code history
+
+🧾 7. STOCK CODE HISTORY TABLE
+stock_code_history
+id
+product_id
+old_stock_code
+new_stock_code
+changed_at
+changed_by
+reason
+
+🖥️ 8. UI FEATURES
+Product Form
+
+live stock code preview
+
+taxonomy dropdown
+
+color selector
+
+validation errors
+
+Inventory Table
+
+Columns:
+
+Stock Code
+Category
+Subcategory
+Custom Branches
+Color
+Product Identifier
+
+
+Inline Editing:
+
+taxonomy edit regenerates code instantly
+
+color change updates code live
+
+Taxonomy Builder
+
+Add Field:
+
+Branch Unique Code
+
+
+Auto suggestions:
+
+PU
+EP
+WP
+TC
+BC
+SL
+
+🔐 9. DATA SAFETY
+
+prevent duplicate stock codes
+
+lock stock code editing manually
+
+allow admin override
+
+maintain rollback capability
+
+🚀 10. PERFORMANCE REQUIREMENTS
+
+stock code generation < 50ms
+
+bulk regenerate engine
+
+background migration script
+
+cache taxonomy tree
+
+🎯 FINAL OUTPUT REQUIRED
+
+Replit Agent must produce:
+
+DB Schema Updates
+
+Stock Code Generator Service
+
+Taxonomy Branch Code Engine
+
+Color Management Module
+
+Live Preview UI Component
+
+Inline Inventory Update Logic
+
+History Tracking System
+
+Migration Script for Existing Products
+
+Validation Engine
+
+Bulk Regeneration Tool

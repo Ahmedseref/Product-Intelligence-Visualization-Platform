@@ -1,6 +1,7 @@
 import type { Express } from "express";
 import { storage } from "./storage";
 import * as backupService from "./backupService";
+import * as stockCodeService from "./stockCodeService";
 import { authMiddleware, requirePasswordChange } from "./authRoutes";
 
 export function registerRoutes(app: Express): void {
@@ -13,6 +14,8 @@ export function registerRoutes(app: Express): void {
   app.use("/api/backups", authMiddleware, requirePasswordChange);
   app.use("/api/supplier-products", authMiddleware, requirePasswordChange);
   app.use("/api/settings", authMiddleware, requirePasswordChange);
+  app.use("/api/colors", authMiddleware, requirePasswordChange);
+  app.use("/api/stock-codes", authMiddleware, requirePasswordChange);
 
   app.get("/api/tree-nodes", async (req, res) => {
     try {
@@ -166,6 +169,21 @@ export function registerRoutes(app: Express): void {
   app.post("/api/products", async (req, res) => {
     try {
       const product = await storage.createProduct(req.body);
+      if (product.nodeId) {
+        try {
+          const generated = await stockCodeService.generateStockCode(
+            product.nodeId, 
+            product.id,
+            product.colorId || undefined
+          );
+          if (generated) {
+            await storage.updateProduct(product.productId, { stockCode: generated });
+            product.stockCode = generated;
+          }
+        } catch (e) {
+          console.error("Stock code generation failed (non-critical):", e);
+        }
+      }
       res.status(201).json(product);
     } catch (error) {
       console.error("Error creating product:", error);
@@ -178,6 +196,21 @@ export function registerRoutes(app: Express): void {
       const product = await storage.updateProduct(req.params.productId, req.body);
       if (!product) {
         return res.status(404).json({ error: "Product not found" });
+      }
+      if (req.body.nodeId || req.body.colorId !== undefined) {
+        try {
+          const generated = await stockCodeService.generateStockCode(
+            product.nodeId, 
+            product.id,
+            product.colorId || undefined
+          );
+          if (generated && generated !== product.stockCode) {
+            await storage.updateProduct(product.productId, { stockCode: generated });
+            product.stockCode = generated;
+          }
+        } catch (e) {
+          console.error("Stock code regeneration failed (non-critical):", e);
+        }
       }
       res.json(product);
     } catch (error) {
@@ -840,6 +873,125 @@ export function registerRoutes(app: Express): void {
     } catch (error) {
       console.error("Error updating backup settings:", error);
       res.status(500).json({ error: "Failed to update backup settings" });
+    }
+  });
+
+  app.get("/api/colors", async (req, res) => {
+    try {
+      const allColors = await storage.getColors();
+      res.json(allColors);
+    } catch (error) {
+      console.error("Error fetching colors:", error);
+      res.status(500).json({ error: "Failed to fetch colors" });
+    }
+  });
+
+  app.post("/api/colors", async (req, res) => {
+    try {
+      const { name, code, hexValue } = req.body;
+      if (!name || !code) {
+        return res.status(400).json({ error: "Name and code are required" });
+      }
+      const validation = stockCodeService.validateBranchCode(code.toUpperCase());
+      if (!validation.valid) {
+        return res.status(400).json({ error: validation.error });
+      }
+      const color = await storage.createColor({ name, code: code.toUpperCase(), hexValue });
+      res.status(201).json(color);
+    } catch (error: any) {
+      if (error.message?.includes('unique') || error.code === '23505') {
+        return res.status(400).json({ error: "Color code already exists" });
+      }
+      console.error("Error creating color:", error);
+      res.status(500).json({ error: "Failed to create color" });
+    }
+  });
+
+  app.patch("/api/colors/:id", async (req, res) => {
+    try {
+      const id = parseInt(req.params.id);
+      if (isNaN(id)) return res.status(400).json({ error: "Invalid ID" });
+      const color = await storage.updateColor(id, req.body);
+      if (!color) return res.status(404).json({ error: "Color not found" });
+      res.json(color);
+    } catch (error) {
+      console.error("Error updating color:", error);
+      res.status(500).json({ error: "Failed to update color" });
+    }
+  });
+
+  app.delete("/api/colors/:id", async (req, res) => {
+    try {
+      const id = parseInt(req.params.id);
+      if (isNaN(id)) return res.status(400).json({ error: "Invalid ID" });
+      await storage.deleteColor(id);
+      res.status(204).send();
+    } catch (error) {
+      console.error("Error deleting color:", error);
+      res.status(500).json({ error: "Failed to delete color" });
+    }
+  });
+
+  app.get("/api/stock-codes/preview", async (req, res) => {
+    try {
+      const { nodeId, colorId, productId } = req.query;
+      if (!nodeId) return res.status(400).json({ error: "nodeId is required" });
+      const code = await stockCodeService.previewStockCode(
+        nodeId as string,
+        colorId ? parseInt(colorId as string) : null,
+        productId as string || null
+      );
+      res.json({ stockCode: code });
+    } catch (error) {
+      console.error("Error previewing stock code:", error);
+      res.status(500).json({ error: "Failed to preview stock code" });
+    }
+  });
+
+  app.post("/api/stock-codes/generate/:productId", async (req, res) => {
+    try {
+      const code = await stockCodeService.updateProductStockCode(
+        req.params.productId,
+        "Manual generation",
+        (req as any).user?.username || "Admin"
+      );
+      if (!code) return res.status(404).json({ error: "Product not found" });
+      res.json({ stockCode: code });
+    } catch (error) {
+      console.error("Error generating stock code:", error);
+      res.status(500).json({ error: "Failed to generate stock code" });
+    }
+  });
+
+  app.post("/api/stock-codes/bulk-regenerate", async (req, res) => {
+    try {
+      const updated = await stockCodeService.bulkRegenerateStockCodes(
+        (req as any).user?.username || "Admin"
+      );
+      res.json({ updated });
+    } catch (error) {
+      console.error("Error bulk regenerating stock codes:", error);
+      res.status(500).json({ error: "Failed to regenerate stock codes" });
+    }
+  });
+
+  app.post("/api/stock-codes/migrate-branch-codes", async (req, res) => {
+    try {
+      const migrated = await stockCodeService.migrateExistingBranchCodes();
+      res.json({ migrated });
+    } catch (error) {
+      console.error("Error migrating branch codes:", error);
+      res.status(500).json({ error: "Failed to migrate branch codes" });
+    }
+  });
+
+  app.get("/api/stock-codes/history/:productId", async (req, res) => {
+    try {
+      const history = await stockCodeService.getStockCodeHistoryForProduct(req.params.productId);
+      res.json(history);
+    } catch (error) {
+      console.error("Error fetching stock code history:", error);
+      res.status(500).json({ error: "Failed to fetch stock code history" });
     }
   });
 }

@@ -72,6 +72,7 @@ export const treeNodes = pgTable("tree_nodes", {
   parentId: varchar("parent_id", { length: 100 }),
   description: text("description"),
   metadata: jsonb("metadata"),
+  branchCode: varchar("branch_code", { length: 10 }),
   isActive: boolean("is_active").default(true),
   sortOrder: integer("sort_order").default(0),
   createdAt: timestamp("created_at").defaultNow(),
@@ -85,6 +86,8 @@ export const products = pgTable("products", {
   supplier: varchar("supplier", { length: 255 }),
   supplierId: varchar("supplier_id", { length: 100 }),
   nodeId: varchar("node_id", { length: 100 }).notNull(),
+  stockCode: varchar("stock_code", { length: 255 }),
+  colorId: integer("color_id"),
   manufacturer: varchar("manufacturer", { length: 255 }),
   manufacturingLocation: varchar("manufacturing_location", { length: 255 }),
   description: text("description"),
@@ -131,6 +134,26 @@ export const attachments = pgTable("attachments", {
   objectPath: text("object_path").notNull(),
   category: varchar("category", { length: 100 }),
   uploadedAt: timestamp("uploaded_at").defaultNow(),
+});
+
+export const colors = pgTable("colors", {
+  id: serial("id").primaryKey(),
+  name: varchar("name", { length: 100 }).notNull(),
+  code: varchar("code", { length: 10 }).notNull().unique(),
+  hexValue: varchar("hex_value", { length: 7 }),
+  isActive: boolean("is_active").default(true),
+  sortOrder: integer("sort_order").default(0),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+export const stockCodeHistory = pgTable("stock_code_history", {
+  id: serial("id").primaryKey(),
+  productId: varchar("product_id", { length: 100 }).notNull(),
+  oldStockCode: varchar("old_stock_code", { length: 255 }),
+  newStockCode: varchar("new_stock_code", { length: 255 }).notNull(),
+  reason: varchar("reason", { length: 255 }).notNull(),
+  changedBy: varchar("changed_by", { length: 255 }),
+  changedAt: timestamp("changed_at").defaultNow(),
 });
 
 export const appSettings = pgTable("app_settings", {
@@ -211,5 +234,9 @@ export type AppSettings = typeof appSettings.$inferSelect;
 export type InsertAppSettings = typeof appSettings.$inferInsert;
 export type Backup = typeof backups.$inferSelect;
 export type InsertBackup = typeof backups.$inferInsert;
+export type Color = typeof colors.$inferSelect;
+export type InsertColor = typeof colors.$inferInsert;
+export type StockCodeHistory = typeof stockCodeHistory.$inferSelect;
+export type InsertStockCodeHistory = typeof stockCodeHistory.$inferInsert;
 export type User = typeof users.$inferSelect;
 export type InsertUser = typeof users.$inferInsert;

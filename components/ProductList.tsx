@@ -18,6 +18,7 @@ interface ProductListProps {
   onAddFieldDefinition?: (field: CustomField) => void;
   onAddTreeNode?: (node: TreeNode) => void;
   usageAreas?: string[];
+  colors?: any[];
 }
 
 interface EditingCell {
@@ -39,7 +40,7 @@ interface FilterState {
   moqMax: string;
 }
 
-type ColumnKey = 'id' | 'name' | 'supplier' | 'sector' | 'category' | 'subCategory' | 'taxonomyPath' | 'price' | 'currency' | 'unit' | 'moq' | 'leadTime' | 'manufacturer' | 'location' | 'description' | 'usageAreas';
+type ColumnKey = 'id' | 'stockCode' | 'name' | 'supplier' | 'sector' | 'category' | 'subCategory' | 'taxonomyPath' | 'price' | 'currency' | 'unit' | 'moq' | 'leadTime' | 'manufacturer' | 'location' | 'description' | 'usageAreas';
 
 interface ColumnConfig {
   key: ColumnKey;
@@ -50,6 +51,7 @@ interface ColumnConfig {
 
 const ALL_COLUMNS: ColumnConfig[] = [
   { key: 'id', label: 'ID', sortable: true, defaultVisible: true },
+  { key: 'stockCode', label: 'Stock Code', sortable: true, defaultVisible: true },
   { key: 'name', label: 'Product Name', sortable: true, defaultVisible: true },
   { key: 'supplier', label: 'Supplier', sortable: true, defaultVisible: true },
   { key: 'taxonomyPath', label: 'Taxonomy Path', sortable: true, defaultVisible: true },
@@ -160,7 +162,7 @@ const UsageAreasEditor: React.FC<UsageAreasEditorProps> = ({ product, usageAreas
 
 const ProductList: React.FC<ProductListProps> = ({ 
   products, onUpdate, onDelete, onCreate, customFields, treeNodes,
-  suppliers = [], currentUser, onAddFieldDefinition, onAddTreeNode, usageAreas = []
+  suppliers = [], currentUser, onAddFieldDefinition, onAddTreeNode, usageAreas = [], colors = []
 }) => {
   const [selectedProduct, setSelectedProduct] = useState<Product | null>(null);
   const [editingProduct, setEditingProduct] = useState<Product | null>(null);
@@ -196,6 +198,7 @@ const ProductList: React.FC<ProductListProps> = ({
   
   const [columnWidths, setColumnWidths] = useState<Record<ColumnKey, number>>({
     id: 180,
+    stockCode: 200,
     name: 300,
     supplier: 180,
     taxonomyPath: 280,
@@ -275,6 +278,7 @@ const ProductList: React.FC<ProductListProps> = ({
 
     const widthMap: Record<ColumnKey, number> = {
       id: Math.min(250, Math.max(headerWidth, getContentWidth('id', 7))),
+      stockCode: Math.min(250, Math.max(headerWidth, 180)),
       name: Math.min(400, Math.max(headerWidth, getContentWidth('name'))),
       supplier: Math.min(220, Math.max(headerWidth, getContentWidth('supplier'))),
       taxonomyPath: Math.min(350, Math.max(headerWidth, 200)),
@@ -541,6 +545,7 @@ const ProductList: React.FC<ProductListProps> = ({
     const hierarchy = getHierarchyLevels(p.nodeId);
     switch (field) {
       case 'id': return p.id;
+      case 'stockCode': return p.stockCode || '';
       case 'name': return p.name || '';
       case 'supplier': return p.supplier;
       case 'taxonomyPath': return hierarchy.fullPath;
@@ -1267,6 +1272,15 @@ const ProductList: React.FC<ProductListProps> = ({
                     {visibleColumns.has('id') && (
                       <td className="px-3 py-3 text-xs font-mono font-bold text-blue-600 overflow-hidden text-ellipsis" style={{ width: columnWidths.id, minWidth: columnWidths.id, maxWidth: columnWidths.id }}>{p.id}</td>
                     )}
+                    {visibleColumns.has('stockCode') && (
+                      <td className="px-3 py-3 overflow-hidden text-ellipsis" style={{ width: columnWidths.stockCode, minWidth: columnWidths.stockCode, maxWidth: columnWidths.stockCode }}>
+                        {p.stockCode ? (
+                          <span className="text-xs font-mono font-semibold text-emerald-700 bg-emerald-50 px-2 py-1 rounded">{p.stockCode}</span>
+                        ) : (
+                          <span className="text-xs text-slate-400 italic">Not assigned</span>
+                        )}
+                      </td>
+                    )}
                     {visibleColumns.has('name') && (
                       <td className="px-3 py-3 overflow-hidden text-ellipsis" style={{ width: columnWidths.name, minWidth: columnWidths.name, maxWidth: columnWidths.name }}>
                         {renderEditableCell(
@@ -1625,6 +1639,7 @@ const ProductList: React.FC<ProductListProps> = ({
               treeNodes={treeNodes}
               suppliers={suppliers}
               usageAreas={usageAreas}
+              colors={colors}
               onAddFieldDefinition={onAddFieldDefinition}
               onAddTreeNode={onAddTreeNode}
             />

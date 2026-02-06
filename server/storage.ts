@@ -1,12 +1,14 @@
 import { 
   treeNodes, products, customFieldDefinitions,
   suppliers, supplierProducts, attachments, appSettings,
+  colors,
   type TreeNode, type InsertTreeNode,
   type Product, type InsertProduct,
   type CustomFieldDefinition, type InsertCustomFieldDefinition,
   type Supplier, type InsertSupplier,
   type SupplierProduct, type InsertSupplierProduct,
-  type Attachment, type InsertAttachment
+  type Attachment, type InsertAttachment,
+  type Color, type InsertColor
 } from "@shared/schema";
 import { db } from "./db";
 import { eq, and, isNull } from "drizzle-orm";
@@ -233,6 +235,34 @@ export class DatabaseStorage implements IStorage {
       await db.insert(appSettings).values({ key: 'usage_areas', value: areas });
     }
     return areas;
+  }
+
+  async getColors(): Promise<Color[]> {
+    return await db.select().from(colors).orderBy(colors.sortOrder);
+  }
+
+  async getColor(id: number): Promise<Color | undefined> {
+    const [color] = await db.select().from(colors).where(eq(colors.id, id));
+    return color || undefined;
+  }
+
+  async createColor(color: InsertColor): Promise<Color> {
+    const [created] = await db.insert(colors).values(color).returning();
+    return created;
+  }
+
+  async updateColor(id: number, updates: Partial<InsertColor>): Promise<Color | undefined> {
+    const [updated] = await db
+      .update(colors)
+      .set(updates)
+      .where(eq(colors.id, id))
+      .returning();
+    return updated || undefined;
+  }
+
+  async deleteColor(id: number): Promise<boolean> {
+    const result = await db.delete(colors).where(eq(colors.id, id)).returning();
+    return result.length > 0;
   }
 }
 

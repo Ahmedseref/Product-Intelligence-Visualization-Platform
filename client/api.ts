@@ -8,6 +8,7 @@ export interface TreeNodeData {
   parentId: string | null;
   description?: string;
   metadata?: Record<string, any>;
+  branchCode?: string;
   isActive?: boolean;
   sortOrder?: number;
 }
@@ -27,6 +28,8 @@ export interface ProductData {
   supplier?: string;
   supplierId?: string;
   nodeId: string;
+  stockCode?: string;
+  colorId?: number;
   manufacturer?: string;
   manufacturingLocation?: string;
   description?: string;
@@ -268,6 +271,79 @@ export const api = {
       method: 'DELETE',
     });
     if (!res.ok) throw new Error('Failed to delete supplier product');
+  },
+
+  async getColors(): Promise<any[]> {
+    const res = await authFetch(`${API_BASE}/colors`);
+    if (!res.ok) throw new Error('Failed to fetch colors');
+    return res.json();
+  },
+
+  async createColor(color: { name: string; code: string; hexValue?: string }): Promise<any> {
+    const res = await authFetch(`${API_BASE}/colors`, {
+      method: 'POST',
+      body: JSON.stringify(color),
+    });
+    if (!res.ok) {
+      const err = await res.json();
+      throw new Error(err.error || 'Failed to create color');
+    }
+    return res.json();
+  },
+
+  async updateColor(id: number, updates: Partial<{ name: string; code: string; hexValue: string; isActive: boolean; sortOrder: number }>): Promise<any> {
+    const res = await authFetch(`${API_BASE}/colors/${id}`, {
+      method: 'PATCH',
+      body: JSON.stringify(updates),
+    });
+    if (!res.ok) throw new Error('Failed to update color');
+    return res.json();
+  },
+
+  async deleteColor(id: number): Promise<void> {
+    const res = await authFetch(`${API_BASE}/colors/${id}`, {
+      method: 'DELETE',
+    });
+    if (!res.ok) throw new Error('Failed to delete color');
+  },
+
+  async generateStockCode(productId: string): Promise<{ stockCode: string }> {
+    const res = await authFetch(`${API_BASE}/stock-codes/generate/${productId}`, {
+      method: 'POST',
+    });
+    if (!res.ok) throw new Error('Failed to generate stock code');
+    return res.json();
+  },
+
+  async previewStockCode(nodeId: string, colorId?: number, productId?: string): Promise<{ stockCode: string }> {
+    const params = new URLSearchParams({ nodeId });
+    if (colorId) params.append('colorId', String(colorId));
+    if (productId) params.append('productId', productId);
+    const res = await authFetch(`${API_BASE}/stock-codes/preview?${params}`);
+    if (!res.ok) throw new Error('Failed to preview stock code');
+    return res.json();
+  },
+
+  async bulkRegenerateStockCodes(): Promise<{ updated: number }> {
+    const res = await authFetch(`${API_BASE}/stock-codes/bulk-regenerate`, {
+      method: 'POST',
+    });
+    if (!res.ok) throw new Error('Failed to regenerate stock codes');
+    return res.json();
+  },
+
+  async migrateExistingBranchCodes(): Promise<{ migrated: number }> {
+    const res = await authFetch(`${API_BASE}/stock-codes/migrate-branch-codes`, {
+      method: 'POST',
+    });
+    if (!res.ok) throw new Error('Failed to migrate branch codes');
+    return res.json();
+  },
+
+  async getStockCodeHistory(productId: string): Promise<any[]> {
+    const res = await authFetch(`${API_BASE}/stock-codes/history/${productId}`);
+    if (!res.ok) throw new Error('Failed to fetch stock code history');
+    return res.json();
   },
 
   async getUsageAreas(): Promise<string[]> {
