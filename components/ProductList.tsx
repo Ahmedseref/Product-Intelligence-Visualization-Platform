@@ -1274,7 +1274,7 @@ const ProductList: React.FC<ProductListProps> = ({
           <table className="w-full text-left border-collapse" style={{ tableLayout: 'fixed', minWidth: '1400px' }}>
             <thead>
               <tr className="bg-slate-50 border-b border-slate-200">
-                <th className="px-2 py-2 w-10 sticky left-0 bg-slate-50 z-10">
+                <th className="px-2 py-1.5 w-10 sticky left-0 bg-slate-50 z-10">
                   <input 
                     type="checkbox"
                     checked={selectedIds.size === sortedProducts.length && sortedProducts.length > 0}
@@ -1282,11 +1282,11 @@ const ProductList: React.FC<ProductListProps> = ({
                     className="w-4 h-4 rounded border-slate-300 text-blue-600 focus:ring-blue-500"
                   />
                 </th>
-                <th className="px-1 py-2 w-8 bg-slate-50"></th>
+                <th className="px-1 py-1.5 w-8 bg-slate-50"></th>
                 {ALL_COLUMNS.filter(col => visibleColumns.has(col.key)).map(col => (
                   <th 
                     key={col.key}
-                    className={`px-3 py-2 text-[10px] font-bold text-slate-500 uppercase tracking-widest whitespace-nowrap relative ${col.sortable ? 'cursor-pointer hover:bg-slate-100' : ''}`}
+                    className={`px-3 py-1.5 text-[10px] font-bold text-slate-500 uppercase tracking-widest whitespace-nowrap relative ${col.sortable ? 'cursor-pointer hover:bg-slate-100' : ''}`}
                     style={{ width: columnWidths[col.key], minWidth: columnWidths[col.key], maxWidth: columnWidths[col.key] }}
                     onClick={() => col.sortable && handleSort(col.key)}
                   >
@@ -1302,8 +1302,7 @@ const ProductList: React.FC<ProductListProps> = ({
                     />
                   </th>
                 ))}
-                <th className="px-3 py-2 text-[10px] font-bold text-slate-500 uppercase tracking-widest text-right sticky right-0 bg-slate-50 z-10">
-                  Actions
+                <th className="px-2 py-1.5 w-24 text-[10px] font-bold text-slate-500 uppercase tracking-widest text-right bg-slate-50">
                 </th>
               </tr>
             </thead>
@@ -1326,7 +1325,7 @@ const ProductList: React.FC<ProductListProps> = ({
                       }, 250);
                     }}
                   >
-                    <td className="px-2 py-2 sticky left-0 bg-white group-hover:bg-blue-50/30 z-10" onClick={e => e.stopPropagation()}>
+                    <td className="px-2 py-1 sticky left-0 bg-white group-hover:bg-blue-50/30 z-10" onClick={e => e.stopPropagation()}>
                       <input 
                         type="checkbox"
                         checked={selectedIds.has(p.id)}
@@ -1334,7 +1333,7 @@ const ProductList: React.FC<ProductListProps> = ({
                         className="w-4 h-4 rounded border-slate-300 text-blue-600 focus:ring-blue-500"
                       />
                     </td>
-                    <td className="px-1 py-2 w-8" onClick={e => e.stopPropagation()}>
+                    <td className="px-1 py-1 w-8" onClick={e => e.stopPropagation()}>
                       <button
                         onClick={(e) => {
                           e.stopPropagation();
@@ -1351,7 +1350,7 @@ const ProductList: React.FC<ProductListProps> = ({
                       </button>
                     </td>
                     {visibleColumns.has('stockCode') && (
-                      <td className="px-3 py-2 overflow-hidden text-ellipsis" style={{ width: columnWidths.stockCode, minWidth: columnWidths.stockCode, maxWidth: columnWidths.stockCode }}>
+                      <td className="px-3 py-1 overflow-hidden text-ellipsis" style={{ width: columnWidths.stockCode, minWidth: columnWidths.stockCode, maxWidth: columnWidths.stockCode }}>
                         {p.stockCode ? (
                           <span className="text-xs font-mono font-semibold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded">{p.stockCode}</span>
                         ) : (
@@ -1360,7 +1359,7 @@ const ProductList: React.FC<ProductListProps> = ({
                       </td>
                     )}
                     {visibleColumns.has('name') && (
-                      <td className="px-3 py-2 overflow-hidden text-ellipsis" style={{ width: columnWidths.name, minWidth: columnWidths.name, maxWidth: columnWidths.name }}>
+                      <td className="px-3 py-1 overflow-hidden text-ellipsis" style={{ width: columnWidths.name, minWidth: columnWidths.name, maxWidth: columnWidths.name }}>
                         {renderEditableCell(
                           p, 
                           'name', 
@@ -1372,7 +1371,7 @@ const ProductList: React.FC<ProductListProps> = ({
                       </td>
                     )}
                     {visibleColumns.has('supplier') && (
-                      <td className="px-3 py-2 overflow-hidden text-ellipsis" style={{ width: columnWidths.supplier, minWidth: columnWidths.supplier, maxWidth: columnWidths.supplier }}>
+                      <td className="px-3 py-1 overflow-hidden text-ellipsis" style={{ width: columnWidths.supplier, minWidth: columnWidths.supplier, maxWidth: columnWidths.supplier }}>
                         {renderEditableCell(
                           p,
                           'supplier',
@@ -1384,7 +1383,7 @@ const ProductList: React.FC<ProductListProps> = ({
                     {visibleColumns.has('taxonomyPath') && (
                       <td 
                         ref={(el) => { taxonomyCellRefs.current[p.id] = el; }}
-                        className="px-3 py-2 overflow-visible" 
+                        className="px-3 py-1 overflow-visible" 
                         style={{ width: columnWidths.taxonomyPath, minWidth: columnWidths.taxonomyPath, maxWidth: columnWidths.taxonomyPath, position: 'relative', zIndex: isEditing(p.id, 'taxonomyPath') ? 1000 : 'auto' }}
                         onClick={(e) => e.stopPropagation()}
                       >
@@ -1451,19 +1450,19 @@ const ProductList: React.FC<ProductListProps> = ({
                       </td>
                     )}
                     {visibleColumns.has('id') && (
-                      <td className="px-3 py-2 text-xs font-mono font-bold text-blue-600 overflow-hidden text-ellipsis" style={{ width: columnWidths.id, minWidth: columnWidths.id, maxWidth: columnWidths.id }}>{p.id}</td>
+                      <td className="px-3 py-1 text-xs font-mono font-bold text-blue-600 overflow-hidden text-ellipsis" style={{ width: columnWidths.id, minWidth: columnWidths.id, maxWidth: columnWidths.id }}>{p.id}</td>
                     )}
                     {visibleColumns.has('sector') && (
-                      <td className="px-3 py-2 text-xs text-slate-600 overflow-hidden text-ellipsis" style={{ width: columnWidths.sector, minWidth: columnWidths.sector, maxWidth: columnWidths.sector }}>{hierarchy.sector || '-'}</td>
+                      <td className="px-3 py-1 text-xs text-slate-600 overflow-hidden text-ellipsis" style={{ width: columnWidths.sector, minWidth: columnWidths.sector, maxWidth: columnWidths.sector }}>{hierarchy.sector || '-'}</td>
                     )}
                     {visibleColumns.has('category') && (
-                      <td className="px-3 py-2 text-xs text-slate-600 overflow-hidden text-ellipsis" style={{ width: columnWidths.category, minWidth: columnWidths.category, maxWidth: columnWidths.category }}>{hierarchy.category || '-'}</td>
+                      <td className="px-3 py-1 text-xs text-slate-600 overflow-hidden text-ellipsis" style={{ width: columnWidths.category, minWidth: columnWidths.category, maxWidth: columnWidths.category }}>{hierarchy.category || '-'}</td>
                     )}
                     {visibleColumns.has('subCategory') && (
-                      <td className="px-3 py-2 text-xs text-slate-600 overflow-hidden text-ellipsis" style={{ width: columnWidths.subCategory, minWidth: columnWidths.subCategory, maxWidth: columnWidths.subCategory }}>{hierarchy.subCategory || '-'}</td>
+                      <td className="px-3 py-1 text-xs text-slate-600 overflow-hidden text-ellipsis" style={{ width: columnWidths.subCategory, minWidth: columnWidths.subCategory, maxWidth: columnWidths.subCategory }}>{hierarchy.subCategory || '-'}</td>
                     )}
                     {visibleColumns.has('price') && (
-                      <td className="px-3 py-2 overflow-hidden text-ellipsis" style={{ width: columnWidths.price, minWidth: columnWidths.price, maxWidth: columnWidths.price }}>
+                      <td className="px-3 py-1 overflow-hidden text-ellipsis" style={{ width: columnWidths.price, minWidth: columnWidths.price, maxWidth: columnWidths.price }}>
                         {renderEditableCell(
                           p,
                           'price',
@@ -1473,13 +1472,13 @@ const ProductList: React.FC<ProductListProps> = ({
                       </td>
                     )}
                     {visibleColumns.has('currency') && (
-                      <td className="px-3 py-2 text-xs text-slate-600" style={{ width: columnWidths.currency, minWidth: columnWidths.currency, maxWidth: columnWidths.currency }}>{p.currency}</td>
+                      <td className="px-3 py-1 text-xs text-slate-600" style={{ width: columnWidths.currency, minWidth: columnWidths.currency, maxWidth: columnWidths.currency }}>{p.currency}</td>
                     )}
                     {visibleColumns.has('unit') && (
-                      <td className="px-3 py-2 text-xs text-slate-600" style={{ width: columnWidths.unit, minWidth: columnWidths.unit, maxWidth: columnWidths.unit }}>{p.unit}</td>
+                      <td className="px-3 py-1 text-xs text-slate-600" style={{ width: columnWidths.unit, minWidth: columnWidths.unit, maxWidth: columnWidths.unit }}>{p.unit}</td>
                     )}
                     {visibleColumns.has('moq') && (
-                      <td className="px-3 py-2 overflow-hidden text-ellipsis" style={{ width: columnWidths.moq, minWidth: columnWidths.moq, maxWidth: columnWidths.moq }}>
+                      <td className="px-3 py-1 overflow-hidden text-ellipsis" style={{ width: columnWidths.moq, minWidth: columnWidths.moq, maxWidth: columnWidths.moq }}>
                         {renderEditableCell(
                           p,
                           'moq',
@@ -1489,7 +1488,7 @@ const ProductList: React.FC<ProductListProps> = ({
                       </td>
                     )}
                     {visibleColumns.has('leadTime') && (
-                      <td className="px-3 py-2 overflow-hidden text-ellipsis" style={{ width: columnWidths.leadTime, minWidth: columnWidths.leadTime, maxWidth: columnWidths.leadTime }}>
+                      <td className="px-3 py-1 overflow-hidden text-ellipsis" style={{ width: columnWidths.leadTime, minWidth: columnWidths.leadTime, maxWidth: columnWidths.leadTime }}>
                         {renderEditableCell(
                           p,
                           'leadTime',
@@ -1502,7 +1501,7 @@ const ProductList: React.FC<ProductListProps> = ({
                       </td>
                     )}
                     {visibleColumns.has('manufacturer') && (
-                      <td className="px-3 py-2 overflow-hidden text-ellipsis" style={{ width: columnWidths.manufacturer, minWidth: columnWidths.manufacturer, maxWidth: columnWidths.manufacturer }}>
+                      <td className="px-3 py-1 overflow-hidden text-ellipsis" style={{ width: columnWidths.manufacturer, minWidth: columnWidths.manufacturer, maxWidth: columnWidths.manufacturer }}>
                         {renderEditableCell(
                           p,
                           'manufacturer',
@@ -1512,13 +1511,13 @@ const ProductList: React.FC<ProductListProps> = ({
                       </td>
                     )}
                     {visibleColumns.has('location') && (
-                      <td className="px-3 py-2 text-xs text-slate-600 overflow-hidden text-ellipsis truncate" style={{ width: columnWidths.location, minWidth: columnWidths.location, maxWidth: columnWidths.location }}>{p.manufacturingLocation || '-'}</td>
+                      <td className="px-3 py-1 text-xs text-slate-600 overflow-hidden text-ellipsis truncate" style={{ width: columnWidths.location, minWidth: columnWidths.location, maxWidth: columnWidths.location }}>{p.manufacturingLocation || '-'}</td>
                     )}
                     {visibleColumns.has('description') && (
-                      <td className="px-3 py-2 text-xs text-slate-500 truncate overflow-hidden text-ellipsis" style={{ width: columnWidths.description, minWidth: columnWidths.description, maxWidth: columnWidths.description }} title={p.description}>{p.description || '-'}</td>
+                      <td className="px-3 py-1 text-xs text-slate-500 truncate overflow-hidden text-ellipsis" style={{ width: columnWidths.description, minWidth: columnWidths.description, maxWidth: columnWidths.description }} title={p.description}>{p.description || '-'}</td>
                     )}
                     {visibleColumns.has('usageAreas') && (
-                      <td className="px-3 py-2 overflow-hidden" style={{ width: columnWidths.usageAreas, minWidth: columnWidths.usageAreas, maxWidth: columnWidths.usageAreas }}>
+                      <td className="px-3 py-1 overflow-hidden" style={{ width: columnWidths.usageAreas, minWidth: columnWidths.usageAreas, maxWidth: columnWidths.usageAreas }}>
                         {isEditing(p.id, 'usageAreas') ? (
                           <UsageAreasEditor
                             product={p}
@@ -1572,8 +1571,8 @@ const ProductList: React.FC<ProductListProps> = ({
                         )}
                       </td>
                     )}
-                    <td className="px-3 py-2 text-right sticky right-0 bg-white group-hover:bg-blue-50/30 z-10">
-                    <div className="flex items-center justify-end gap-0.5" onClick={e => e.stopPropagation()}>
+                    <td className="px-2 py-1 text-right w-24">
+                    <div className="flex items-center justify-end gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity duration-150" onClick={e => e.stopPropagation()}>
                       <button 
                         onClick={() => currentUser ? setEditingProduct(p) : startEditing(p, 'name', p.name)}
                         className="p-1 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded transition-all"

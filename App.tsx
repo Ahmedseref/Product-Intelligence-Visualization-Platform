@@ -16,7 +16,7 @@ import Settings from './components/Settings';
 import Login from './components/Login';
 import ChangePassword from './components/ChangePassword';
 import { api, authApi, setAuthToken, initAuthToken, AuthUser } from './client/api';
-import { LogOut } from 'lucide-react';
+import { LogOut, PanelLeftClose, PanelLeftOpen } from 'lucide-react';
 
 const App: React.FC = () => {
   const [authUser, setAuthUser] = useState<AuthUser | null>(null);
@@ -40,6 +40,7 @@ const App: React.FC = () => {
   const [usageAreas, setUsageAreas] = useState<string[]>([]);
   const [colorsList, setColorsList] = useState<any[]>([]);
   const [taxonomyPanelWidth, setTaxonomyPanelWidth] = useState(288);
+  const [showTaxonomyPanel, setShowTaxonomyPanel] = useState(true);
   const [isResizingPanel, setIsResizingPanel] = useState(false);
   const panelResizeRef = React.useRef<HTMLDivElement>(null);
   const resizeStartRef = React.useRef<{ startX: number; startWidth: number } | null>(null);
@@ -724,31 +725,43 @@ const App: React.FC = () => {
 
         <div className="flex-1 flex overflow-hidden">
           {(viewMode === 'inventory' || viewMode === 'dashboard') && (
-            <aside 
-              className="border-r border-slate-200 bg-white hidden xl:flex flex-shrink-0 relative"
-              style={{ width: taxonomyPanelWidth }}
-            >
-              <div className="p-4 h-full flex-1 overflow-auto">
-                <ProductTree 
-                  nodes={treeNodes} 
-                  selectedNodeId={selectedNodeId} 
-                  onSelectNode={setSelectedNodeId} 
-                  productsCount={productCounts}
-                  onAddNode={addTreeNode}
-                  onEditNode={editTreeNode}
-                  onDeleteNode={deleteTreeNode}
-                  onMoveNode={moveTreeNode}
-                />
-              </div>
-              <div
-                ref={panelResizeRef}
-                onMouseDown={startPanelResize}
-                className="absolute right-0 top-0 h-full w-1.5 cursor-col-resize hover:bg-blue-400 active:bg-blue-500 transition-colors group flex items-center justify-center"
-                style={{ marginRight: -3 }}
+            <div className="relative flex flex-shrink-0">
+              <aside 
+                className={`border-r border-slate-200 bg-white flex-shrink-0 relative transition-all duration-300 ease-in-out overflow-hidden hidden ${showTaxonomyPanel ? 'xl:flex' : ''}`}
+                style={{ width: showTaxonomyPanel ? taxonomyPanelWidth : 0, minWidth: showTaxonomyPanel ? taxonomyPanelWidth : 0 }}
               >
-                <div className="w-0.5 h-8 bg-slate-300 group-hover:bg-blue-400 rounded-full" />
-              </div>
-            </aside>
+                <div className="p-4 h-full flex-1 overflow-auto" style={{ width: taxonomyPanelWidth }}>
+                  <ProductTree 
+                    nodes={treeNodes} 
+                    selectedNodeId={selectedNodeId} 
+                    onSelectNode={setSelectedNodeId} 
+                    productsCount={productCounts}
+                    onAddNode={addTreeNode}
+                    onEditNode={editTreeNode}
+                    onDeleteNode={deleteTreeNode}
+                    onMoveNode={moveTreeNode}
+                  />
+                </div>
+                {showTaxonomyPanel && (
+                  <div
+                    ref={panelResizeRef}
+                    onMouseDown={startPanelResize}
+                    className="absolute right-0 top-0 h-full w-1.5 cursor-col-resize hover:bg-blue-400 active:bg-blue-500 transition-colors group flex items-center justify-center"
+                    style={{ marginRight: -3 }}
+                  >
+                    <div className="w-0.5 h-8 bg-slate-300 group-hover:bg-blue-400 rounded-full" />
+                  </div>
+                )}
+              </aside>
+              <button
+                onClick={() => setShowTaxonomyPanel(!showTaxonomyPanel)}
+                className="hidden xl:flex absolute top-3 z-20 w-6 h-6 bg-white border border-slate-200 rounded-full shadow-sm items-center justify-center text-slate-500 hover:text-blue-600 hover:border-blue-300 transition-all"
+                title={showTaxonomyPanel ? 'Hide taxonomy panel' : 'Show taxonomy panel'}
+                style={{ right: showTaxonomyPanel ? -12 : -24 }}
+              >
+                {showTaxonomyPanel ? <PanelLeftClose className="w-3.5 h-3.5" /> : <PanelLeftOpen className="w-3.5 h-3.5" />}
+              </button>
+            </div>
           )}
 
           <main className="flex-1 overflow-y-auto p-6 scroll-smooth">
