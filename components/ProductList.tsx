@@ -4,7 +4,7 @@ import { ICONS, CURRENCIES, UNITS } from '../constants';
 import ProductDetailsModal from './ProductDetailsModal';
 import ProductForm from './ProductForm';
 import TaxonomyNodeSelector from './TaxonomyNodeSelector';
-import { Check, X, Download, Filter, FileText, ChevronDown, Copy, Trash2, Columns, Eye, EyeOff, FolderTree } from 'lucide-react';
+import { Check, X, Download, Filter, FileText, ChevronDown, ChevronRight, Copy, Trash2, Columns, Eye, EyeOff, FolderTree, Search, ChevronsUpDown } from 'lucide-react';
 
 interface ProductListProps {
   products: Product[];
@@ -50,24 +50,26 @@ interface ColumnConfig {
 }
 
 const ALL_COLUMNS: ColumnConfig[] = [
-  { key: 'id', label: 'ID', sortable: true, defaultVisible: true },
   { key: 'stockCode', label: 'Stock Code', sortable: true, defaultVisible: true },
   { key: 'name', label: 'Product Name', sortable: true, defaultVisible: true },
   { key: 'supplier', label: 'Supplier', sortable: true, defaultVisible: true },
   { key: 'taxonomyPath', label: 'Taxonomy Path', sortable: true, defaultVisible: true },
+  { key: 'price', label: 'Price', sortable: true, defaultVisible: true },
+  { key: 'usageAreas', label: 'Usage Areas', sortable: false, defaultVisible: true },
+  { key: 'id', label: 'ID', sortable: true, defaultVisible: false },
   { key: 'sector', label: 'Sector', sortable: true, defaultVisible: false },
   { key: 'category', label: 'Category', sortable: true, defaultVisible: false },
   { key: 'subCategory', label: 'Sub-Category', sortable: true, defaultVisible: false },
-  { key: 'price', label: 'Price', sortable: true, defaultVisible: true },
   { key: 'currency', label: 'Currency', sortable: true, defaultVisible: false },
   { key: 'unit', label: 'Unit', sortable: true, defaultVisible: false },
-  { key: 'moq', label: 'MOQ', sortable: true, defaultVisible: true },
-  { key: 'leadTime', label: 'Lead Time', sortable: true, defaultVisible: true },
+  { key: 'moq', label: 'MOQ', sortable: true, defaultVisible: false },
+  { key: 'leadTime', label: 'Lead Time', sortable: true, defaultVisible: false },
   { key: 'manufacturer', label: 'Manufacturer', sortable: true, defaultVisible: false },
   { key: 'location', label: 'Location', sortable: true, defaultVisible: false },
   { key: 'description', label: 'Description', sortable: false, defaultVisible: false },
-  { key: 'usageAreas', label: 'Usage Areas', sortable: false, defaultVisible: true },
 ];
+
+const SECONDARY_COLUMNS: ColumnKey[] = ['description', 'moq', 'leadTime', 'manufacturer', 'location', 'currency', 'unit', 'id'];
 
 interface UsageAreasEditorProps {
   product: Product;
@@ -172,6 +174,8 @@ const ProductList: React.FC<ProductListProps> = ({
   const [editValue, setEditValue] = useState<string>('');
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const clickTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [expandedRows, setExpandedRows] = useState<Set<string>>(new Set());
   const [showFilterPanel, setShowFilterPanel] = useState(false);
   const [showExportMenu, setShowExportMenu] = useState(false);
   const [showColumnsMenu, setShowColumnsMenu] = useState(false);
@@ -199,18 +203,18 @@ const ProductList: React.FC<ProductListProps> = ({
   
   const [columnWidths, setColumnWidths] = useState<Record<ColumnKey, number>>({
     id: 180,
-    stockCode: 200,
-    name: 300,
-    supplier: 180,
-    taxonomyPath: 280,
+    stockCode: 180,
+    name: 280,
+    supplier: 160,
+    taxonomyPath: 240,
     sector: 120,
     category: 120,
     subCategory: 120,
-    price: 100,
+    price: 90,
     currency: 80,
     unit: 80,
     moq: 80,
-    usageAreas: 200,
+    usageAreas: 180,
     leadTime: 100,
     manufacturer: 150,
     location: 150,
@@ -526,7 +530,19 @@ const ProductList: React.FC<ProductListProps> = ({
     return getNodeDescendants(filters.taxonomyNodeId);
   }, [filters.taxonomyNodeId, getNodeDescendants]);
 
-  const filteredProducts = products.filter(p => {
+  const searchFiltered = searchQuery ? products.filter(p => {
+    const q = searchQuery.toLowerCase();
+    const hierarchy = getHierarchyLevels(p.nodeId);
+    return (
+      p.name?.toLowerCase().includes(q) ||
+      (p.stockCode || '').toLowerCase().includes(q) ||
+      (p.description || '').toLowerCase().includes(q) ||
+      p.supplier?.toLowerCase().includes(q) ||
+      hierarchy.fullPath.toLowerCase().includes(q)
+    );
+  }) : products;
+
+  const filteredProducts = searchFiltered.filter(p => {
     const hierarchy = getHierarchyLevels(p.nodeId);
     if (filters.taxonomyNodeId && taxonomyFilterNodes && !taxonomyFilterNodes.has(p.nodeId)) return false;
     if (filters.sector && hierarchy.sector !== filters.sector) return false;
@@ -808,7 +824,27 @@ const ProductList: React.FC<ProductListProps> = ({
 
   const hasActiveFilters = filters.sector || filters.category || filters.supplier || filters.manufacturer || 
     filters.priceMin || filters.priceMax || filters.leadTimeMin || filters.leadTimeMax || 
-    filters.moqMin || filters.moqMax;
+    filters.moqMin || filters.moqMax || filters.taxonomyNodeId;
+
+  const toggleRowExpanded = (productId: string) => {
+    setExpandedRows(prev => {
+      const newSet = new Set(prev);
+      if (newSet.has(productId)) {
+        newSet.delete(productId);
+      } else {
+        newSet.add(productId);
+      }
+      return newSet;
+    });
+  };
+
+  const expandAllRows = () => {
+    setExpandedRows(new Set(sortedProducts.map(p => p.id)));
+  };
+
+  const collapseAllRows = () => {
+    setExpandedRows(new Set());
+  };
 
   const duplicateProduct = (product: Product) => {
     if (!onCreate) return;
@@ -919,6 +955,31 @@ const ProductList: React.FC<ProductListProps> = ({
     <div className="space-y-4">
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-4">
         <div className="flex items-center gap-2 flex-wrap">
+          <div className="relative flex-1 max-w-xs">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+            <input
+              type="text"
+              value={searchQuery}
+              onChange={e => setSearchQuery(e.target.value)}
+              placeholder="Search products..."
+              className="w-full pl-10 pr-4 py-2 bg-white border border-slate-200 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none"
+            />
+            {searchQuery && (
+              <button onClick={() => setSearchQuery('')} className="absolute right-3 top-1/2 -translate-y-1/2">
+                <X className="w-3.5 h-3.5 text-slate-400 hover:text-slate-600" />
+              </button>
+            )}
+          </div>
+
+          <button
+            onClick={expandedRows.size > 0 ? collapseAllRows : expandAllRows}
+            className="flex items-center gap-1.5 px-3 py-1.5 bg-white border border-slate-200 rounded-lg text-sm font-medium text-slate-700 hover:bg-slate-50 transition-all"
+            title={expandedRows.size > 0 ? 'Collapse all rows' : 'Expand all rows'}
+          >
+            <ChevronsUpDown size={16} />
+            {expandedRows.size > 0 ? 'Collapse' : 'Expand'}
+          </button>
+
           <div className="relative">
             <button 
               onClick={() => setShowFilterPanel(!showFilterPanel)}
@@ -1198,7 +1259,7 @@ const ProductList: React.FC<ProductListProps> = ({
         </div>
 
         <div className="flex items-center gap-4">
-          <span className="text-xs text-blue-600 bg-blue-50 px-2 py-1 rounded-full">Double-click cells to edit</span>
+          <span className="text-xs text-blue-600 bg-blue-50 px-2 py-1 rounded-full">Click cells to edit</span>
           <p className="text-sm text-slate-500 font-medium">
             {filteredProducts.length !== products.length 
               ? `${filteredProducts.length} of ${products.length} Products`
@@ -1213,7 +1274,7 @@ const ProductList: React.FC<ProductListProps> = ({
           <table className="w-full text-left border-collapse" style={{ tableLayout: 'fixed', minWidth: '1400px' }}>
             <thead>
               <tr className="bg-slate-50 border-b border-slate-200">
-                <th className="px-3 py-3 w-10 sticky left-0 bg-slate-50 z-10">
+                <th className="px-2 py-2 w-10 sticky left-0 bg-slate-50 z-10">
                   <input 
                     type="checkbox"
                     checked={selectedIds.size === sortedProducts.length && sortedProducts.length > 0}
@@ -1221,10 +1282,11 @@ const ProductList: React.FC<ProductListProps> = ({
                     className="w-4 h-4 rounded border-slate-300 text-blue-600 focus:ring-blue-500"
                   />
                 </th>
+                <th className="px-1 py-2 w-8 bg-slate-50"></th>
                 {ALL_COLUMNS.filter(col => visibleColumns.has(col.key)).map(col => (
                   <th 
                     key={col.key}
-                    className={`px-3 py-3 text-[10px] font-bold text-slate-500 uppercase tracking-widest whitespace-nowrap relative ${col.sortable ? 'cursor-pointer hover:bg-slate-100' : ''}`}
+                    className={`px-3 py-2 text-[10px] font-bold text-slate-500 uppercase tracking-widest whitespace-nowrap relative ${col.sortable ? 'cursor-pointer hover:bg-slate-100' : ''}`}
                     style={{ width: columnWidths[col.key], minWidth: columnWidths[col.key], maxWidth: columnWidths[col.key] }}
                     onClick={() => col.sortable && handleSort(col.key)}
                   >
@@ -1240,7 +1302,7 @@ const ProductList: React.FC<ProductListProps> = ({
                     />
                   </th>
                 ))}
-                <th className="px-3 py-3 text-[10px] font-bold text-slate-500 uppercase tracking-widest text-right sticky right-0 bg-slate-50 z-10">
+                <th className="px-3 py-2 text-[10px] font-bold text-slate-500 uppercase tracking-widest text-right sticky right-0 bg-slate-50 z-10">
                   Actions
                 </th>
               </tr>
@@ -1248,9 +1310,11 @@ const ProductList: React.FC<ProductListProps> = ({
             <tbody className="divide-y divide-slate-100">
               {sortedProducts.map((p) => {
                 const hierarchy = getHierarchyLevels(p.nodeId);
+                const isExpanded = expandedRows.has(p.id);
+                const totalCols = visibleColumns.size + 3;
                 return (
+                  <React.Fragment key={p.id}>
                   <tr 
-                    key={p.id} 
                     className={`group hover:bg-blue-50/30 transition-colors cursor-pointer ${selectedIds.has(p.id) ? 'bg-blue-50/50' : ''}`}
                     onClick={() => {
                       if (editingCell) return;
@@ -1262,7 +1326,7 @@ const ProductList: React.FC<ProductListProps> = ({
                       }, 250);
                     }}
                   >
-                    <td className="px-3 py-3 sticky left-0 bg-white group-hover:bg-blue-50/30 z-10" onClick={e => e.stopPropagation()}>
+                    <td className="px-2 py-2 sticky left-0 bg-white group-hover:bg-blue-50/30 z-10" onClick={e => e.stopPropagation()}>
                       <input 
                         type="checkbox"
                         checked={selectedIds.has(p.id)}
@@ -1270,20 +1334,33 @@ const ProductList: React.FC<ProductListProps> = ({
                         className="w-4 h-4 rounded border-slate-300 text-blue-600 focus:ring-blue-500"
                       />
                     </td>
-                    {visibleColumns.has('id') && (
-                      <td className="px-3 py-3 text-xs font-mono font-bold text-blue-600 overflow-hidden text-ellipsis" style={{ width: columnWidths.id, minWidth: columnWidths.id, maxWidth: columnWidths.id }}>{p.id}</td>
-                    )}
+                    <td className="px-1 py-2 w-8" onClick={e => e.stopPropagation()}>
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          toggleRowExpanded(p.id);
+                        }}
+                        className="p-0.5 rounded hover:bg-emerald-50 transition-colors"
+                        title={isExpanded ? 'Collapse details' : 'Expand details'}
+                      >
+                        {isExpanded ? (
+                          <ChevronDown className="w-4 h-4 text-emerald-600" />
+                        ) : (
+                          <ChevronRight className="w-4 h-4 text-emerald-600" />
+                        )}
+                      </button>
+                    </td>
                     {visibleColumns.has('stockCode') && (
-                      <td className="px-3 py-3 overflow-hidden text-ellipsis" style={{ width: columnWidths.stockCode, minWidth: columnWidths.stockCode, maxWidth: columnWidths.stockCode }}>
+                      <td className="px-3 py-2 overflow-hidden text-ellipsis" style={{ width: columnWidths.stockCode, minWidth: columnWidths.stockCode, maxWidth: columnWidths.stockCode }}>
                         {p.stockCode ? (
-                          <span className="text-xs font-mono font-semibold text-emerald-700 bg-emerald-50 px-2 py-1 rounded">{p.stockCode}</span>
+                          <span className="text-xs font-mono font-semibold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded">{p.stockCode}</span>
                         ) : (
                           <span className="text-xs text-slate-400 italic">Not assigned</span>
                         )}
                       </td>
                     )}
                     {visibleColumns.has('name') && (
-                      <td className="px-3 py-3 overflow-hidden text-ellipsis" style={{ width: columnWidths.name, minWidth: columnWidths.name, maxWidth: columnWidths.name }}>
+                      <td className="px-3 py-2 overflow-hidden text-ellipsis" style={{ width: columnWidths.name, minWidth: columnWidths.name, maxWidth: columnWidths.name }}>
                         {renderEditableCell(
                           p, 
                           'name', 
@@ -1295,7 +1372,7 @@ const ProductList: React.FC<ProductListProps> = ({
                       </td>
                     )}
                     {visibleColumns.has('supplier') && (
-                      <td className="px-3 py-3 overflow-hidden text-ellipsis" style={{ width: columnWidths.supplier, minWidth: columnWidths.supplier, maxWidth: columnWidths.supplier }}>
+                      <td className="px-3 py-2 overflow-hidden text-ellipsis" style={{ width: columnWidths.supplier, minWidth: columnWidths.supplier, maxWidth: columnWidths.supplier }}>
                         {renderEditableCell(
                           p,
                           'supplier',
@@ -1307,7 +1384,7 @@ const ProductList: React.FC<ProductListProps> = ({
                     {visibleColumns.has('taxonomyPath') && (
                       <td 
                         ref={(el) => { taxonomyCellRefs.current[p.id] = el; }}
-                        className="px-3 py-3 overflow-visible" 
+                        className="px-3 py-2 overflow-visible" 
                         style={{ width: columnWidths.taxonomyPath, minWidth: columnWidths.taxonomyPath, maxWidth: columnWidths.taxonomyPath, position: 'relative', zIndex: isEditing(p.id, 'taxonomyPath') ? 1000 : 'auto' }}
                         onClick={(e) => e.stopPropagation()}
                       >
@@ -1366,24 +1443,27 @@ const ProductList: React.FC<ProductListProps> = ({
                             }}
                           >
                             <FolderTree className="w-3.5 h-3.5 text-slate-400 flex-shrink-0" />
-                            <span className="text-sm text-slate-600 truncate" title={hierarchy.fullPath}>
+                            <span className="text-xs text-slate-600 truncate" title={hierarchy.fullPath}>
                               {hierarchy.fullPath || '-'}
                             </span>
                           </div>
                         )}
                       </td>
                     )}
+                    {visibleColumns.has('id') && (
+                      <td className="px-3 py-2 text-xs font-mono font-bold text-blue-600 overflow-hidden text-ellipsis" style={{ width: columnWidths.id, minWidth: columnWidths.id, maxWidth: columnWidths.id }}>{p.id}</td>
+                    )}
                     {visibleColumns.has('sector') && (
-                      <td className="px-3 py-3 text-sm text-slate-600 overflow-hidden text-ellipsis" style={{ width: columnWidths.sector, minWidth: columnWidths.sector, maxWidth: columnWidths.sector }}>{hierarchy.sector || '-'}</td>
+                      <td className="px-3 py-2 text-xs text-slate-600 overflow-hidden text-ellipsis" style={{ width: columnWidths.sector, minWidth: columnWidths.sector, maxWidth: columnWidths.sector }}>{hierarchy.sector || '-'}</td>
                     )}
                     {visibleColumns.has('category') && (
-                      <td className="px-3 py-3 text-sm text-slate-600 overflow-hidden text-ellipsis" style={{ width: columnWidths.category, minWidth: columnWidths.category, maxWidth: columnWidths.category }}>{hierarchy.category || '-'}</td>
+                      <td className="px-3 py-2 text-xs text-slate-600 overflow-hidden text-ellipsis" style={{ width: columnWidths.category, minWidth: columnWidths.category, maxWidth: columnWidths.category }}>{hierarchy.category || '-'}</td>
                     )}
                     {visibleColumns.has('subCategory') && (
-                      <td className="px-3 py-3 text-sm text-slate-600 overflow-hidden text-ellipsis" style={{ width: columnWidths.subCategory, minWidth: columnWidths.subCategory, maxWidth: columnWidths.subCategory }}>{hierarchy.subCategory || '-'}</td>
+                      <td className="px-3 py-2 text-xs text-slate-600 overflow-hidden text-ellipsis" style={{ width: columnWidths.subCategory, minWidth: columnWidths.subCategory, maxWidth: columnWidths.subCategory }}>{hierarchy.subCategory || '-'}</td>
                     )}
                     {visibleColumns.has('price') && (
-                      <td className="px-3 py-3 overflow-hidden text-ellipsis" style={{ width: columnWidths.price, minWidth: columnWidths.price, maxWidth: columnWidths.price }}>
+                      <td className="px-3 py-2 overflow-hidden text-ellipsis" style={{ width: columnWidths.price, minWidth: columnWidths.price, maxWidth: columnWidths.price }}>
                         {renderEditableCell(
                           p,
                           'price',
@@ -1393,52 +1473,52 @@ const ProductList: React.FC<ProductListProps> = ({
                       </td>
                     )}
                     {visibleColumns.has('currency') && (
-                      <td className="px-3 py-3 text-sm text-slate-600" style={{ width: columnWidths.currency, minWidth: columnWidths.currency, maxWidth: columnWidths.currency }}>{p.currency}</td>
+                      <td className="px-3 py-2 text-xs text-slate-600" style={{ width: columnWidths.currency, minWidth: columnWidths.currency, maxWidth: columnWidths.currency }}>{p.currency}</td>
                     )}
                     {visibleColumns.has('unit') && (
-                      <td className="px-3 py-3 text-sm text-slate-600" style={{ width: columnWidths.unit, minWidth: columnWidths.unit, maxWidth: columnWidths.unit }}>{p.unit}</td>
+                      <td className="px-3 py-2 text-xs text-slate-600" style={{ width: columnWidths.unit, minWidth: columnWidths.unit, maxWidth: columnWidths.unit }}>{p.unit}</td>
                     )}
                     {visibleColumns.has('moq') && (
-                      <td className="px-3 py-3 overflow-hidden text-ellipsis" style={{ width: columnWidths.moq, minWidth: columnWidths.moq, maxWidth: columnWidths.moq }}>
+                      <td className="px-3 py-2 overflow-hidden text-ellipsis" style={{ width: columnWidths.moq, minWidth: columnWidths.moq, maxWidth: columnWidths.moq }}>
                         {renderEditableCell(
                           p,
                           'moq',
-                          <span className="text-sm text-slate-600">{p.moq}</span>,
+                          <span className="text-xs text-slate-600">{p.moq}</span>,
                           p.moq
                         )}
                       </td>
                     )}
                     {visibleColumns.has('leadTime') && (
-                      <td className="px-3 py-3 overflow-hidden text-ellipsis" style={{ width: columnWidths.leadTime, minWidth: columnWidths.leadTime, maxWidth: columnWidths.leadTime }}>
+                      <td className="px-3 py-2 overflow-hidden text-ellipsis" style={{ width: columnWidths.leadTime, minWidth: columnWidths.leadTime, maxWidth: columnWidths.leadTime }}>
                         {renderEditableCell(
                           p,
                           'leadTime',
                           <div className="flex items-center gap-2">
                             <span className={`w-2 h-2 rounded-full ${p.leadTime > 30 ? 'bg-amber-400' : 'bg-emerald-400'}`}></span>
-                            <span className="text-sm text-slate-600">{p.leadTime}d</span>
+                            <span className="text-xs text-slate-600">{p.leadTime}d</span>
                           </div>,
                           p.leadTime
                         )}
                       </td>
                     )}
                     {visibleColumns.has('manufacturer') && (
-                      <td className="px-3 py-3 overflow-hidden text-ellipsis" style={{ width: columnWidths.manufacturer, minWidth: columnWidths.manufacturer, maxWidth: columnWidths.manufacturer }}>
+                      <td className="px-3 py-2 overflow-hidden text-ellipsis" style={{ width: columnWidths.manufacturer, minWidth: columnWidths.manufacturer, maxWidth: columnWidths.manufacturer }}>
                         {renderEditableCell(
                           p,
                           'manufacturer',
-                          <span className="text-sm text-slate-600 truncate block">{p.manufacturer || '-'}</span>,
+                          <span className="text-xs text-slate-600 truncate block">{p.manufacturer || '-'}</span>,
                           p.manufacturer || ''
                         )}
                       </td>
                     )}
                     {visibleColumns.has('location') && (
-                      <td className="px-3 py-3 text-sm text-slate-600 overflow-hidden text-ellipsis truncate" style={{ width: columnWidths.location, minWidth: columnWidths.location, maxWidth: columnWidths.location }}>{p.manufacturingLocation || '-'}</td>
+                      <td className="px-3 py-2 text-xs text-slate-600 overflow-hidden text-ellipsis truncate" style={{ width: columnWidths.location, minWidth: columnWidths.location, maxWidth: columnWidths.location }}>{p.manufacturingLocation || '-'}</td>
                     )}
                     {visibleColumns.has('description') && (
-                      <td className="px-3 py-3 text-sm text-slate-500 truncate overflow-hidden text-ellipsis" style={{ width: columnWidths.description, minWidth: columnWidths.description, maxWidth: columnWidths.description }} title={p.description}>{p.description || '-'}</td>
+                      <td className="px-3 py-2 text-xs text-slate-500 truncate overflow-hidden text-ellipsis" style={{ width: columnWidths.description, minWidth: columnWidths.description, maxWidth: columnWidths.description }} title={p.description}>{p.description || '-'}</td>
                     )}
                     {visibleColumns.has('usageAreas') && (
-                      <td className="px-3 py-3 overflow-hidden" style={{ width: columnWidths.usageAreas, minWidth: columnWidths.usageAreas, maxWidth: columnWidths.usageAreas }}>
+                      <td className="px-3 py-2 overflow-hidden" style={{ width: columnWidths.usageAreas, minWidth: columnWidths.usageAreas, maxWidth: columnWidths.usageAreas }}>
                         {isEditing(p.id, 'usageAreas') ? (
                           <UsageAreasEditor
                             product={p}
@@ -1462,7 +1542,7 @@ const ProductList: React.FC<ProductListProps> = ({
                             {(() => {
                               const allAreas = getProductUsageAreas(p);
                               if (allAreas.length === 0) {
-                                return <span className="text-sm text-slate-400">-</span>;
+                                return <span className="text-xs text-slate-400">-</span>;
                               }
                               return (
                                 <div className="flex flex-wrap gap-1">
@@ -1492,7 +1572,7 @@ const ProductList: React.FC<ProductListProps> = ({
                         )}
                       </td>
                     )}
-                    <td className="px-3 py-3 text-right sticky right-0 bg-white group-hover:bg-blue-50/30 z-10">
+                    <td className="px-3 py-2 text-right sticky right-0 bg-white group-hover:bg-blue-50/30 z-10">
                     <div className="flex items-center justify-end gap-0.5" onClick={e => e.stopPropagation()}>
                       <button 
                         onClick={() => currentUser ? setEditingProduct(p) : startEditing(p, 'name', p.name)}
@@ -1520,24 +1600,93 @@ const ProductList: React.FC<ProductListProps> = ({
                     </div>
                   </td>
                 </tr>
+                {isExpanded && (
+                  <tr className="bg-slate-50/50">
+                    <td colSpan={totalCols} className="p-0">
+                      <div className="border-l-4 border-blue-400 px-6 py-3" onClick={e => e.stopPropagation()}>
+                        {p.description && (
+                          <div className="mb-3">
+                            <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Description</span>
+                            <p className="text-sm text-slate-700 mt-0.5">{p.description}</p>
+                          </div>
+                        )}
+                        <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-7 gap-x-6 gap-y-3">
+                          <div>
+                            <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest block">MOQ</span>
+                            <div className="mt-0.5">
+                              {renderEditableCell(
+                                p,
+                                'moq',
+                                <span className="text-sm text-slate-700 font-medium">{p.moq}</span>,
+                                p.moq
+                              )}
+                            </div>
+                          </div>
+                          <div>
+                            <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest block">Lead Time</span>
+                            <div className="mt-0.5">
+                              {renderEditableCell(
+                                p,
+                                'leadTime',
+                                <div className="flex items-center gap-1.5">
+                                  <span className={`w-2 h-2 rounded-full ${p.leadTime > 30 ? 'bg-amber-400' : 'bg-emerald-400'}`}></span>
+                                  <span className="text-sm text-slate-700 font-medium">{p.leadTime}d</span>
+                                </div>,
+                                p.leadTime
+                              )}
+                            </div>
+                          </div>
+                          <div>
+                            <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest block">Manufacturer</span>
+                            <div className="mt-0.5">
+                              {renderEditableCell(
+                                p,
+                                'manufacturer',
+                                <span className="text-sm text-slate-700 font-medium truncate block">{p.manufacturer || '-'}</span>,
+                                p.manufacturer || ''
+                              )}
+                            </div>
+                          </div>
+                          <div>
+                            <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest block">Location</span>
+                            <p className="text-sm text-slate-700 font-medium mt-0.5 truncate">{p.manufacturingLocation || '-'}</p>
+                          </div>
+                          <div>
+                            <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest block">Currency</span>
+                            <p className="text-sm text-slate-700 font-medium mt-0.5">{p.currency}</p>
+                          </div>
+                          <div>
+                            <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest block">Unit</span>
+                            <p className="text-sm text-slate-700 font-medium mt-0.5">{p.unit}</p>
+                          </div>
+                          <div>
+                            <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest block">ID</span>
+                            <p className="text-xs font-mono font-bold text-blue-600 mt-0.5">{p.id}</p>
+                          </div>
+                        </div>
+                      </div>
+                    </td>
+                  </tr>
+                )}
+                </React.Fragment>
                 );
               })}
               {sortedProducts.length === 0 && (
                 <tr>
-                  <td colSpan={visibleColumns.size + 2} className="px-6 py-20 text-center">
+                  <td colSpan={visibleColumns.size + 3} className="px-6 py-20 text-center">
                     <div className="flex flex-col items-center gap-3 text-slate-400">
                       <div className="w-12 h-12 bg-slate-50 rounded-full flex items-center justify-center">
                         {ICONS.Inventory}
                       </div>
                       <p className="text-sm font-medium">
-                        {hasActiveFilters 
+                        {hasActiveFilters || searchQuery
                           ? 'No products match the current filters.' 
                           : 'No products found for this category or search.'
                         }
                       </p>
-                      {hasActiveFilters && (
+                      {(hasActiveFilters || searchQuery) && (
                         <button 
-                          onClick={clearFilters}
+                          onClick={() => { clearFilters(); setSearchQuery(''); }}
                           className="text-sm text-blue-600 hover:underline"
                         >
                           Clear filters
