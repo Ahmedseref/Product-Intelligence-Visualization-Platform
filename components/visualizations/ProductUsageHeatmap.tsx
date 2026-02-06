@@ -49,10 +49,12 @@ interface DrillDownData {
 }
 
 type MatrixMode = 'category' | 'product';
-type ColorPalette = 'blues' | 'ocean' | 'forest' | 'sunset' | 'berry' | 'multi';
+type ColorPalette = 'blues' | 'ocean' | 'forest' | 'sunset' | 'berry' | 'multi' | 'binary' | 'tertiary';
 
 const PALETTE_OPTIONS: { value: ColorPalette; label: string; nivoScheme: string }[] = [
   { value: 'blues', label: 'Blues', nivoScheme: 'blues' },
+  { value: 'binary', label: 'Binary (Yes/No)', nivoScheme: 'blues' },
+  { value: 'tertiary', label: 'Tertiary (Low/Med/High)', nivoScheme: 'blues' },
   { value: 'ocean', label: 'Ocean', nivoScheme: 'blues' },
   { value: 'forest', label: 'Forest', nivoScheme: 'greens' },
   { value: 'sunset', label: 'Sunset', nivoScheme: 'oranges' },
@@ -470,7 +472,7 @@ const ProductUsageHeatmap: React.FC<ProductUsageHeatmapProps> = ({
   }, [colorPalette]);
 
   const colorsConfig = useMemo(() => {
-    if (colorPalette === 'multi') {
+    if (colorPalette === 'multi' || colorPalette === 'binary' || colorPalette === 'tertiary') {
       return {
         type: 'sequential' as const,
         scheme: 'blues' as const,
@@ -494,8 +496,24 @@ const ProductUsageHeatmap: React.FC<ProductUsageHeatmapProps> = ({
     return CHART_COLORS.categorical[colIndex % CHART_COLORS.categorical.length];
   }, []);
 
+  const getBinaryColor = useCallback((value: number): { fill: string; text: string } => {
+    if (value === 0) return { fill: '#f1f5f9', text: '#94a3b8' };
+    return { fill: '#3b82f6', text: '#ffffff' };
+  }, []);
+
+  const getTertiaryColor = useCallback((value: number, max: number): { fill: string; text: string } => {
+    if (value === 0) return { fill: '#f1f5f9', text: '#94a3b8' };
+    const ratio = max > 0 ? value / max : 0;
+    if (ratio <= 0.33) return { fill: '#93c5fd', text: '#1e3a8a' };
+    if (ratio <= 0.66) return { fill: '#3b82f6', text: '#ffffff' };
+    return { fill: '#1e3a8a', text: '#ffffff' };
+  }, []);
+
   const CustomCellComponent = ({ cell, onMouseEnter, onMouseMove, onMouseLeave, onClick, animatedProps, borderWidth, borderRadius, enableLabels, ...props }: any) => {
     const isMultiColor = colorPalette === 'multi';
+    const isBinary = colorPalette === 'binary';
+    const isTertiary = colorPalette === 'tertiary';
+    const isCustomColor = isMultiColor || isBinary || isTertiary;
     const isProductMode = matrixMode === 'product';
 
     const value = cell.value ?? 0;
@@ -603,6 +621,44 @@ const ProductUsageHeatmap: React.FC<ProductUsageHeatmapProps> = ({
               fill={intensity > 0.5 ? '#ffffff' : '#334155'}
               fontSize={11}
               fontWeight={600}
+              style={{ pointerEvents: 'none' }}
+            >
+              {cellLabel}
+            </text>
+          )}
+        </g>
+      );
+    }
+
+    if (isBinary || isTertiary) {
+      const colors = isBinary ? getBinaryColor(value) : getTertiaryColor(value, Math.max(maxValue, 1));
+      return (
+        <g
+          transform={`translate(${cell.x}, ${cell.y})`}
+          onClick={handleClick}
+          onMouseEnter={handleMouseEnter}
+          onMouseMove={handleMouseMove}
+          onMouseLeave={handleMouseLeave}
+          style={{ cursor: 'pointer' }}
+        >
+          <rect
+            x={cell.width / -2}
+            y={cell.height / -2}
+            width={cell.width}
+            height={cell.height}
+            fill={colors.fill}
+            fillOpacity={1}
+            strokeWidth={1}
+            stroke="#e2e8f0"
+            rx={4}
+          />
+          {cellLabel && (
+            <text
+              textAnchor="middle"
+              dominantBaseline="central"
+              fill={colors.text}
+              fontSize={cellFontSize}
+              fontWeight={cellFontWeight}
               style={{ pointerEvents: 'none' }}
             >
               {cellLabel}
@@ -845,7 +901,7 @@ const ProductUsageHeatmap: React.FC<ProductUsageHeatmapProps> = ({
     selectedSuppliers.length > 0 || selectedManufacturers.length > 0 ||
     priceRange.min || priceRange.max;
 
-  const chartHeight = Math.max(400, activeData.length * 50 + 100);
+  const chartHeight = Math.max(400, activeData.length * 50 + 160);
   const leftMargin = matrixMode === 'product' ? 200 : 160;
 
   const chartTitle = matrixMode === 'category'
@@ -1054,7 +1110,7 @@ const ProductUsageHeatmap: React.FC<ProductUsageHeatmapProps> = ({
         >
           <ResponsiveHeatMap
             data={activeData}
-            margin={{ top: 80, right: 90, bottom: 30, left: leftMargin }}
+            margin={{ top: 120, right: 90, bottom: 30, left: leftMargin }}
             valueFormat=">-.0f"
             axisTop={{
               tickSize: 5,

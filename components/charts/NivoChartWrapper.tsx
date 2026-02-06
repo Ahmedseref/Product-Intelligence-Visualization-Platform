@@ -126,7 +126,7 @@ const NivoChartWrapper: React.FC<NivoChartWrapperProps> = ({
   return (
     <div className={`bg-white rounded-2xl border border-slate-200 shadow-sm ${className}`}>
       {(title || subtitle) && (
-        <div className="px-6 pt-6 pb-4 border-b border-slate-100">
+        <div className="px-6 pt-6 pb-4 border-b border-slate-100 text-center">
           {title && <h3 className="text-lg font-bold text-slate-800">{title}</h3>}
           {subtitle && <p className="text-sm text-slate-500 mt-1">{subtitle}</p>}
         </div>
