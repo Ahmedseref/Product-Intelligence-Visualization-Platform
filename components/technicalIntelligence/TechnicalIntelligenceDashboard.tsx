@@ -176,6 +176,9 @@ const TechnicalIntelligenceDashboard: React.FC<TechnicalIntelligenceDashboardPro
           setBenchmarkData(data);
           break;
         }
+        case 'usage-density': {
+          break;
+        }
       }
     } catch (err: any) {
       console.error('Failed to load tab data:', err);
@@ -1006,29 +1009,24 @@ const TechnicalIntelligenceDashboard: React.FC<TechnicalIntelligenceDashboardPro
   };
 
   const renderUsageDensity = () => {
-    if (!products || products.length === 0) {
-      return <EmptyState message="No product data available for the Usage Density matrix" />;
-    }
     return (
-      <div className="space-y-4">
-        <ProductUsageHeatmap
-          products={products}
-          treeNodes={treeNodes}
-          suppliers={suppliersProp}
-          customFields={customFields}
-          currentUser={currentUser}
-          usageAreas={usageAreas}
-          onProductUpdate={onProductUpdate}
-          onProductDelete={onProductDelete}
-          onAddFieldDefinition={onAddFieldDefinition}
-          onAddTreeNode={onAddTreeNode}
-        />
-      </div>
+      <ProductUsageHeatmap
+        products={products}
+        treeNodes={treeNodes}
+        suppliers={suppliersProp}
+        customFields={customFields}
+        currentUser={currentUser}
+        usageAreas={usageAreas}
+        onProductUpdate={onProductUpdate}
+        onProductDelete={onProductDelete}
+        onAddFieldDefinition={onAddFieldDefinition}
+        onAddTreeNode={onAddTreeNode}
+      />
     );
   };
 
   const renderActiveTab = () => {
-    if (loading && !overviewData && !productData && !systemData && !taxonomyData && !coverageData && !benchmarkData) {
+    if (activeTab !== 'usage-density' && loading && !overviewData && !productData && !systemData && !taxonomyData && !coverageData && !benchmarkData) {
       return <LoadingState />;
     }
     switch (activeTab) {
