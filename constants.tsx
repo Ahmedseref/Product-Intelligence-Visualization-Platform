@@ -22,7 +22,8 @@ import {
   GitBranch,
   ChevronRight,
   FolderTree,
-  Combine
+  Combine,
+  Activity
 } from 'lucide-react';
 
 export const ICONS = {
@@ -49,7 +50,8 @@ export const ICONS = {
   Taxonomy: <FolderTree size={20} />,
   Tree: <FolderTree size={20} />,
   Package: <Package size={20} />,
-  SystemBuilder: <Combine size={20} />
+  SystemBuilder: <Combine size={20} />,
+  TechIntelligence: <Activity size={20} />
 };
 
 export const SECTORS = ['Retail', 'Industrial', 'Chemical', 'Textile', 'Food & Beverage', 'Electronics'];

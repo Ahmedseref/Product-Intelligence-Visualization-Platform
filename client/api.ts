@@ -765,3 +765,66 @@ export const systemsApi = {
     return response.json();
   },
 };
+
+const buildFilterParams = (filters?: { supplier?: string; sector?: string; taxonomy?: string }): string => {
+  if (!filters) return '';
+  const params = new URLSearchParams();
+  if (filters.supplier) params.set('supplier', filters.supplier);
+  if (filters.sector) params.set('sector', filters.sector);
+  if (filters.taxonomy) params.set('taxonomy', filters.taxonomy);
+  const str = params.toString();
+  return str ? `&${str}` : '';
+};
+
+export const analyticsApi = {
+  getOverview: async (filters?: { supplier?: string; sector?: string; taxonomy?: string }) => {
+    const fp = buildFilterParams(filters);
+    const response = await fetch(`${API_BASE}/analytics/overview?_=1${fp}`, { headers: getAuthHeaders() });
+    if (!response.ok) throw new Error('Failed to fetch analytics overview');
+    return response.json();
+  },
+  getProductIntelligence: async (filters?: { supplier?: string; sector?: string; taxonomy?: string }) => {
+    const fp = buildFilterParams(filters);
+    const response = await fetch(`${API_BASE}/analytics/product-intelligence?_=1${fp}`, { headers: getAuthHeaders() });
+    if (!response.ok) throw new Error('Failed to fetch product intelligence');
+    return response.json();
+  },
+  getSystemIntelligence: async (filters?: { supplier?: string; sector?: string; taxonomy?: string }) => {
+    const fp = buildFilterParams(filters);
+    const response = await fetch(`${API_BASE}/analytics/system-intelligence?_=1${fp}`, { headers: getAuthHeaders() });
+    if (!response.ok) throw new Error('Failed to fetch system intelligence');
+    return response.json();
+  },
+  getSupplierHeatmap: async (mode: string, filters?: { supplier?: string; sector?: string; taxonomy?: string }) => {
+    const fp = buildFilterParams(filters);
+    const response = await fetch(`${API_BASE}/analytics/supplier-heatmap?mode=${mode}${fp}`, { headers: getAuthHeaders() });
+    if (!response.ok) throw new Error('Failed to fetch supplier heatmap');
+    return response.json();
+  },
+  getTaxonomySupplier: async (filters?: { supplier?: string; sector?: string; taxonomy?: string }) => {
+    const fp = buildFilterParams(filters);
+    const response = await fetch(`${API_BASE}/analytics/taxonomy-supplier?_=1${fp}`, { headers: getAuthHeaders() });
+    if (!response.ok) throw new Error('Failed to fetch taxonomy supplier data');
+    return response.json();
+  },
+  getCoverageRadar: async (filters?: { supplier?: string; sector?: string; taxonomy?: string }) => {
+    const fp = buildFilterParams(filters);
+    const response = await fetch(`${API_BASE}/analytics/coverage-radar?_=1${fp}`, { headers: getAuthHeaders() });
+    if (!response.ok) throw new Error('Failed to fetch coverage radar');
+    return response.json();
+  },
+  getCompetitiveBenchmark: async (systemId?: string, filters?: { supplier?: string; sector?: string; taxonomy?: string }) => {
+    const fp = buildFilterParams(filters);
+    const url = systemId
+      ? `${API_BASE}/analytics/competitive-benchmark?systemId=${systemId}${fp}`
+      : `${API_BASE}/analytics/competitive-benchmark?_=1${fp}`;
+    const response = await fetch(url, { headers: getAuthHeaders() });
+    if (!response.ok) throw new Error('Failed to fetch competitive benchmark');
+    return response.json();
+  },
+  getFilters: async () => {
+    const response = await fetch(`${API_BASE}/analytics/filters`, { headers: getAuthHeaders() });
+    if (!response.ok) throw new Error('Failed to fetch filters');
+    return response.json();
+  },
+};

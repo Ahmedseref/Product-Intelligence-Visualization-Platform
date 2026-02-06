@@ -1,0 +1,387 @@
+Intelligent Technical Dashboard & Visualization System
+With Multi-Supplier Intelligence & Comparison Layer
+
+(Construction Chemicals System Intelligence Platform)
+
+🎯 Objective
+
+Redesign the dashboard and analytics engine to deliver:
+
+Technical product intelligence
+
+System engineering insights
+
+Taxonomy analytics
+
+Layer & structure analysis
+
+Product utilization intelligence
+
+Multi-supplier benchmarking
+
+Competitive system comparison
+
+All visualizations must use:
+
+👉 Nivo Visualization Library
+👉 Nivo Heatmap for all comparison matrices
+
+🧱 Core Data Model Expansion
+New Core Entity — Supplier
+
+Each entity must include supplier relationships:
+
+Product
+
+product_id
+
+supplier_id (or multiple suppliers)
+
+supplier_product_code
+
+supplier_grade
+
+supplier_region
+
+equivalent_products[]
+
+System
+
+system_id
+
+system_name
+
+sector
+
+suppliers_supported[]
+
+default_supplier
+
+system_variant_by_supplier[]
+
+Layer
+
+layer_id
+
+layer_type
+
+allowed_suppliers[]
+
+supplier_default_products[]
+
+📊 Dashboard Architecture
+🧭 1. Technical Intelligence Overview Dashboard
+KPI Cards
+
+Total Products
+
+Total Systems
+
+Total Suppliers
+
+Total System Variants
+
+Avg Suppliers per System
+
+Multi-Supplier Systems %
+
+Products With Multiple Suppliers
+
+Systems With Equivalent Products
+
+Supplier Technical Coverage Score
+
+Most Dominant Supplier
+
+Most Diverse System
+
+Supplier Concentration Index
+
+🧬 2. Product Intelligence Dashboard (Supplier-Aware)
+Product Utilization by Supplier
+
+Bar Chart
+
+X-axis:
+Product
+
+Y-axis:
+System Count
+
+Stack:
+Supplier
+
+Insight:
+Cross-supplier material reuse
+
+Equivalent Product Network
+
+Graph Visualization
+
+Shows:
+Products from different suppliers serving same layer/system
+
+Supplier Dependency Analysis
+
+Donut Chart
+
+Segments:
+Single-source
+Dual-source
+Multi-source products
+
+🏗️ 3. System Intelligence Dashboard
+System Supplier Variants
+
+Bar Chart
+
+X-axis:
+System Name
+
+Stack:
+Supplier Variants
+
+Y-axis:
+Number of Variants
+
+System Complexity vs Supplier Diversity
+
+Scatter Plot
+
+X-axis:
+Layer Count
+
+Y-axis:
+Supplier Count
+
+Layer Supplier Flexibility
+
+Stacked Bar
+
+Layer Types:
+Prime
+Base
+Top
+Intermediate
+
+Stack:
+Allowed Suppliers
+
+🔗 4. Supplier Comparison Intelligence Dashboard (Core Feature)
+Mandatory Visualization — Nivo Heatmap
+
+User-selectable matrices:
+
+Supplier ↔ System
+
+Supplier ↔ Layer Type
+
+Supplier ↔ Sector
+
+Supplier ↔ Taxonomy Branch
+
+Supplier ↔ Product Category
+
+Supplier ↔ Technical Specialty
+
+Supplier ↔ Stock Code Prefix
+
+Supplier ↔ System Complexity
+
+Cell Value Options:
+
+Product Count
+
+System Coverage
+
+Default Assignments
+
+Layer Participation
+
+Technical Score
+
+🏭 5. Competitive System Benchmark Dashboard
+Compare Same System Across Suppliers
+
+Example:
+PU Waterproofing System
+
+Compare:
+
+Supplier A
+Supplier B
+Supplier C
+
+Metrics:
+
+Layer Structure
+
+Product Types
+
+Default Products
+
+System Complexity
+
+Layer Thickness
+
+Performance Category
+
+Taxonomy Coverage
+
+Visualization:
+
+Radar Chart
+
+Parallel Coordinates Chart
+
+Layer Structure Heatmap
+
+🌳 6. Taxonomy + Supplier Intelligence
+Branch Supplier Distribution
+
+Bar Chart
+
+X-axis:
+Taxonomy Branch
+
+Stack:
+Supplier
+
+Y-axis:
+Product Count
+
+Supplier Specialization Map
+
+Treemap
+
+Hierarchy:
+Supplier → Sector → System → Product
+
+Semantic Stock Code vs Supplier
+
+Heatmap
+
+X-axis:
+Stock Code Prefix
+
+Y-axis:
+Supplier
+
+Value:
+Number of Products
+
+🧪 7. Technical Coverage Dashboard
+Supplier Technical Depth Score
+
+Radar Chart
+
+Dimensions:
+
+Sector Coverage
+
+Layer Coverage
+
+System Complexity
+
+Taxonomy Depth
+
+Product Variety
+
+System Reusability
+
+Multi-layer Support
+
+📄 8. Reporting & Export Features
+
+Every visualization must support:
+
+Export PNG
+
+Export SVG
+
+Export PDF
+
+Export CSV
+
+Embed into System Reports
+
+Embed into Supplier Comparison Reports
+
+Export Competitive Analysis Pack
+
+⚙️ Technical Implementation Requirements
+Visualization Engine
+
+Mandatory:
+
+Nivo Heatmap
+
+Nivo Bar
+
+Nivo Line
+
+Nivo Radar
+
+Nivo Scatter
+
+Nivo TreeMap
+
+Nivo Network (if available)
+
+New API Endpoints
+
+/analytics/supplier-system-coverage
+/analytics/system-supplier-variants
+/analytics/product-supplier-utilization
+/analytics/supplier-taxonomy-coverage
+/analytics/competitive-system-benchmark
+/analytics/supplier-layer-flexibility
+/analytics/equivalent-products-network
+/analytics/supplier-stockcode-distribution
+
+🎛️ UX Enhancements
+Global Filters
+
+Supplier
+
+Multiple Suppliers
+
+Supplier Region
+
+Sector
+
+System
+
+Layer Type
+
+Taxonomy Branch
+
+Stock Code Prefix
+
+Default vs Optional
+
+Multi-Supplier Toggle
+
+
+
+🚀 Expected Platform Outcome
+
+Platform must enable:
+
+Technical system comparison
+
+Supplier benchmarking
+
+Equivalent product mapping
+
+Competitive engineering analysis
+
+Multi-source risk assessment
+
+Technical procurement intelligence
+
+Catalog engineering
+
+System design flexibility
+
+NOT generic procurement dashboards.

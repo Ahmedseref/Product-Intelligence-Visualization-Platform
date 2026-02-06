@@ -9,6 +9,7 @@ import { startScheduledBackups, initializeBackupService } from "./backupService"
 import { registerAuthRoutes } from "./authRoutes";
 import { bootstrapAdminUser } from "./authService";
 import { registerSystemRoutes } from "./systemRoutes";
+import { registerAnalyticsRoutes } from "./analyticsRoutes";
 
 const rootDir = process.cwd();
 
@@ -46,6 +47,7 @@ registerAuthRoutes(app);
 registerObjectStorageRoutes(app);
 registerRoutes(app);
 registerSystemRoutes(app);
+registerAnalyticsRoutes(app);
 
 function findDistPath(): string {
   const candidates = [

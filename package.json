@@ -24,6 +24,8 @@
     "@nivo/line": "^0.99.0",
     "@nivo/network": "^0.99.0",
     "@nivo/pie": "^0.99.0",
+    "@nivo/radar": "^0.99.0",
+    "@nivo/scatterplot": "^0.99.0",
     "@nivo/sunburst": "^0.99.0",
     "@nivo/tooltip": "^0.99.0",
     "@nivo/treemap": "^0.99.0",
