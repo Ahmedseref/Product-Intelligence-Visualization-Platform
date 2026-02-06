@@ -17,7 +17,6 @@ const SystemDashboard: React.FC<SystemDashboardProps> = ({ products }) => {
   const [loading, setLoading] = useState(true);
   const [heatmapMode, setHeatmapMode] = useState<HeatmapAxisMode>('product-system');
   const [heatmapData, setHeatmapData] = useState<any[]>([]);
-  const [heatmapKeys, setHeatmapKeys] = useState<string[]>([]);
 
   const loadData = useCallback(async () => {
     setLoading(true);
@@ -46,46 +45,39 @@ const SystemDashboard: React.FC<SystemDashboardProps> = ({ products }) => {
       const productIds = [...new Set(statsData.productSystemMatrix.map(m => m.productId))];
       const data = productIds.slice(0, 15).map(pId => {
         const prod = products.find(p => p.id === pId);
-        const row: any = { id: prod?.name || pId };
-        systemNames.forEach(sName => {
-          const entry = statsData.productSystemMatrix.find(m => m.productId === pId && m.systemName === sName);
-          row[sName] = entry ? entry.count : 0;
-        });
-        return row;
+        return {
+          id: prod?.name || String(pId),
+          data: systemNames.map(sName => {
+            const entry = statsData.productSystemMatrix.find(m => m.productId === pId && m.systemName === sName);
+            return { x: sName, y: entry ? entry.count : 0 };
+          })
+        };
       });
       setHeatmapData(data);
-      setHeatmapKeys(systemNames);
     } else if (mode === 'layer-product' && statsData.layerProductMatrix?.length > 0) {
       const layerNames = [...new Set(statsData.layerProductMatrix.map(m => m.layerName))];
       const productIds = [...new Set(statsData.layerProductMatrix.map(m => m.productId))];
-      const data = layerNames.slice(0, 15).map(lName => {
-        const row: any = { id: lName };
-        productIds.slice(0, 15).forEach(pId => {
+      const limitedProductIds = productIds.slice(0, 15);
+      const data = layerNames.slice(0, 15).map(lName => ({
+        id: lName,
+        data: limitedProductIds.map(pId => {
           const prod = products.find(p => p.id === pId);
           const entry = statsData.layerProductMatrix.find(m => m.layerName === lName && m.productId === pId);
-          row[prod?.name || pId] = entry ? entry.count : 0;
-        });
-        return row;
-      });
-      const keys = productIds.slice(0, 15).map(pId => {
-        const prod = products.find(p => p.id === pId);
-        return prod?.name || pId;
-      });
+          return { x: prod?.name || String(pId), y: entry ? entry.count : 0 };
+        })
+      }));
       setHeatmapData(data);
-      setHeatmapKeys(keys);
     } else if (mode === 'system-layer' && statsData.systemLayerMatrix?.length > 0) {
       const systemNames = [...new Set(statsData.systemLayerMatrix.map(m => m.systemName))];
       const layerNames = [...new Set(statsData.systemLayerMatrix.map(m => m.layerName))];
-      const data = systemNames.slice(0, 15).map(sName => {
-        const row: any = { id: sName };
-        layerNames.forEach(lName => {
+      const data = systemNames.slice(0, 15).map(sName => ({
+        id: sName,
+        data: layerNames.map(lName => {
           const entry = statsData.systemLayerMatrix.find(m => m.systemName === sName && m.layerName === lName);
-          row[lName] = entry ? entry.productCount : 0;
-        });
-        return row;
-      });
+          return { x: lName, y: entry ? entry.productCount : 0 };
+        })
+      }));
       setHeatmapData(data);
-      setHeatmapKeys(layerNames);
     } else if (mode === 'product-sector') {
       const productIds = Object.keys(statsData.productUtilization);
       const sectorNames = systemsData.flatMap(s => {
@@ -96,28 +88,28 @@ const SystemDashboard: React.FC<SystemDashboardProps> = ({ products }) => {
       if (uniqueSectors.length > 0) {
         const data = productIds.slice(0, 15).map(pId => {
           const prod = products.find(p => p.id === pId);
-          const row: any = { id: prod?.name || pId };
-          uniqueSectors.forEach(sec => { row[sec] = 0; });
+          const sectorCounts: Record<string, number> = {};
+          uniqueSectors.forEach(sec => { sectorCounts[sec] = 0; });
           for (const entry of statsData.productSystemMatrix) {
             if (entry.productId === pId) {
               const sys = systemsData.find(s => s.systemId === entry.systemId);
               const mapping = sys?.sectorMapping as string[];
               if (Array.isArray(mapping)) {
-                mapping.forEach(sec => { row[sec] = (row[sec] || 0) + entry.count; });
+                mapping.forEach(sec => { sectorCounts[sec] = (sectorCounts[sec] || 0) + entry.count; });
               }
             }
           }
-          return row;
+          return {
+            id: prod?.name || String(pId),
+            data: uniqueSectors.map(sec => ({ x: sec, y: sectorCounts[sec] || 0 }))
+          };
         });
         setHeatmapData(data);
-        setHeatmapKeys(uniqueSectors);
       } else {
         setHeatmapData([]);
-        setHeatmapKeys([]);
       }
     } else {
       setHeatmapData([]);
-      setHeatmapKeys([]);
     }
   };
 
@@ -315,7 +307,7 @@ const SystemDashboard: React.FC<SystemDashboardProps> = ({ products }) => {
           </div>
         )}
 
-        {heatmapData.length > 0 && heatmapKeys.length > 0 && (
+        {heatmapData.length > 0 && (
           <div className="bg-white rounded-xl border border-slate-200 p-4">
             <div className="flex items-center justify-between mb-4">
               <h3 className="text-sm font-bold text-slate-700">Product Matrix Heatmap</h3>
