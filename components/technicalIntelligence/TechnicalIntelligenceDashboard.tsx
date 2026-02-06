@@ -654,9 +654,18 @@ const TechnicalIntelligenceDashboard: React.FC<TechnicalIntelligenceDashboardPro
                   theme={nivoTheme as any}
                   animate={true}
                   tooltip={({ node }) => (
-                    <div className="bg-white px-3 py-2 rounded-lg shadow-lg border text-xs">
-                      <strong>{(node.data as any).name}</strong>
-                      <div className="text-slate-500 mt-1">Layers: {node.data.x} | Suppliers: {node.data.y}</div>
+                    <div className="bg-white px-4 py-3 rounded-xl shadow-xl border border-slate-200 min-w-[200px]">
+                      <div className="text-sm font-bold text-slate-800 mb-2">{(node.data as any).name}</div>
+                      <div className="flex gap-4">
+                        <div className="bg-slate-50 rounded-lg px-3 py-2 text-center flex-1">
+                          <div className="text-[10px] text-slate-500 uppercase">Layers</div>
+                          <div className="text-base font-bold text-slate-700">{node.data.x}</div>
+                        </div>
+                        <div className="bg-slate-50 rounded-lg px-3 py-2 text-center flex-1">
+                          <div className="text-[10px] text-slate-500 uppercase">Suppliers</div>
+                          <div className="text-base font-bold text-slate-700">{node.data.y}</div>
+                        </div>
+                      </div>
                     </div>
                   )}
                 />
@@ -752,9 +761,16 @@ const TechnicalIntelligenceDashboard: React.FC<TechnicalIntelligenceDashboardPro
                 animate={true}
                 hoverTarget="cell"
                 tooltip={({ cell }) => (
-                  <div className="bg-white px-3 py-2 rounded-lg shadow-lg border text-xs">
-                    <div className="font-semibold">{cell.serieId} → {cell.data.x}</div>
-                    <div className="text-slate-500 mt-1">Value: <strong className="text-blue-600">{cell.data.y}</strong></div>
+                  <div className="bg-white px-4 py-3 rounded-xl shadow-xl border border-slate-200 min-w-[220px]">
+                    <div className="text-sm font-bold text-slate-800 mb-2">{cell.serieId}</div>
+                    <div className="text-xs text-slate-500 mb-2">→ {cell.data.x}</div>
+                    <div className="flex items-center justify-between bg-blue-50 rounded-lg px-3 py-2">
+                      <span className="text-xs font-medium text-slate-600">Count</span>
+                      <span className="text-lg font-bold text-blue-600">{cell.data.y}</span>
+                    </div>
+                    <div className="text-[10px] text-slate-400 mt-2">
+                      {heatmapModes.find(m => m.value === heatmapMode)?.label || 'Matrix'}
+                    </div>
                   </div>
                 )}
               />
