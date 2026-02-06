@@ -279,12 +279,13 @@ const App: React.FC = () => {
 
   const addProduct = async (newProduct: Product) => {
     try {
-      await api.createProduct({
+      const savedProduct = await api.createProduct({
         productId: newProduct.id,
         name: newProduct.name,
         supplier: newProduct.supplier,
         supplierId: newProduct.supplierId,
         nodeId: newProduct.nodeId,
+        colorId: newProduct.colorId,
         manufacturer: newProduct.manufacturer,
         manufacturingLocation: newProduct.manufacturingLocation,
         description: newProduct.description,
@@ -306,7 +307,8 @@ const App: React.FC = () => {
         createdBy: newProduct.createdBy,
         history: newProduct.history,
       });
-      setProducts(prev => [newProduct, ...prev]);
+      const merged = { ...newProduct, ...savedProduct };
+      setProducts(prev => [merged, ...prev]);
       setViewMode('inventory');
     } catch (err) {
       console.error('Failed to add product:', err);
@@ -359,10 +361,11 @@ const App: React.FC = () => {
 
   const updateProduct = async (updatedProduct: Product) => {
     try {
-      await api.updateProduct(updatedProduct.id, {
+      const savedProduct = await api.updateProduct(updatedProduct.id, {
         name: updatedProduct.name,
         supplier: updatedProduct.supplier,
         nodeId: updatedProduct.nodeId,
+        colorId: updatedProduct.colorId,
         manufacturer: updatedProduct.manufacturer,
         manufacturingLocation: updatedProduct.manufacturingLocation,
         description: updatedProduct.description,
@@ -383,7 +386,8 @@ const App: React.FC = () => {
         sector: updatedProduct.sector,
         history: updatedProduct.history,
       });
-      setProducts(prev => prev.map(p => p.id === updatedProduct.id ? updatedProduct : p));
+      const merged = { ...updatedProduct, ...savedProduct };
+      setProducts(prev => prev.map(p => p.id === updatedProduct.id ? merged : p));
     } catch (err) {
       console.error('Failed to update product:', err);
       setProducts(prev => prev.map(p => p.id === updatedProduct.id ? updatedProduct : p));
