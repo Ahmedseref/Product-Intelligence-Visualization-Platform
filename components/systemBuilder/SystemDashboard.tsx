@@ -307,21 +307,21 @@ const SystemDashboard: React.FC<SystemDashboardProps> = ({ products }) => {
           </div>
         )}
 
-        {heatmapData.length > 0 && (
-          <div className="bg-white rounded-xl border border-slate-200 p-4">
-            <div className="flex items-center justify-between mb-4">
-              <h3 className="text-sm font-bold text-slate-700">Product Matrix Heatmap</h3>
-              <select
-                value={heatmapMode}
-                onChange={(e) => setHeatmapMode(e.target.value as HeatmapAxisMode)}
-                className="text-xs border border-slate-200 rounded-lg px-2 py-1 focus:ring-2 focus:ring-blue-500 outline-none"
-              >
-                <option value="product-system">Product → System</option>
-                <option value="product-sector">Product → Sector</option>
-                <option value="layer-product">Layer → Product</option>
-                <option value="system-layer">System → Layer</option>
-              </select>
-            </div>
+        <div className="bg-white rounded-xl border border-slate-200 p-4">
+          <div className="flex items-center justify-between mb-4">
+            <h3 className="text-sm font-bold text-slate-700">Product Matrix Heatmap</h3>
+            <select
+              value={heatmapMode}
+              onChange={(e) => setHeatmapMode(e.target.value as HeatmapAxisMode)}
+              className="text-xs border border-slate-200 rounded-lg px-2 py-1 focus:ring-2 focus:ring-blue-500 outline-none"
+            >
+              <option value="product-system">Product → System</option>
+              <option value="product-sector">Product → Sector</option>
+              <option value="layer-product">Layer → Product</option>
+              <option value="system-layer">System → Layer</option>
+            </select>
+          </div>
+          {heatmapData.length > 0 ? (
             <div style={{ height: 300 }}>
               <ResponsiveHeatMap
                 data={heatmapData}
@@ -338,8 +338,18 @@ const SystemDashboard: React.FC<SystemDashboardProps> = ({ products }) => {
                 animate={true}
               />
             </div>
-          </div>
-        )}
+          ) : (
+            <div className="flex flex-col items-center justify-center py-12 text-slate-400">
+              <Grid3X3 size={32} className="mb-2 opacity-50" />
+              <p className="text-sm font-medium">No data for this view</p>
+              <p className="text-xs mt-1">
+                {heatmapMode === 'product-sector'
+                  ? 'Assign sectors to your systems in the Builder tab to see this matrix'
+                  : 'Add systems with layers and products to populate the heatmap'}
+              </p>
+            </div>
+          )}
+        </div>
       </div>
     </div>
   );

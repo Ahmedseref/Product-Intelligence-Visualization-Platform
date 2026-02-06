@@ -29,7 +29,8 @@ const SystemBuilder: React.FC<SystemBuilderProps> = ({ products }) => {
   const [showAddProduct, setShowAddProduct] = useState<string | null>(null);
   const [editingLayer, setEditingLayer] = useState<string | null>(null);
   const [editingOption, setEditingOption] = useState<string | null>(null);
-  const [newSystemForm, setNewSystemForm] = useState({ name: '', description: '', typicalUses: '' });
+  const [newSystemForm, setNewSystemForm] = useState({ name: '', description: '', typicalUses: '', sectorMapping: [] as string[] });
+  const [sectorInput, setSectorInput] = useState('');
   const [newLayerForm, setNewLayerForm] = useState({ layerName: '', notes: '' });
   const [productSearch, setProductSearch] = useState('');
   const [editLayerForm, setEditLayerForm] = useState({ layerName: '', notes: '' });
@@ -82,11 +83,24 @@ const SystemBuilder: React.FC<SystemBuilderProps> = ({ products }) => {
     }
   }, [selectedSystemId, loadFullSystem]);
 
+  const handleAddSector = () => {
+    const trimmed = sectorInput.trim();
+    if (trimmed && !newSystemForm.sectorMapping.includes(trimmed)) {
+      setNewSystemForm({ ...newSystemForm, sectorMapping: [...newSystemForm.sectorMapping, trimmed] });
+    }
+    setSectorInput('');
+  };
+
+  const handleRemoveSector = (sector: string) => {
+    setNewSystemForm({ ...newSystemForm, sectorMapping: newSystemForm.sectorMapping.filter(s => s !== sector) });
+  };
+
   const handleCreateSystem = async () => {
     if (!newSystemForm.name.trim()) return;
     try {
       await systemsApi.createSystem(newSystemForm);
-      setNewSystemForm({ name: '', description: '', typicalUses: '' });
+      setNewSystemForm({ name: '', description: '', typicalUses: '', sectorMapping: [] });
+      setSectorInput('');
       setShowCreateSystem(false);
       await loadSystems();
     } catch (err) {
@@ -417,6 +431,31 @@ const SystemBuilder: React.FC<SystemBuilderProps> = ({ products }) => {
                 onChange={(e) => setNewSystemForm({ ...newSystemForm, typicalUses: e.target.value })}
                 className="w-full px-3 py-1.5 text-sm border border-slate-200 rounded-lg mb-2 focus:ring-2 focus:ring-blue-500 outline-none"
               />
+              <div className="mb-2">
+                <div className="flex items-center gap-1 mb-1">
+                  <input
+                    type="text"
+                    placeholder="Add sector (e.g. Flooring, Roofing)"
+                    value={sectorInput}
+                    onChange={(e) => setSectorInput(e.target.value)}
+                    onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); handleAddSector(); } }}
+                    className="flex-1 px-3 py-1.5 text-sm border border-slate-200 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none"
+                  />
+                  <button type="button" onClick={handleAddSector} className="px-2 py-1.5 text-sm bg-slate-200 text-slate-600 rounded-lg hover:bg-slate-300">
+                    <Plus size={14} />
+                  </button>
+                </div>
+                {newSystemForm.sectorMapping.length > 0 && (
+                  <div className="flex flex-wrap gap-1">
+                    {newSystemForm.sectorMapping.map(sec => (
+                      <span key={sec} className="inline-flex items-center gap-1 px-2 py-0.5 text-xs bg-blue-100 text-blue-700 rounded-full">
+                        {sec}
+                        <button onClick={() => handleRemoveSector(sec)} className="hover:text-red-500"><X size={10} /></button>
+                      </span>
+                    ))}
+                  </div>
+                )}
+              </div>
               <div className="flex gap-2">
                 <button onClick={handleCreateSystem} className="flex-1 px-3 py-1.5 text-sm bg-blue-600 text-white rounded-lg hover:bg-blue-700">Create</button>
                 <button onClick={() => setShowCreateSystem(false)} className="px-3 py-1.5 text-sm bg-slate-200 text-slate-600 rounded-lg hover:bg-slate-300">Cancel</button>
@@ -485,6 +524,45 @@ const SystemBuilder: React.FC<SystemBuilderProps> = ({ products }) => {
                   <h2 className="text-lg font-bold text-slate-800">{fullSystem.name}</h2>
                   {fullSystem.description && <p className="text-sm text-slate-500 mt-0.5">{fullSystem.description}</p>}
                   {fullSystem.typicalUses && <p className="text-xs text-slate-400 mt-0.5">Uses: {fullSystem.typicalUses}</p>}
+                  {(() => {
+                    const mapping = fullSystem.sectorMapping as string[] | undefined;
+                    return Array.isArray(mapping) && mapping.length > 0 ? (
+                      <div className="flex flex-wrap gap-1 mt-1">
+                        {mapping.map(sec => (
+                          <span key={sec} className="inline-flex items-center gap-1 px-2 py-0.5 text-[10px] bg-indigo-50 text-indigo-600 rounded-full font-medium">
+                            {sec}
+                            <button
+                              onClick={() => {
+                                const updated = mapping.filter(s => s !== sec);
+                                systemsApi.updateSystem(selectedSystemId!, { sectorMapping: updated }).then(() => loadFullSystem(selectedSystemId!));
+                              }}
+                              className="hover:text-red-500"
+                            ><X size={8} /></button>
+                          </span>
+                        ))}
+                        <button
+                          onClick={() => {
+                            const newSec = prompt('Add sector:');
+                            if (newSec?.trim()) {
+                              const updated = [...mapping, newSec.trim()];
+                              systemsApi.updateSystem(selectedSystemId!, { sectorMapping: updated }).then(() => loadFullSystem(selectedSystemId!));
+                            }
+                          }}
+                          className="inline-flex items-center gap-0.5 px-1.5 py-0.5 text-[10px] bg-slate-100 text-slate-500 rounded-full hover:bg-slate-200"
+                        ><Plus size={8} /> Sector</button>
+                      </div>
+                    ) : (
+                      <button
+                        onClick={() => {
+                          const newSec = prompt('Add sector (e.g. Flooring, Roofing):');
+                          if (newSec?.trim()) {
+                            systemsApi.updateSystem(selectedSystemId!, { sectorMapping: [newSec.trim()] }).then(() => loadFullSystem(selectedSystemId!));
+                          }
+                        }}
+                        className="inline-flex items-center gap-0.5 mt-1 px-2 py-0.5 text-[10px] bg-slate-100 text-slate-500 rounded-full hover:bg-slate-200"
+                      ><Plus size={8} /> Add Sector</button>
+                    );
+                  })()}
                 </div>
                 <div className="flex items-center gap-2">
                   <select
