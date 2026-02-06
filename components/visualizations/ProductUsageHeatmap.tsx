@@ -512,6 +512,7 @@ const ProductUsageHeatmap: React.FC<ProductUsageHeatmapProps> = ({
       return (
         <g
           transform={`translate(${cell.x}, ${cell.y})`}
+          onClick={() => handleCellClick(cell)}
           onMouseEnter={() => setHoveredCell({ serieId: cell.serieId, dataX: cell.data.x })}
           onMouseLeave={() => setHoveredCell(null)}
           style={{ cursor: 'pointer' }}
@@ -534,6 +535,7 @@ const ProductUsageHeatmap: React.FC<ProductUsageHeatmapProps> = ({
               fill="#ffffff"
               fontSize={cellFontSize}
               fontWeight={cellFontWeight}
+              style={{ pointerEvents: 'none' }}
             >
               {cellLabel}
             </text>
@@ -553,6 +555,7 @@ const ProductUsageHeatmap: React.FC<ProductUsageHeatmapProps> = ({
       return (
         <g
           transform={`translate(${cell.x}, ${cell.y})`}
+          onClick={() => handleCellClick(cell)}
           onMouseEnter={() => setHoveredCell({ serieId: cell.serieId, dataX: cell.data.x })}
           onMouseLeave={() => setHoveredCell(null)}
           style={{ cursor: 'pointer' }}
@@ -575,6 +578,7 @@ const ProductUsageHeatmap: React.FC<ProductUsageHeatmapProps> = ({
               fill={intensity > 0.5 ? '#ffffff' : '#334155'}
               fontSize={11}
               fontWeight={600}
+              style={{ pointerEvents: 'none' }}
             >
               {cellLabel}
             </text>
@@ -588,6 +592,7 @@ const ProductUsageHeatmap: React.FC<ProductUsageHeatmapProps> = ({
     return (
       <g
         transform={`translate(${cell.x}, ${cell.y})`}
+        onClick={() => handleCellClick(cell)}
         onMouseEnter={() => setHoveredCell({ serieId: cell.serieId, dataX: cell.data.x })}
         onMouseLeave={() => setHoveredCell(null)}
         style={{ cursor: 'pointer' }}
@@ -610,13 +615,14 @@ const ProductUsageHeatmap: React.FC<ProductUsageHeatmapProps> = ({
             fill={defaultTextColor}
             fontSize={cellFontSize}
             fontWeight={cellFontWeight}
+            style={{ pointerEvents: 'none' }}
           >
             {cellLabel}
           </text>
         )}
       </g>
     );
-  }, [colorPalette, matrixMode, usageAreaColumns, getColumnColor, maxValue]);
+  }, [colorPalette, matrixMode, usageAreaColumns, getColumnColor, maxValue, handleCellClick]);
 
   const HighlightLayer = useCallback(({ cells }: any) => {
     if (!hoveredCell) return null;
