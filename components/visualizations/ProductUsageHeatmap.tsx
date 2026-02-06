@@ -902,7 +902,7 @@ const ProductUsageHeatmap: React.FC<ProductUsageHeatmapProps> = ({
     priceRange.min || priceRange.max;
 
   const chartHeight = Math.max(400, activeData.length * 50 + 160);
-  const leftMargin = matrixMode === 'product' ? 200 : 160;
+  const leftMargin = matrixMode === 'product' ? 240 : 160;
 
   const chartTitle = matrixMode === 'category'
     ? 'Product Usage Density Matrix'
@@ -1128,7 +1128,7 @@ const ProductUsageHeatmap: React.FC<ProductUsageHeatmapProps> = ({
               legend: axisLeftLegend,
               legendPosition: 'middle',
               legendOffset: -(leftMargin - 20),
-              truncateTickAt: 18,
+              truncateTickAt: matrixMode === 'product' ? 28 : 18,
               format: (v: string) => seriesIdToName[v] || v
             }}
             colors={colorsConfig}
