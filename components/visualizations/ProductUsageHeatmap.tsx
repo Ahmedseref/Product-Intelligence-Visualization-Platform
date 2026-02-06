@@ -503,20 +503,25 @@ const ProductUsageHeatmap: React.FC<ProductUsageHeatmapProps> = ({
     const cellFontSize = isProductMode ? 13 : 11;
     const cellFontWeight = isProductMode ? 800 : 600;
 
+    const nivoMouseEnter = onMouseEnter ? onMouseEnter(cell) : undefined;
+    const nivoMouseMove = onMouseMove ? onMouseMove(cell) : undefined;
+    const nivoMouseLeave = onMouseLeave ? onMouseLeave(cell) : undefined;
+    const nivoClick = onClick ? onClick(cell) : undefined;
+
     const handleMouseEnter = (e: React.MouseEvent) => {
       setHoveredCell({ serieId: cell.serieId, dataX: cell.data.x });
-      if (onMouseEnter) onMouseEnter(cell, e);
+      if (nivoMouseEnter) nivoMouseEnter(e);
     };
     const handleMouseMove = (e: React.MouseEvent) => {
-      if (onMouseMove) onMouseMove(cell, e);
+      if (nivoMouseMove) nivoMouseMove(e);
     };
     const handleMouseLeave = (e: React.MouseEvent) => {
       setHoveredCell(null);
-      if (onMouseLeave) onMouseLeave(cell, e);
+      if (nivoMouseLeave) nivoMouseLeave(e);
     };
     const handleClick = (e: React.MouseEvent) => {
       handleCellClick(cell);
-      if (onClick) onClick(cell, e);
+      if (nivoClick) nivoClick(e);
     };
 
     if (isMultiColor && isProductMode) {
