@@ -80,6 +80,8 @@ const ProductUsageHeatmap: React.FC<ProductUsageHeatmapProps> = ({
   const [selectedUsageAreas, setSelectedUsageAreas] = useState<string[]>([]);
   const [selectedSuppliers, setSelectedSuppliers] = useState<string[]>([]);
   const [selectedManufacturers, setSelectedManufacturers] = useState<string[]>([]);
+  const [selectedProducts, setSelectedProducts] = useState<string[]>([]);
+  const [productSearchQuery, setProductSearchQuery] = useState('');
   const [priceRange, setPriceRange] = useState<{ min: string; max: string }>({ min: '', max: '' });
   const [categoryLevel, setCategoryLevel] = useState<'sector' | 'category' | 'subcategory' | 'group' | 'leaf'>('category');
   const [showFilters, setShowFilters] = useState(true);
@@ -247,6 +249,9 @@ const ProductUsageHeatmap: React.FC<ProductUsageHeatmapProps> = ({
       : allUsageAreas;
 
     let prods = filteredProducts;
+    if (selectedProducts.length > 0) {
+      prods = prods.filter(p => selectedProducts.includes(p.id));
+    }
     if (selectedCategories.length > 0) {
       prods = prods.filter(p => {
         const cat = getProductCategory(p);
@@ -289,7 +294,7 @@ const ProductUsageHeatmap: React.FC<ProductUsageHeatmapProps> = ({
         data: dataPoints
       };
     });
-  }, [matrixMode, filteredProducts, selectedCategories, selectedUsageAreas, allUsageAreas, getProductCategory, getProductUsageAreas]);
+  }, [matrixMode, filteredProducts, selectedProducts, selectedCategories, selectedUsageAreas, allUsageAreas, getProductCategory, getProductUsageAreas]);
 
   const activeData = matrixMode === 'category' ? heatmapData : productHeatmapData;
 
@@ -889,16 +894,25 @@ const ProductUsageHeatmap: React.FC<ProductUsageHeatmapProps> = ({
     );
   };
 
+  const toggleProduct = (id: string) => {
+    setSelectedProducts(prev =>
+      prev.includes(id) ? prev.filter(p => p !== id) : [...prev, id]
+    );
+  };
+
   const clearFilters = () => {
     setSelectedCategories([]);
     setSelectedUsageAreas([]);
     setSelectedSuppliers([]);
     setSelectedManufacturers([]);
+    setSelectedProducts([]);
+    setProductSearchQuery('');
     setPriceRange({ min: '', max: '' });
   };
 
   const hasActiveFilters = selectedCategories.length > 0 || selectedUsageAreas.length > 0 ||
     selectedSuppliers.length > 0 || selectedManufacturers.length > 0 ||
+    selectedProducts.length > 0 ||
     priceRange.min || priceRange.max;
 
   const chartHeight = Math.max(400, activeData.length * 50 + 160);
@@ -1011,7 +1025,64 @@ const ProductUsageHeatmap: React.FC<ProductUsageHeatmapProps> = ({
 
       {showFilters && (
         <div className="bg-white rounded-2xl border border-slate-200 p-6">
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+          <div className={`grid grid-cols-1 md:grid-cols-2 ${matrixMode === 'product' ? 'lg:grid-cols-5' : 'lg:grid-cols-4'} gap-6`}>
+            {matrixMode === 'product' && (
+              <div>
+                <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">
+                  Products ({selectedProducts.length} of {filteredProducts.length})
+                </label>
+                <input
+                  type="text"
+                  placeholder="Search products..."
+                  value={productSearchQuery}
+                  onChange={e => setProductSearchQuery(e.target.value)}
+                  className="w-full px-3 py-1.5 mb-2 bg-slate-50 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                />
+                <div className="flex items-center gap-2 mb-2">
+                  <button
+                    onClick={() => {
+                      const visibleIds = filteredProducts
+                        .filter(p => !productSearchQuery || p.name.toLowerCase().includes(productSearchQuery.toLowerCase()))
+                        .map(p => p.id);
+                      setSelectedProducts(prev => {
+                        const allSelected = visibleIds.every(id => prev.includes(id));
+                        if (allSelected) return prev.filter(id => !visibleIds.includes(id));
+                        return [...new Set([...prev, ...visibleIds])];
+                      });
+                    }}
+                    className="text-xs text-blue-600 hover:text-blue-800 font-medium"
+                  >
+                    Select/Deselect All
+                  </button>
+                  {selectedProducts.length > 0 && (
+                    <button
+                      onClick={() => setSelectedProducts([])}
+                      className="text-xs text-red-500 hover:text-red-700 font-medium"
+                    >
+                      Clear
+                    </button>
+                  )}
+                </div>
+                <div className="max-h-40 overflow-y-auto space-y-1 border border-slate-200 rounded-lg p-2">
+                  {filteredProducts
+                    .filter(p => !productSearchQuery || p.name.toLowerCase().includes(productSearchQuery.toLowerCase()))
+                    .map(p => (
+                      <label key={p.id} className="flex items-center gap-2 px-2 py-1 hover:bg-slate-50 rounded cursor-pointer">
+                        <input
+                          type="checkbox"
+                          checked={selectedProducts.includes(p.id)}
+                          onChange={() => toggleProduct(p.id)}
+                          className="rounded border-slate-300 text-blue-600 focus:ring-blue-500"
+                        />
+                        <span className="text-sm text-slate-700 truncate" title={`${p.name} (${p.supplier || 'No supplier'})`}>
+                          {p.name}
+                        </span>
+                      </label>
+                    ))}
+                </div>
+              </div>
+            )}
+
             <div>
               <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">
                 Categories ({selectedCategories.length} selected)
