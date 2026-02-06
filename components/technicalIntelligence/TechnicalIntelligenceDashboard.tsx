@@ -108,9 +108,11 @@ const TechnicalIntelligenceDashboard: React.FC<TechnicalIntelligenceDashboardPro
 
   const activeFilterCount = Object.values(activeFilters).filter(Boolean).length;
 
+  const [categoryDistLevel, setCategoryDistLevel] = useState<'sector' | 'category' | 'subcategory'>('sector');
+
   const categoryDistribution = useMemo(() => {
     if (!products || products.length === 0 || !treeNodes || treeNodes.length === 0) return [];
-    const rootNodes = treeNodes.filter(n => !n.parentId);
+
     const getDescendantIds = (nodeId: string): string[] => {
       const result = [nodeId];
       const children = treeNodes.filter(n => n.parentId === nodeId);
@@ -119,17 +121,38 @@ const TechnicalIntelligenceDashboard: React.FC<TechnicalIntelligenceDashboardPro
       }
       return result;
     };
-    const distribution = rootNodes.map(root => {
-      const descendantIds = getDescendantIds(root.id);
+
+    const getNodesAtLevel = (level: 'sector' | 'category' | 'subcategory') => {
+      const roots = treeNodes.filter(n => !n.parentId);
+      if (level === 'sector') return roots;
+      const level2: typeof treeNodes = [];
+      roots.forEach(r => {
+        const children = treeNodes.filter(n => n.parentId === r.id);
+        level2.push(...children);
+      });
+      if (level === 'category') return level2.length > 0 ? level2 : roots;
+      const level3: typeof treeNodes = [];
+      level2.forEach(n => {
+        const children = treeNodes.filter(c => c.parentId === n.id);
+        level3.push(...children);
+      });
+      return level3.length > 0 ? level3 : (level2.length > 0 ? level2 : roots);
+    };
+
+    const nodes = getNodesAtLevel(categoryDistLevel);
+    const distribution = nodes.map(node => {
+      const descendantIds = getDescendantIds(node.id);
       const count = products.filter(p => p.nodeId && descendantIds.includes(p.nodeId)).length;
-      return { id: root.name, label: root.name, value: count };
+      return { id: node.name, label: node.name, value: count };
     }).filter(d => d.value > 0);
-    const uncategorized = products.filter(p => !p.nodeId).length;
+
+    const assignedNodeIds = new Set(nodes.flatMap(n => getDescendantIds(n.id)));
+    const uncategorized = products.filter(p => !p.nodeId || !assignedNodeIds.has(p.nodeId)).length;
     if (uncategorized > 0) {
       distribution.push({ id: 'Uncategorized', label: 'Uncategorized', value: uncategorized });
     }
     return distribution;
-  }, [products, treeNodes]);
+  }, [products, treeNodes, categoryDistLevel]);
 
   const loadTabData = useCallback(async (tab: DashboardTab) => {
     setLoading(true);
@@ -417,11 +440,32 @@ const TechnicalIntelligenceDashboard: React.FC<TechnicalIntelligenceDashboardPro
         {categoryDistribution.length > 0 && (
           <div className="bg-white rounded-xl border border-slate-200 p-4">
             <div className="flex items-center justify-between mb-3">
-              <div>
-                <h3 className="text-sm font-bold text-slate-700">Category Distribution</h3>
-                <p className="text-xs text-slate-400 mt-0.5">Products distributed across top-level taxonomy branches</p>
+              <div className="flex items-center gap-4">
+                <div>
+                  <h3 className="text-sm font-bold text-slate-700">
+                    {categoryDistLevel === 'sector' ? 'Sector' : categoryDistLevel === 'category' ? 'Category' : 'Sub-Category'} Distribution
+                  </h3>
+                  <p className="text-xs text-slate-400 mt-0.5">
+                    Products distributed across {categoryDistLevel === 'sector' ? 'sectors' : categoryDistLevel === 'category' ? 'categories' : 'sub-categories'}
+                  </p>
+                </div>
+                <div className="flex bg-slate-100 rounded-lg p-0.5">
+                  {(['sector', 'category', 'subcategory'] as const).map(level => (
+                    <button
+                      key={level}
+                      onClick={() => setCategoryDistLevel(level)}
+                      className={`px-3 py-1 text-xs font-medium rounded-md transition-all ${
+                        categoryDistLevel === level
+                          ? 'bg-white text-blue-700 shadow-sm'
+                          : 'text-slate-500 hover:text-slate-700'
+                      }`}
+                    >
+                      {level === 'sector' ? 'Sector' : level === 'category' ? 'Category' : 'Sub-Category'}
+                    </button>
+                  ))}
+                </div>
               </div>
-              <ChartExportBar chartId="category-dist-pie" csvData={categoryDistribution} csvFilename="category-distribution" />
+              <ChartExportBar chartId="category-dist-pie" csvData={categoryDistribution} csvFilename={`${categoryDistLevel}-distribution`} />
             </div>
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
               <div id="category-dist-pie" style={{ height: 320 }}>
