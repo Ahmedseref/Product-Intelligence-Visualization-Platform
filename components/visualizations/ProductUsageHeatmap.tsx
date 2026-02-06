@@ -494,7 +494,7 @@ const ProductUsageHeatmap: React.FC<ProductUsageHeatmapProps> = ({
     return CHART_COLORS.categorical[colIndex % CHART_COLORS.categorical.length];
   }, []);
 
-  const CustomCellComponent = useCallback(({ cell, ...props }: any) => {
+  const CustomCellComponent = useCallback(({ cell, onMouseEnter, onMouseMove, onMouseLeave, onClick, ...props }: any) => {
     const isMultiColor = colorPalette === 'multi';
     const isProductMode = matrixMode === 'product';
 
@@ -502,6 +502,22 @@ const ProductUsageHeatmap: React.FC<ProductUsageHeatmapProps> = ({
     const cellLabel = isProductMode && value > 0 ? 'X' : (value > 0 ? value : null);
     const cellFontSize = isProductMode ? 13 : 11;
     const cellFontWeight = isProductMode ? 800 : 600;
+
+    const handleMouseEnter = (e: React.MouseEvent) => {
+      setHoveredCell({ serieId: cell.serieId, dataX: cell.data.x });
+      if (onMouseEnter) onMouseEnter(cell, e);
+    };
+    const handleMouseMove = (e: React.MouseEvent) => {
+      if (onMouseMove) onMouseMove(cell, e);
+    };
+    const handleMouseLeave = (e: React.MouseEvent) => {
+      setHoveredCell(null);
+      if (onMouseLeave) onMouseLeave(cell, e);
+    };
+    const handleClick = (e: React.MouseEvent) => {
+      handleCellClick(cell);
+      if (onClick) onClick(cell, e);
+    };
 
     if (isMultiColor && isProductMode) {
       const colIndex = usageAreaColumns.indexOf(cell.data.x);
@@ -512,9 +528,10 @@ const ProductUsageHeatmap: React.FC<ProductUsageHeatmapProps> = ({
       return (
         <g
           transform={`translate(${cell.x}, ${cell.y})`}
-          onClick={() => handleCellClick(cell)}
-          onMouseEnter={() => setHoveredCell({ serieId: cell.serieId, dataX: cell.data.x })}
-          onMouseLeave={() => setHoveredCell(null)}
+          onClick={handleClick}
+          onMouseEnter={handleMouseEnter}
+          onMouseMove={handleMouseMove}
+          onMouseLeave={handleMouseLeave}
           style={{ cursor: 'pointer' }}
         >
           <rect
@@ -555,9 +572,10 @@ const ProductUsageHeatmap: React.FC<ProductUsageHeatmapProps> = ({
       return (
         <g
           transform={`translate(${cell.x}, ${cell.y})`}
-          onClick={() => handleCellClick(cell)}
-          onMouseEnter={() => setHoveredCell({ serieId: cell.serieId, dataX: cell.data.x })}
-          onMouseLeave={() => setHoveredCell(null)}
+          onClick={handleClick}
+          onMouseEnter={handleMouseEnter}
+          onMouseMove={handleMouseMove}
+          onMouseLeave={handleMouseLeave}
           style={{ cursor: 'pointer' }}
         >
           <rect
@@ -592,9 +610,10 @@ const ProductUsageHeatmap: React.FC<ProductUsageHeatmapProps> = ({
     return (
       <g
         transform={`translate(${cell.x}, ${cell.y})`}
-        onClick={() => handleCellClick(cell)}
-        onMouseEnter={() => setHoveredCell({ serieId: cell.serieId, dataX: cell.data.x })}
-        onMouseLeave={() => setHoveredCell(null)}
+        onClick={handleClick}
+        onMouseEnter={handleMouseEnter}
+        onMouseMove={handleMouseMove}
+        onMouseLeave={handleMouseLeave}
         style={{ cursor: 'pointer' }}
       >
         <rect
