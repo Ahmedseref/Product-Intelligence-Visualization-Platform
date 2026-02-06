@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback, useMemo, Component, ErrorInfo, ReactNode } from 'react';
+import React, { useState, useEffect, useCallback, useMemo, useRef, Component, ErrorInfo, ReactNode } from 'react';
 import { ResponsiveBar } from '@nivo/bar';
 import { ResponsivePie } from '@nivo/pie';
 import { ResponsiveHeatMap } from '@nivo/heatmap';
@@ -98,6 +98,7 @@ const TechnicalIntelligenceDashboard: React.FC<TechnicalIntelligenceDashboardPro
   const [heatmapData, setHeatmapData] = useState<any[]>([]);
   const [heatmapMode, setHeatmapMode] = useState('supplier-system');
   const [taxonomyData, setTaxonomyData] = useState<any>(null);
+  const [taxonomyLevel, setTaxonomyLevel] = useState<'sector' | 'category' | 'subcategory'>('sector');
   const [coverageData, setCoverageData] = useState<any>(null);
   const [benchmarkData, setBenchmarkData] = useState<any>(null);
   const [selectedBenchmarkSystem, setSelectedBenchmarkSystem] = useState<string>('');
@@ -154,6 +155,9 @@ const TechnicalIntelligenceDashboard: React.FC<TechnicalIntelligenceDashboardPro
     return distribution;
   }, [products, treeNodes, categoryDistLevel]);
 
+  const taxonomyLevelRef = useRef(taxonomyLevel);
+  taxonomyLevelRef.current = taxonomyLevel;
+
   const loadTabData = useCallback(async (tab: DashboardTab) => {
     setLoading(true);
     setError(null);
@@ -185,7 +189,7 @@ const TechnicalIntelligenceDashboard: React.FC<TechnicalIntelligenceDashboardPro
           break;
         }
         case 'taxonomy': {
-          const data = await analyticsApi.getTaxonomySupplier(f);
+          const data = await analyticsApi.getTaxonomySupplier(f, taxonomyLevelRef.current);
           setTaxonomyData(data);
           break;
         }
@@ -214,6 +218,20 @@ const TechnicalIntelligenceDashboard: React.FC<TechnicalIntelligenceDashboardPro
   useEffect(() => {
     loadTabData(activeTab);
   }, [activeTab, loadTabData]);
+
+  const handleTaxonomyLevelChange = useCallback(async (level: 'sector' | 'category' | 'subcategory') => {
+    setTaxonomyLevel(level);
+    setLoading(true);
+    try {
+      const f = activeFilterCount > 0 ? activeFilters : undefined;
+      const data = await analyticsApi.getTaxonomySupplier(f, level);
+      setTaxonomyData(data);
+    } catch (err: any) {
+      console.error('Failed to load taxonomy data:', err);
+    } finally {
+      setLoading(false);
+    }
+  }, [activeFilters, activeFilterCount]);
 
   useEffect(() => {
     if (!filters) {
@@ -771,6 +789,26 @@ const TechnicalIntelligenceDashboard: React.FC<TechnicalIntelligenceDashboardPro
     );
   };
 
+  const taxonomyLevelLabel = taxonomyLevel === 'sector' ? 'Sector' : taxonomyLevel === 'category' ? 'Category' : 'Sub-Category';
+
+  const TaxonomyLevelSelector = () => (
+    <div className="flex bg-slate-100 rounded-lg p-0.5">
+      {(['sector', 'category', 'subcategory'] as const).map(level => (
+        <button
+          key={level}
+          onClick={() => handleTaxonomyLevelChange(level)}
+          className={`px-3 py-1 text-xs font-medium rounded-md transition-all ${
+            taxonomyLevel === level
+              ? 'bg-white text-blue-700 shadow-sm'
+              : 'text-slate-500 hover:text-slate-700'
+          }`}
+        >
+          {level === 'sector' ? 'Sector' : level === 'category' ? 'Category' : 'Sub-Category'}
+        </button>
+      ))}
+    </div>
+  );
+
   const renderTaxonomySupplier = () => {
     if (!taxonomyData) return <LoadingState />;
 
@@ -778,8 +816,14 @@ const TechnicalIntelligenceDashboard: React.FC<TechnicalIntelligenceDashboardPro
       <div className="space-y-6">
         <div className="bg-white rounded-xl border border-slate-200 p-4">
           <div className="flex items-center justify-between mb-3">
-            <h3 className="text-sm font-bold text-slate-700">Branch Supplier Distribution</h3>
-            <ChartExportBar chartId="branch-dist-chart" csvData={taxonomyData.branchDistribution} csvFilename="branch-distribution" />
+            <div className="flex items-center gap-4">
+              <div>
+                <h3 className="text-sm font-bold text-slate-700">{taxonomyLevelLabel} Supplier Distribution</h3>
+                <p className="text-xs text-slate-400 mt-0.5">Product count by {taxonomyLevelLabel.toLowerCase()} per supplier</p>
+              </div>
+              <TaxonomyLevelSelector />
+            </div>
+            <ChartExportBar chartId="branch-dist-chart" csvData={taxonomyData.branchDistribution} csvFilename={`${taxonomyLevel}-distribution`} />
           </div>
           <div id="branch-dist-chart" style={{ height: 320 }}>
             {taxonomyData.branchDistribution?.length > 0 ? (
@@ -810,8 +854,11 @@ const TechnicalIntelligenceDashboard: React.FC<TechnicalIntelligenceDashboardPro
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
           <div className="bg-white rounded-xl border border-slate-200 p-4">
             <div className="flex items-center justify-between mb-3">
-              <h3 className="text-sm font-bold text-slate-700">Supplier Specialization Map</h3>
-              <ChartExportBar chartId="treemap-chart" csvData={taxonomyData.branchDistribution} csvFilename="supplier-treemap" />
+              <div>
+                <h3 className="text-sm font-bold text-slate-700">Supplier Specialization by {taxonomyLevelLabel}</h3>
+                <p className="text-xs text-slate-400 mt-0.5">Supplier products grouped by {taxonomyLevelLabel.toLowerCase()}</p>
+              </div>
+              <ChartExportBar chartId="treemap-chart" csvData={taxonomyData.branchDistribution} csvFilename={`supplier-treemap-${taxonomyLevel}`} />
             </div>
             <div id="treemap-chart" style={{ height: 350 }}>
               {taxonomyData.treemapData?.children?.length > 0 ? (

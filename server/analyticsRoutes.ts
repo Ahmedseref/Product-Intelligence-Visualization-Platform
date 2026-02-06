@@ -418,15 +418,34 @@ export function registerAnalyticsRoutes(app: Express): void {
 
       ({ allProducts, allSystems } = applyFilters(req.query, { allProducts, allSystems, allNodes }));
 
-      const branchDistribution: Record<string, Record<string, number>> = {};
-      const rootNodes = allNodes.filter(n => !n.parentId);
+      const level = (req.query.level as string) || 'sector';
 
-      for (const root of rootNodes) {
-        const descendantIds = getDescendantNodeIds(root.nodeId, allNodes);
-        branchDistribution[root.name] = {};
+      const getNodesAtLevel = (lvl: string) => {
+        const roots = allNodes.filter((n: any) => !n.parentId);
+        if (lvl === 'sector') return roots;
+        const level2: any[] = [];
+        roots.forEach((r: any) => {
+          const children = allNodes.filter((n: any) => n.parentId === r.nodeId);
+          level2.push(...children);
+        });
+        if (lvl === 'category') return level2.length > 0 ? level2 : roots;
+        const level3: any[] = [];
+        level2.forEach((n: any) => {
+          const children = allNodes.filter((c: any) => c.parentId === n.nodeId);
+          level3.push(...children);
+        });
+        return level3.length > 0 ? level3 : (level2.length > 0 ? level2 : roots);
+      };
+
+      const branchDistribution: Record<string, Record<string, number>> = {};
+      const levelNodes = getNodesAtLevel(level);
+
+      for (const node of levelNodes) {
+        const descendantIds = getDescendantNodeIds(node.nodeId, allNodes);
+        branchDistribution[node.name] = {};
         for (const p of allProducts.filter(pr => descendantIds.includes(pr.nodeId))) {
           const supName = p.supplier || 'Unknown';
-          branchDistribution[root.name][supName] = (branchDistribution[root.name][supName] || 0) + 1;
+          branchDistribution[node.name][supName] = (branchDistribution[node.name][supName] || 0) + 1;
         }
       }
 
@@ -443,25 +462,36 @@ export function registerAnalyticsRoutes(app: Express): void {
         return entry;
       });
 
+      const findNodeForProduct = (product: any) => {
+        if (!product.nodeId) return null;
+        const productNode = allNodes.find((n: any) => n.nodeId === product.nodeId);
+        if (!productNode) return null;
+        for (const lvlNode of levelNodes) {
+          const descIds = getDescendantNodeIds(lvlNode.nodeId, allNodes);
+          if (descIds.includes(product.nodeId)) return lvlNode.name;
+        }
+        return null;
+      };
+
       const treemapData = {
         name: 'Suppliers',
         children: allSuppliers.map(sup => {
           const supProducts = allProducts.filter(p => p.supplierId === sup.supplierId);
-          const sectorGroups: Record<string, any[]> = {};
+          const groupedByLevel: Record<string, any[]> = {};
           const nameCounters: Record<string, number> = {};
           for (const p of supProducts) {
-            const sec = p.sector || 'General';
-            if (!sectorGroups[sec]) sectorGroups[sec] = [];
+            const groupName = findNodeForProduct(p) || 'Unassigned';
+            if (!groupedByLevel[groupName]) groupedByLevel[groupName] = [];
             const baseName = p.name.substring(0, 20);
-            const key = `${sec}:${baseName}`;
+            const key = `${groupName}:${baseName}`;
             nameCounters[key] = (nameCounters[key] || 0) + 1;
             const uniqueName = nameCounters[key] > 1 ? `${baseName} (${nameCounters[key]})` : baseName;
-            sectorGroups[sec].push({ name: uniqueName, value: 1 });
+            groupedByLevel[groupName].push({ name: uniqueName, value: 1 });
           }
           return {
             name: sup.name,
-            children: Object.entries(sectorGroups).map(([sec, prods]) => ({
-              name: sec,
+            children: Object.entries(groupedByLevel).map(([grp, prods]) => ({
+              name: grp,
               children: prods.slice(0, 10),
             })),
           };

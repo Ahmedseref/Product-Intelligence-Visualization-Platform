@@ -801,9 +801,10 @@ export const analyticsApi = {
     if (!response.ok) throw new Error('Failed to fetch supplier heatmap');
     return response.json();
   },
-  getTaxonomySupplier: async (filters?: { supplier?: string; sector?: string; taxonomy?: string }) => {
+  getTaxonomySupplier: async (filters?: { supplier?: string; sector?: string; taxonomy?: string }, level?: string) => {
     const fp = buildFilterParams(filters);
-    const response = await fetch(`${API_BASE}/analytics/taxonomy-supplier?_=1${fp}`, { headers: getAuthHeaders() });
+    const lvl = level ? `&level=${level}` : '';
+    const response = await fetch(`${API_BASE}/analytics/taxonomy-supplier?_=1${fp}${lvl}`, { headers: getAuthHeaders() });
     if (!response.ok) throw new Error('Failed to fetch taxonomy supplier data');
     return response.json();
   },
