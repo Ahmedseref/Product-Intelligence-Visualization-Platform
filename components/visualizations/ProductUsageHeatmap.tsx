@@ -494,7 +494,7 @@ const ProductUsageHeatmap: React.FC<ProductUsageHeatmapProps> = ({
     return CHART_COLORS.categorical[colIndex % CHART_COLORS.categorical.length];
   }, []);
 
-  const CustomCellComponent = useCallback(({ cell, onMouseEnter, onMouseMove, onMouseLeave, onClick, ...props }: any) => {
+  const CustomCellComponent = ({ cell, onMouseEnter, onMouseMove, onMouseLeave, onClick, animatedProps, borderWidth, borderRadius, enableLabels, ...props }: any) => {
     const isMultiColor = colorPalette === 'multi';
     const isProductMode = matrixMode === 'product';
 
@@ -503,25 +503,27 @@ const ProductUsageHeatmap: React.FC<ProductUsageHeatmapProps> = ({
     const cellFontSize = isProductMode ? 13 : 11;
     const cellFontWeight = isProductMode ? 800 : 600;
 
-    const nivoMouseEnter = onMouseEnter ? onMouseEnter(cell) : undefined;
-    const nivoMouseMove = onMouseMove ? onMouseMove(cell) : undefined;
-    const nivoMouseLeave = onMouseLeave ? onMouseLeave(cell) : undefined;
-    const nivoClick = onClick ? onClick(cell) : undefined;
+    const handlers = React.useMemo(() => ({
+      onMouseEnter: onMouseEnter ? onMouseEnter(cell) : undefined,
+      onMouseMove: onMouseMove ? onMouseMove(cell) : undefined,
+      onMouseLeave: onMouseLeave ? onMouseLeave(cell) : undefined,
+      onClick: onClick ? onClick(cell) : undefined,
+    }), [cell, onMouseEnter, onMouseMove, onMouseLeave, onClick]);
 
     const handleMouseEnter = (e: React.MouseEvent) => {
       setHoveredCell({ serieId: cell.serieId, dataX: cell.data.x });
-      if (nivoMouseEnter) nivoMouseEnter(e);
+      if (handlers.onMouseEnter) handlers.onMouseEnter(e);
     };
     const handleMouseMove = (e: React.MouseEvent) => {
-      if (nivoMouseMove) nivoMouseMove(e);
+      if (handlers.onMouseMove) handlers.onMouseMove(e);
     };
     const handleMouseLeave = (e: React.MouseEvent) => {
       setHoveredCell(null);
-      if (nivoMouseLeave) nivoMouseLeave(e);
+      if (handlers.onMouseLeave) handlers.onMouseLeave(e);
     };
     const handleClick = (e: React.MouseEvent) => {
       handleCellClick(cell);
-      if (nivoClick) nivoClick(e);
+      if (handlers.onClick) handlers.onClick(e);
     };
 
     if (isMultiColor && isProductMode) {
@@ -646,7 +648,7 @@ const ProductUsageHeatmap: React.FC<ProductUsageHeatmapProps> = ({
         )}
       </g>
     );
-  }, [colorPalette, matrixMode, usageAreaColumns, getColumnColor, maxValue, handleCellClick]);
+  };
 
   const HighlightLayer = useCallback(({ cells }: any) => {
     if (!hoveredCell) return null;
