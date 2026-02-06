@@ -8,6 +8,7 @@ import { registerObjectStorageRoutes } from "./replit_integrations/object_storag
 import { startScheduledBackups, initializeBackupService } from "./backupService";
 import { registerAuthRoutes } from "./authRoutes";
 import { bootstrapAdminUser } from "./authService";
+import { registerSystemRoutes } from "./systemRoutes";
 
 const rootDir = process.cwd();
 
@@ -44,6 +45,7 @@ app.get("/", (req, res, next) => {
 registerAuthRoutes(app);
 registerObjectStorageRoutes(app);
 registerRoutes(app);
+registerSystemRoutes(app);
 
 function findDistPath(): string {
   const candidates = [

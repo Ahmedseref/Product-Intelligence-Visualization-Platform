@@ -15,6 +15,7 @@ import FloatingNotesWidget from './components/FloatingNotesWidget';
 import Settings from './components/Settings';
 import Login from './components/Login';
 import ChangePassword from './components/ChangePassword';
+import SystemBuilder from './components/systemBuilder/SystemBuilder';
 import { api, authApi, setAuthToken, initAuthToken, AuthUser } from './client/api';
 import { LogOut, PanelLeftClose, PanelLeftOpen } from 'lucide-react';
 
@@ -867,6 +868,9 @@ const App: React.FC = () => {
                 onUpdateSupplier={updateSupplier}
                 onDeleteSupplier={deleteSupplier}
               />
+            )}
+            {viewMode === 'system-builder' && (
+              <SystemBuilder products={products} />
             )}
             {viewMode === 'settings' && (
               <Settings

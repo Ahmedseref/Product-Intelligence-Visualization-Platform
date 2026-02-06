@@ -21,7 +21,8 @@ import {
   DollarSign,
   GitBranch,
   ChevronRight,
-  FolderTree
+  FolderTree,
+  Combine
 } from 'lucide-react';
 
 export const ICONS = {
@@ -47,7 +48,8 @@ export const ICONS = {
   Hierarchy: <GitBranch size={20} />,
   Taxonomy: <FolderTree size={20} />,
   Tree: <FolderTree size={20} />,
-  Package: <Package size={20} />
+  Package: <Package size={20} />,
+  SystemBuilder: <Combine size={20} />
 };
 
 export const SECTORS = ['Retail', 'Industrial', 'Chemical', 'Textile', 'Food & Beverage', 'Electronics'];

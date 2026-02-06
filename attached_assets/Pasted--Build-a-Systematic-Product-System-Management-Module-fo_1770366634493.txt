@@ -1,0 +1,345 @@
+
+
+Build a **Systematic Product & System Management Module** for a web application designed to manage **construction chemicals, flooring systems, and waterproofing systems**.
+The module must support structured product-system relationships, dynamic taxonomy, advanced visualization, and export-ready system generation.
+
+The implementation must integrate with the existing app architecture and use:
+
+* React + TypeScript frontend
+* Nivo Charts for all visualizations (including Heatmap)
+* Existing Taxonomy Builder
+* Existing Product Inventory
+* REST or GraphQL API backend
+* Database: PostgreSQL or equivalent relational DB
+
+---
+
+## 🧱 1. DATA ARCHITECTURE
+
+### 1.1 System Entity
+
+Represents a full technical system (Epoxy SL System, Polyurea Waterproofing System, etc.).
+
+Fields:
+
+```
+system_id (UUID, PK)
+name (TEXT)
+description (TEXT)
+typical_uses (TEXT)
+sector_mapping (JSONB)
+created_at
+updated_at
+```
+
+---
+
+### 1.2 System Layer Entity
+
+Represents system build-up layers.
+
+```
+layer_id (UUID, PK)
+system_id (UUID, FK)
+layer_name (TEXT)
+order_sequence (INT)
+notes (TEXT optional)
+```
+
+Rules:
+
+* Layers must be sortable via drag-and-drop.
+* order_sequence auto-updates on reorder.
+
+---
+
+### 1.3 System Product Option Entity (Many-to-Many Junction)
+
+Links products to layers.
+
+```
+id (UUID PK)
+system_layer_id (UUID FK)
+product_id (UUID FK)
+benefit (TEXT)
+is_default (BOOLEAN)
+created_at
+```
+
+Rules:
+
+* Multiple products allowed per layer.
+* One or more defaults allowed.
+* Inline editing supported.
+
+---
+
+### 1.4 Sector Entity (Optional)
+
+```
+sector_id (UUID PK)
+sector_name (TEXT)
+description (TEXT optional)
+```
+
+Used for:
+
+* filtering
+* visualization axis switching
+
+---
+
+## ⚙️ 2. SYSTEM BUILD-UP LOGIC
+
+Workflow Engine:
+
+1. User selects System
+2. Fetch Layers ordered by order_sequence
+3. For each layer:
+
+```
+SELECT products
+FROM system_product_options
+JOIN products
+WHERE layer_id = ?
+```
+
+4. Render Build-Up Structure:
+
+```
+System
+ ├─ Layer
+ │   ├─ Product Option
+ │   ├─ Benefit
+ │   └─ Default Flag
+```
+
+5. Allow:
+
+* Export to PDF
+* Export to Word
+* Export JSON
+* Export CSV
+
+---
+
+## 🧩 3. TAXONOMY INTEGRATION
+
+Taxonomy Builder already supports deep hierarchy.
+
+Enhance:
+
+* Unlimited depth branch selection
+* Product assignment to deepest node
+* Dynamic column generation in Inventory
+
+Example hierarchy:
+
+```
+Sector > Category > Subcategory > Custom > Technical Level > ...
+```
+
+Requirements:
+
+* Product selector uses recursive tree dropdown
+* Inventory supports inline taxonomy editing
+* System Builder filters products based on taxonomy
+
+---
+
+## 📊 4. VISUALIZATION DASHBOARD (NIVO ONLY)
+
+All charts MUST use:
+
+```
+@nivo/bar
+@nivo/heatmap
+@nivo/treemap
+@nivo/sunburst
+@nivo/network
+```
+
+---
+
+### 4.1 Product Utilization Frequency
+
+Type:
+
+```
+Nivo Horizontal Bar
+```
+
+Data:
+
+```
+product_name vs number_of_system_layers_used
+```
+
+---
+
+### 4.2 System Complexity
+
+Type:
+
+```
+Nivo Vertical Bar
+```
+
+Metric:
+
+```
+number_of_product_options per system
+```
+
+---
+
+### 4.3 Layer Distribution
+
+Type:
+
+```
+Nivo Stacked Bar
+```
+
+Display:
+
+```
+Prime / Base / Top Coat distribution
+```
+
+---
+
+### 4.4 Product Matrix Heatmap
+
+Use Existing Heatmap Component.
+
+User Axis Switch Options:
+
+```
+Product → System
+Product → Sector
+Sector → System
+Layer → Product
+System → Layer
+```
+
+Controls:
+
+* axis dropdown
+* value metric dropdown
+* clustering toggle
+* search filter
+
+---
+
+## 🖥️ 5. SYSTEM BUILDER UX
+
+Interface Layout:
+
+LEFT PANEL:
+
+* System Tree
+* Layer Order Drag List
+
+CENTER:
+
+* Layer Editor
+* Product Assignment
+* Benefit Editor
+
+RIGHT:
+
+* Live Visualization Preview
+* System Summary
+* Export Buttons
+
+Features:
+
+* drag & drop layers
+* drag & drop products
+* inline editing
+* live system preview
+* auto-save drafts
+* version snapshot creation
+
+---
+
+## 🔐 6. DATA SAFETY
+
+Implement:
+
+* Versioning
+* Auto Backup
+* Change History
+* Rollback to Previous Version
+
+Storage Rules:
+
+* compress JSON snapshots
+* store delta changes
+* allow export backup file
+
+---
+
+## 🔄 7. DATA INGESTION
+
+Support:
+
+* manual entry
+* CSV import
+* JSON import
+* product bulk mapping
+
+Include:
+
+* validation engine
+* duplicate detection
+* missing layer warnings
+
+---
+
+## 📑 8. REPORT GENERATION
+
+Generate:
+
+* System Specification Sheet
+* Product Technical Summary
+* Layer Build-Up Diagram
+
+Export Formats:
+
+```
+PDF
+DOCX
+Excel
+JSON
+```
+
+---
+
+## 🚀 9. PERFORMANCE REQUIREMENTS
+
+* Lazy loading systems
+* Indexed DB queries
+* Cached taxonomy tree
+* Virtualized product lists
+* Websocket updates optional
+* Heatmap virtualization for large data
+
+---
+
+## 🎯 FINAL OUTPUT
+
+Replit Agent must deliver:
+
+1. Full Database Schema
+2. Backend API Structure
+3. React Component Structure
+4. Nivo Visualization Components
+5. System Builder UI
+6. Export Engine
+7. Versioning System
+8. Taxonomy Integration
+9. Data Transformation Logic
+10. Deployment-ready Module
+

@@ -156,6 +156,62 @@ export const stockCodeHistory = pgTable("stock_code_history", {
   changedAt: timestamp("changed_at").defaultNow(),
 });
 
+export const sectors = pgTable("sectors", {
+  id: serial("id").primaryKey(),
+  sectorId: varchar("sector_id", { length: 100 }).notNull().unique(),
+  name: varchar("name", { length: 255 }).notNull(),
+  description: text("description"),
+  isActive: boolean("is_active").default(true),
+  sortOrder: integer("sort_order").default(0),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
+export const systems = pgTable("systems", {
+  id: serial("id").primaryKey(),
+  systemId: varchar("system_id", { length: 100 }).notNull().unique(),
+  name: varchar("name", { length: 255 }).notNull(),
+  description: text("description"),
+  typicalUses: text("typical_uses"),
+  sectorMapping: jsonb("sector_mapping").default([]),
+  status: varchar("status", { length: 20 }).default("draft"),
+  version: integer("version").default(1),
+  isActive: boolean("is_active").default(true),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
+export const systemLayers = pgTable("system_layers", {
+  id: serial("id").primaryKey(),
+  layerId: varchar("layer_id", { length: 100 }).notNull().unique(),
+  systemId: varchar("system_id", { length: 100 }).notNull(),
+  layerName: varchar("layer_name", { length: 255 }).notNull(),
+  orderSequence: integer("order_sequence").notNull().default(0),
+  notes: text("notes"),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
+export const systemProductOptions = pgTable("system_product_options", {
+  id: serial("id").primaryKey(),
+  optionId: varchar("option_id", { length: 100 }).notNull().unique(),
+  layerId: varchar("layer_id", { length: 100 }).notNull(),
+  productId: varchar("product_id", { length: 100 }).notNull(),
+  benefit: text("benefit"),
+  isDefault: boolean("is_default").default(false),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+export const systemHistory = pgTable("system_history", {
+  id: serial("id").primaryKey(),
+  systemId: varchar("system_id", { length: 100 }).notNull(),
+  version: integer("version").notNull(),
+  snapshotData: jsonb("snapshot_data").notNull(),
+  changeDescription: text("change_description"),
+  changedBy: varchar("changed_by", { length: 255 }),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
 export const appSettings = pgTable("app_settings", {
   id: serial("id").primaryKey(),
   key: varchar("key", { length: 100 }).notNull().unique(),
@@ -216,6 +272,40 @@ export const productsRelations = relations(products, ({ one }) => ({
   }),
 }));
 
+export const sectorsRelations = relations(sectors, ({ }) => ({
+}));
+
+export const systemsRelations = relations(systems, ({ many }) => ({
+  layers: many(systemLayers),
+  history: many(systemHistory),
+}));
+
+export const systemLayersRelations = relations(systemLayers, ({ one, many }) => ({
+  system: one(systems, {
+    fields: [systemLayers.systemId],
+    references: [systems.systemId],
+  }),
+  productOptions: many(systemProductOptions),
+}));
+
+export const systemProductOptionsRelations = relations(systemProductOptions, ({ one }) => ({
+  layer: one(systemLayers, {
+    fields: [systemProductOptions.layerId],
+    references: [systemLayers.layerId],
+  }),
+  product: one(products, {
+    fields: [systemProductOptions.productId],
+    references: [products.productId],
+  }),
+}));
+
+export const systemHistoryRelations = relations(systemHistory, ({ one }) => ({
+  system: one(systems, {
+    fields: [systemHistory.systemId],
+    references: [systems.systemId],
+  }),
+}));
+
 export type Supplier = typeof suppliers.$inferSelect;
 export type InsertSupplier = typeof suppliers.$inferInsert;
 export type MasterProduct = typeof masterProducts.$inferSelect;
@@ -240,3 +330,13 @@ export type StockCodeHistory = typeof stockCodeHistory.$inferSelect;
 export type InsertStockCodeHistory = typeof stockCodeHistory.$inferInsert;
 export type User = typeof users.$inferSelect;
 export type InsertUser = typeof users.$inferInsert;
+export type Sector = typeof sectors.$inferSelect;
+export type InsertSector = typeof sectors.$inferInsert;
+export type System = typeof systems.$inferSelect;
+export type InsertSystem = typeof systems.$inferInsert;
+export type SystemLayer = typeof systemLayers.$inferSelect;
+export type InsertSystemLayer = typeof systemLayers.$inferInsert;
+export type SystemProductOption = typeof systemProductOptions.$inferSelect;
+export type InsertSystemProductOption = typeof systemProductOptions.$inferInsert;
+export type SystemHistory = typeof systemHistory.$inferSelect;
+export type InsertSystemHistory = typeof systemHistory.$inferInsert;

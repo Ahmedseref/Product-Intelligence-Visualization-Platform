@@ -146,7 +146,87 @@ export interface ChartConfig {
   aggregation: AggregationMethod;
 }
 
-export type ViewMode = 'dashboard' | 'inventory' | 'visualize' | 'add-product' | 'taxonomy-manager' | 'suppliers' | 'settings';
+export interface Sector {
+  id: number;
+  sectorId: string;
+  name: string;
+  description?: string;
+  isActive: boolean;
+  sortOrder: number;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface SystemData {
+  id: number;
+  systemId: string;
+  name: string;
+  description?: string;
+  typicalUses?: string;
+  sectorMapping: string[];
+  status: string;
+  version: number;
+  isActive: boolean;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface SystemLayer {
+  id: number;
+  layerId: string;
+  systemId: string;
+  layerName: string;
+  orderSequence: number;
+  notes?: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface SystemProductOption {
+  id: number;
+  optionId: string;
+  layerId: string;
+  productId: string;
+  benefit?: string;
+  isDefault: boolean;
+  createdAt: string;
+  productName?: string;
+  productStockCode?: string;
+  productSupplier?: string;
+}
+
+export interface SystemLayerWithProducts extends SystemLayer {
+  productOptions: SystemProductOption[];
+}
+
+export interface SystemFull extends SystemData {
+  layers: SystemLayerWithProducts[];
+}
+
+export interface SystemHistoryEntry {
+  id: number;
+  systemId: string;
+  version: number;
+  snapshotData: any;
+  changeDescription?: string;
+  changedBy?: string;
+  createdAt: string;
+}
+
+export interface SystemStats {
+  totalSystems: number;
+  totalLayers: number;
+  totalOptions: number;
+  totalSectors: number;
+  productUtilization: Record<string, number>;
+  systemComplexity: { systemId: string; name: string; layerCount: number; optionCount: number }[];
+  layerDistribution: Record<string, number>;
+  productSystemMatrix: { productId: string; systemId: string; systemName: string; count: number }[];
+  layerProductMatrix: { layerName: string; productId: string; count: number }[];
+  systemLayerMatrix: { systemName: string; layerName: string; productCount: number }[];
+}
+
+export type ViewMode = 'dashboard' | 'inventory' | 'visualize' | 'add-product' | 'taxonomy-manager' | 'suppliers' | 'settings' | 'system-builder';
 export type UserRole = 'Admin' | 'Editor' | 'Viewer';
 
 export interface User {

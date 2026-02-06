@@ -593,3 +593,175 @@ export const authApi = {
     }
   },
 };
+
+export const systemsApi = {
+  getSectors: async () => {
+    const response = await fetch(`${API_BASE}/sectors`, { headers: getAuthHeaders() });
+    if (!response.ok) throw new Error('Failed to fetch sectors');
+    return response.json();
+  },
+  createSector: async (data: { name: string; description?: string }) => {
+    const response = await fetch(`${API_BASE}/sectors`, {
+      method: 'POST', headers: { ...getAuthHeaders(), 'Content-Type': 'application/json' },
+      body: JSON.stringify(data),
+    });
+    if (!response.ok) throw new Error('Failed to create sector');
+    return response.json();
+  },
+  updateSector: async (sectorId: string, data: Partial<{ name: string; description?: string }>) => {
+    const response = await fetch(`${API_BASE}/sectors/${sectorId}`, {
+      method: 'PUT', headers: { ...getAuthHeaders(), 'Content-Type': 'application/json' },
+      body: JSON.stringify(data),
+    });
+    if (!response.ok) throw new Error('Failed to update sector');
+    return response.json();
+  },
+  deleteSector: async (sectorId: string) => {
+    const response = await fetch(`${API_BASE}/sectors/${sectorId}`, {
+      method: 'DELETE', headers: getAuthHeaders(),
+    });
+    if (!response.ok) throw new Error('Failed to delete sector');
+    return response.json();
+  },
+
+  getSystems: async () => {
+    const response = await fetch(`${API_BASE}/systems`, { headers: getAuthHeaders() });
+    if (!response.ok) throw new Error('Failed to fetch systems');
+    return response.json();
+  },
+  getSystem: async (systemId: string) => {
+    const response = await fetch(`${API_BASE}/systems/${systemId}`, { headers: getAuthHeaders() });
+    if (!response.ok) throw new Error('Failed to fetch system');
+    return response.json();
+  },
+  getSystemFull: async (systemId: string) => {
+    const response = await fetch(`${API_BASE}/systems/${systemId}/full`, { headers: getAuthHeaders() });
+    if (!response.ok) throw new Error('Failed to fetch full system');
+    return response.json();
+  },
+  createSystem: async (data: { name: string; description?: string; typicalUses?: string; sectorMapping?: string[] }) => {
+    const response = await fetch(`${API_BASE}/systems`, {
+      method: 'POST', headers: { ...getAuthHeaders(), 'Content-Type': 'application/json' },
+      body: JSON.stringify(data),
+    });
+    if (!response.ok) throw new Error('Failed to create system');
+    return response.json();
+  },
+  updateSystem: async (systemId: string, data: Partial<{ name: string; description?: string; typicalUses?: string; sectorMapping?: string[]; status?: string }>) => {
+    const response = await fetch(`${API_BASE}/systems/${systemId}`, {
+      method: 'PUT', headers: { ...getAuthHeaders(), 'Content-Type': 'application/json' },
+      body: JSON.stringify(data),
+    });
+    if (!response.ok) throw new Error('Failed to update system');
+    return response.json();
+  },
+  deleteSystem: async (systemId: string) => {
+    const response = await fetch(`${API_BASE}/systems/${systemId}`, {
+      method: 'DELETE', headers: getAuthHeaders(),
+    });
+    if (!response.ok) throw new Error('Failed to delete system');
+    return response.json();
+  },
+
+  getLayers: async (systemId: string) => {
+    const response = await fetch(`${API_BASE}/system-layers/${systemId}`, { headers: getAuthHeaders() });
+    if (!response.ok) throw new Error('Failed to fetch layers');
+    return response.json();
+  },
+  createLayer: async (data: { systemId: string; layerName: string; orderSequence?: number; notes?: string }) => {
+    const response = await fetch(`${API_BASE}/system-layers`, {
+      method: 'POST', headers: { ...getAuthHeaders(), 'Content-Type': 'application/json' },
+      body: JSON.stringify(data),
+    });
+    if (!response.ok) throw new Error('Failed to create layer');
+    return response.json();
+  },
+  updateLayer: async (layerId: string, data: Partial<{ layerName: string; notes?: string; orderSequence?: number }>) => {
+    const response = await fetch(`${API_BASE}/system-layers/${layerId}`, {
+      method: 'PUT', headers: { ...getAuthHeaders(), 'Content-Type': 'application/json' },
+      body: JSON.stringify(data),
+    });
+    if (!response.ok) throw new Error('Failed to update layer');
+    return response.json();
+  },
+  reorderLayers: async (systemId: string, layerOrder: string[]) => {
+    const response = await fetch(`${API_BASE}/system-layers/reorder/${systemId}`, {
+      method: 'PUT', headers: { ...getAuthHeaders(), 'Content-Type': 'application/json' },
+      body: JSON.stringify({ layerOrder }),
+    });
+    if (!response.ok) throw new Error('Failed to reorder layers');
+    return response.json();
+  },
+  deleteLayer: async (layerId: string) => {
+    const response = await fetch(`${API_BASE}/system-layers/${layerId}`, {
+      method: 'DELETE', headers: getAuthHeaders(),
+    });
+    if (!response.ok) throw new Error('Failed to delete layer');
+    return response.json();
+  },
+
+  getProductOptions: async (layerId: string) => {
+    const response = await fetch(`${API_BASE}/system-product-options/${layerId}`, { headers: getAuthHeaders() });
+    if (!response.ok) throw new Error('Failed to fetch product options');
+    return response.json();
+  },
+  addProductOption: async (data: { layerId: string; productId: string; benefit?: string; isDefault?: boolean }) => {
+    const response = await fetch(`${API_BASE}/system-product-options`, {
+      method: 'POST', headers: { ...getAuthHeaders(), 'Content-Type': 'application/json' },
+      body: JSON.stringify(data),
+    });
+    if (!response.ok) throw new Error('Failed to add product option');
+    return response.json();
+  },
+  updateProductOption: async (optionId: string, data: Partial<{ benefit?: string; isDefault?: boolean }>) => {
+    const response = await fetch(`${API_BASE}/system-product-options/${optionId}`, {
+      method: 'PUT', headers: { ...getAuthHeaders(), 'Content-Type': 'application/json' },
+      body: JSON.stringify(data),
+    });
+    if (!response.ok) throw new Error('Failed to update product option');
+    return response.json();
+  },
+  removeProductOption: async (optionId: string) => {
+    const response = await fetch(`${API_BASE}/system-product-options/${optionId}`, {
+      method: 'DELETE', headers: getAuthHeaders(),
+    });
+    if (!response.ok) throw new Error('Failed to remove product option');
+    return response.json();
+  },
+
+  getStats: async () => {
+    const response = await fetch(`${API_BASE}/systems/stats/overview`, { headers: getAuthHeaders() });
+    if (!response.ok) throw new Error('Failed to fetch stats');
+    return response.json();
+  },
+  createSnapshot: async (systemId: string, data?: { description?: string; changedBy?: string }) => {
+    const response = await fetch(`${API_BASE}/systems/${systemId}/snapshot`, {
+      method: 'POST', headers: { ...getAuthHeaders(), 'Content-Type': 'application/json' },
+      body: JSON.stringify(data || {}),
+    });
+    if (!response.ok) throw new Error('Failed to create snapshot');
+    return response.json();
+  },
+  getHistory: async (systemId: string) => {
+    const response = await fetch(`${API_BASE}/system-history/${systemId}`, { headers: getAuthHeaders() });
+    if (!response.ok) throw new Error('Failed to fetch history');
+    return response.json();
+  },
+  exportSystem: async (systemId: string, format: 'json' | 'csv' = 'json') => {
+    const response = await fetch(`${API_BASE}/systems/export/${systemId}?format=${format}`, { headers: getAuthHeaders() });
+    if (!response.ok) throw new Error('Failed to export system');
+    if (format === 'csv') {
+      const blob = await response.blob();
+      return blob;
+    }
+    return response.json();
+  },
+  importSystem: async (data: any) => {
+    const response = await fetch(`${API_BASE}/systems/import`, {
+      method: 'POST', headers: { ...getAuthHeaders(), 'Content-Type': 'application/json' },
+      body: JSON.stringify(data),
+    });
+    if (!response.ok) throw new Error('Failed to import system');
+    return response.json();
+  },
+};

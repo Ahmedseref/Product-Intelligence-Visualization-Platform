@@ -52,6 +52,23 @@ I prefer detailed explanations and thorough code comments. I value iterative dev
         - Backend: server/stockCodeService.ts handles generation, validation, preview, migration, bulk operations
         - Database: products.stockCode, products.colorId, treeNodes.branchCode, colors table, stock_code_history table
 
+    - **Systematic Product & System Management Module**: Full system builder for construction chemicals, flooring, and waterproofing systems with:
+        - 3-panel layout: system list, layer editor, and live build-up preview
+        - System CRUD with status management (draft/active/archived)
+        - System layers with drag-and-drop reorder and CRUD
+        - Product assignment to layers with benefits, default product marking
+        - Version snapshots and change history tracking
+        - Export engine (JSON, CSV) with system spec sheets
+        - Import engine (JSON, CSV) with validation preview, error/warning display
+        - Analytics dashboard with Nivo charts:
+            - Product Utilization Frequency (horizontal bar)
+            - System Complexity (grouped bar)
+            - Layer Type Distribution (vertical bar)
+            - Product Matrix Heatmap with axis switching (Product→System, Product→Sector, Layer→Product, System→Layer)
+        - Database: systems, system_layers, system_product_options, sectors, system_history tables
+        - Backend: server/systemRoutes.ts with full REST API
+        - Frontend: components/systemBuilder/ (SystemBuilder, SystemDashboard, SystemImport)
+
 ### Authentication
 - **Default Credentials**: admin / 1111 (must change on first login)
 - **Password Requirements**: Minimum 6 characters
@@ -73,7 +90,7 @@ I prefer detailed explanations and thorough code comments. I value iterative dev
 - **React**: Frontend library.
 - **Vite**: Frontend build tool.
 - **Tailwind CSS**: Utility-first CSS framework (via CDN).
-- **Nivo**: Data visualization library (bar, line, pie, heatmap charts).
+- **Nivo**: Data visualization library (bar, line, pie, heatmap, treemap, sunburst, network charts).
 - **Lucide React**: Icon library.
 - **Express.js**: Backend web application framework.
 - **Drizzle ORM**: TypeScript ORM for PostgreSQL.
