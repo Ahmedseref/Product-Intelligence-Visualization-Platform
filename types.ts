@@ -226,7 +226,7 @@ export interface SystemStats {
   systemLayerMatrix: { systemName: string; layerName: string; productCount: number }[];
 }
 
-export type ViewMode = 'dashboard' | 'inventory' | 'visualize' | 'add-product' | 'taxonomy-manager' | 'suppliers' | 'settings' | 'system-builder' | 'technical-intelligence';
+export type ViewMode = 'technical-intelligence' | 'inventory' | 'add-product' | 'taxonomy-manager' | 'suppliers' | 'settings' | 'system-builder';
 export type UserRole = 'Admin' | 'Editor' | 'Viewer';
 
 export interface User {

@@ -3,9 +3,7 @@ import { Product, ViewMode, User, CustomField, TreeNode, Supplier, SupplierProdu
 import { INITIAL_PRODUCTS, INITIAL_TREE_NODES } from './mockData';
 import { ICONS } from './constants';
 import Sidebar from './components/Sidebar';
-import Dashboard from './components/Dashboard';
 import ProductList from './components/ProductList';
-import Visualize from './components/Visualize';
 import ProductForm from './components/ProductForm';
 import ProductTree from './components/ProductTree';
 import TaxonomyBuilder from './components/TaxonomyBuilder';
@@ -26,7 +24,7 @@ const App: React.FC = () => {
   const [authError, setAuthError] = useState<string | null>(null);
   const [showChangePassword, setShowChangePassword] = useState(false);
 
-  const [viewMode, setViewMode] = useState<ViewMode>('dashboard');
+  const [viewMode, setViewMode] = useState<ViewMode>('technical-intelligence');
   const [products, setProducts] = useState<Product[]>(INITIAL_PRODUCTS);
   const [treeNodes, setTreeNodes] = useState<TreeNode[]>(INITIAL_TREE_NODES);
   const [suppliers, setSuppliers] = useState<Supplier[]>([]);
@@ -87,7 +85,7 @@ const App: React.FC = () => {
     await authApi.logout();
     setAuthUser(null);
     setShowChangePassword(false);
-    setViewMode('dashboard');
+    setViewMode('technical-intelligence');
   };
 
   const handleChangePassword = async (oldPassword: string, newPassword: string) => {
@@ -726,7 +724,7 @@ const App: React.FC = () => {
         </header>
 
         <div className="flex-1 flex overflow-hidden">
-          {(viewMode === 'inventory' || viewMode === 'dashboard') && (
+          {viewMode === 'inventory' && (
             <div className="relative flex flex-shrink-0">
               <aside 
                 className={`border-r border-slate-200 bg-white flex-shrink-0 relative transition-all duration-300 ease-in-out overflow-hidden hidden ${showTaxonomyPanel ? 'xl:flex' : ''}`}
@@ -767,9 +765,6 @@ const App: React.FC = () => {
           )}
 
           <main className="flex-1 overflow-y-auto p-6 scroll-smooth">
-            {viewMode === 'dashboard' && (
-              <Dashboard products={filteredProducts} />
-            )}
             {viewMode === 'inventory' && (
               <ProductList 
                 products={filteredProducts} 
@@ -784,21 +779,6 @@ const App: React.FC = () => {
                 onAddTreeNode={addTreeNode}
                 usageAreas={usageAreas}
                 colors={colorsList}
-              />
-            )}
-            {viewMode === 'visualize' && (
-              <Visualize 
-                products={filteredProducts}
-                suppliers={suppliers}
-                supplierProducts={supplierProducts}
-                treeNodes={treeNodes}
-                customFields={customFieldConfigs}
-                currentUser={currentUser}
-                usageAreas={usageAreas}
-                onProductUpdate={updateProduct}
-                onProductDelete={deleteProduct}
-                onAddFieldDefinition={addCustomFieldDefinition}
-                onAddTreeNode={addTreeNode}
               />
             )}
             {viewMode === 'add-product' && (
@@ -874,7 +854,18 @@ const App: React.FC = () => {
               <SystemBuilder products={products} />
             )}
             {viewMode === 'technical-intelligence' && (
-              <TechnicalIntelligenceDashboard />
+              <TechnicalIntelligenceDashboard 
+                products={filteredProducts}
+                treeNodes={treeNodes}
+                suppliers={suppliers}
+                customFields={customFieldConfigs}
+                currentUser={currentUser}
+                usageAreas={usageAreas}
+                onProductUpdate={updateProduct}
+                onProductDelete={deleteProduct}
+                onAddFieldDefinition={addCustomFieldDefinition}
+                onAddTreeNode={addTreeNode}
+              />
             )}
             {viewMode === 'settings' && (
               <Settings

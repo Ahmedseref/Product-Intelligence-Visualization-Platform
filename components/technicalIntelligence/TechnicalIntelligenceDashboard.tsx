@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback, Component, ErrorInfo, ReactNode } from 'react';
+import React, { useState, useEffect, useCallback, useMemo, Component, ErrorInfo, ReactNode } from 'react';
 import { ResponsiveBar } from '@nivo/bar';
 import { ResponsivePie } from '@nivo/pie';
 import { ResponsiveHeatMap } from '@nivo/heatmap';
@@ -7,22 +7,21 @@ import { ResponsiveScatterPlot } from '@nivo/scatterplot';
 import { ResponsiveTreeMap } from '@nivo/treemap';
 import { nivoTheme, CHART_COLORS } from '../charts/NivoChartWrapper';
 import { analyticsApi } from '../../client/api';
+import { Product, TreeNode, Supplier, CustomField, User } from '../../types';
+import ProductUsageHeatmap from '../visualizations/ProductUsageHeatmap';
 import {
   BarChart3, TrendingUp, Package, Users, Layers, Grid3X3,
   RefreshCw, Download, Filter, ChevronDown, Activity, Target,
   Radar, GitBranch, Award, Loader2, AlertCircle, X,
-  Building2, Boxes, Network, Cpu, Shield, Zap
+  Building2, Boxes, Network, Cpu, Shield, Zap, PieChart
 } from 'lucide-react';
 
-class DashboardErrorBoundary extends Component<
-  { children: ReactNode },
-  { hasError: boolean; error: Error | null }
-> {
-  constructor(props: { children: ReactNode }) {
-    super(props);
-    this.state = { hasError: false, error: null };
-  }
-  static getDerivedStateFromError(error: Error) {
+interface ErrorBoundaryProps { children: ReactNode }
+interface ErrorBoundaryState { hasError: boolean; error: Error | null }
+
+class DashboardErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundaryState> {
+  state: ErrorBoundaryState = { hasError: false, error: null };
+  static getDerivedStateFromError(error: Error): ErrorBoundaryState {
     return { hasError: true, error };
   }
   componentDidCatch(error: Error, errorInfo: ErrorInfo) {
@@ -40,7 +39,7 @@ class DashboardErrorBoundary extends Component<
             </p>
             <p className="text-xs text-red-400 mb-4 font-mono bg-red-50 p-2 rounded">{this.state.error?.message}</p>
             <button
-              onClick={() => this.setState({ hasError: false, error: null })}
+              onClick={() => { (this as any).setState({ hasError: false, error: null }); }}
               className="px-4 py-2 text-sm bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
             >
               Try Again
@@ -49,11 +48,11 @@ class DashboardErrorBoundary extends Component<
         </div>
       );
     }
-    return this.props.children;
+    return (this as any).props.children;
   }
 }
 
-type DashboardTab = 'overview' | 'product' | 'system' | 'supplier-heatmap' | 'taxonomy' | 'coverage' | 'benchmark';
+type DashboardTab = 'overview' | 'product' | 'system' | 'supplier-heatmap' | 'taxonomy' | 'coverage' | 'benchmark' | 'usage-density';
 
 const TAB_CONFIG: { id: DashboardTab; label: string; icon: React.ReactNode }[] = [
   { id: 'overview', label: 'Overview', icon: <Activity size={16} /> },
@@ -61,11 +60,36 @@ const TAB_CONFIG: { id: DashboardTab; label: string; icon: React.ReactNode }[] =
   { id: 'system', label: 'System Intelligence', icon: <Layers size={16} /> },
   { id: 'supplier-heatmap', label: 'Supplier Matrix', icon: <Grid3X3 size={16} /> },
   { id: 'taxonomy', label: 'Taxonomy & Supplier', icon: <GitBranch size={16} /> },
+  { id: 'usage-density', label: 'Usage Density', icon: <PieChart size={16} /> },
   { id: 'coverage', label: 'Technical Coverage', icon: <Radar size={16} /> },
   { id: 'benchmark', label: 'Competitive Benchmark', icon: <Award size={16} /> },
 ];
 
-const TechnicalIntelligenceDashboard: React.FC = () => {
+interface TechnicalIntelligenceDashboardProps {
+  products?: Product[];
+  treeNodes?: TreeNode[];
+  suppliers?: Supplier[];
+  customFields?: CustomField[];
+  currentUser?: User;
+  usageAreas?: string[];
+  onProductUpdate?: (product: Product) => void;
+  onProductDelete?: (productId: string) => void;
+  onAddFieldDefinition?: (field: CustomField) => void;
+  onAddTreeNode?: (node: TreeNode) => void;
+}
+
+const TechnicalIntelligenceDashboard: React.FC<TechnicalIntelligenceDashboardProps> = ({
+  products = [],
+  treeNodes = [],
+  suppliers: suppliersProp = [],
+  customFields = [],
+  currentUser,
+  usageAreas = [],
+  onProductUpdate,
+  onProductDelete,
+  onAddFieldDefinition,
+  onAddTreeNode,
+}) => {
   const [activeTab, setActiveTab] = useState<DashboardTab>('overview');
   const [loading, setLoading] = useState(false);
   const [overviewData, setOverviewData] = useState<any>(null);
@@ -83,6 +107,29 @@ const TechnicalIntelligenceDashboard: React.FC = () => {
   const [activeFilters, setActiveFilters] = useState<{ supplier?: string; sector?: string; taxonomy?: string }>({});
 
   const activeFilterCount = Object.values(activeFilters).filter(Boolean).length;
+
+  const categoryDistribution = useMemo(() => {
+    if (!products || products.length === 0 || !treeNodes || treeNodes.length === 0) return [];
+    const rootNodes = treeNodes.filter(n => !n.parentId);
+    const getDescendantIds = (nodeId: string): string[] => {
+      const result = [nodeId];
+      const children = treeNodes.filter(n => n.parentId === nodeId);
+      for (const child of children) {
+        result.push(...getDescendantIds(child.id));
+      }
+      return result;
+    };
+    const distribution = rootNodes.map(root => {
+      const descendantIds = getDescendantIds(root.id);
+      const count = products.filter(p => p.nodeId && descendantIds.includes(p.nodeId)).length;
+      return { id: root.name, label: root.name, value: count };
+    }).filter(d => d.value > 0);
+    const uncategorized = products.filter(p => !p.nodeId).length;
+    if (uncategorized > 0) {
+      distribution.push({ id: 'Uncategorized', label: 'Uncategorized', value: uncategorized });
+    }
+    return distribution;
+  }, [products, treeNodes]);
 
   const loadTabData = useCallback(async (tab: DashboardTab) => {
     setLoading(true);
@@ -363,6 +410,50 @@ const TechnicalIntelligenceDashboard: React.FC = () => {
             </div>
           )}
         </div>
+
+        {categoryDistribution.length > 0 && (
+          <div className="bg-white rounded-xl border border-slate-200 p-4">
+            <div className="flex items-center justify-between mb-3">
+              <div>
+                <h3 className="text-sm font-bold text-slate-700">Category Distribution</h3>
+                <p className="text-xs text-slate-400 mt-0.5">Products distributed across top-level taxonomy branches</p>
+              </div>
+              <ChartExportBar chartId="category-dist-pie" csvData={categoryDistribution} csvFilename="category-distribution" />
+            </div>
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+              <div id="category-dist-pie" style={{ height: 320 }}>
+                <ResponsivePie
+                  data={categoryDistribution}
+                  margin={{ top: 30, right: 80, bottom: 30, left: 80 }}
+                  innerRadius={0.5}
+                  padAngle={1}
+                  cornerRadius={4}
+                  activeOuterRadiusOffset={8}
+                  colors={{ scheme: 'paired' }}
+                  borderWidth={1}
+                  borderColor={{ from: 'color', modifiers: [['darker', 0.2]] }}
+                  arcLinkLabelsSkipAngle={10}
+                  arcLinkLabelsTextColor="#334155"
+                  arcLinkLabelsThickness={2}
+                  arcLinkLabelsColor={{ from: 'color' }}
+                  arcLabelsSkipAngle={10}
+                  arcLabelsTextColor={{ from: 'color', modifiers: [['darker', 2]] }}
+                  theme={nivoTheme}
+                />
+              </div>
+              <div className="flex flex-col justify-center space-y-2">
+                {categoryDistribution.map((cat, i) => (
+                  <div key={cat.id} className="flex items-center gap-3 px-3 py-2 rounded-lg bg-slate-50 hover:bg-slate-100 transition-colors">
+                    <div className="w-3 h-3 rounded-full flex-shrink-0" style={{ backgroundColor: ['#a6cee3','#1f78b4','#b2df8a','#33a02c','#fb9a99','#e31a1c','#fdbf6f','#ff7f00','#cab2d6','#6a3d9a','#ffff99','#b15928'][i % 12] }} />
+                    <span className="text-xs font-medium text-slate-700 flex-1 truncate">{cat.label}</span>
+                    <span className="text-xs font-bold text-slate-600">{cat.value}</span>
+                    <span className="text-[10px] text-slate-400">({products.length > 0 ? Math.round((cat.value / products.length) * 100) : 0}%)</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+        )}
       </div>
     );
   };
@@ -914,6 +1005,28 @@ const TechnicalIntelligenceDashboard: React.FC = () => {
     );
   };
 
+  const renderUsageDensity = () => {
+    if (!products || products.length === 0) {
+      return <EmptyState message="No product data available for the Usage Density matrix" />;
+    }
+    return (
+      <div className="space-y-4">
+        <ProductUsageHeatmap
+          products={products}
+          treeNodes={treeNodes}
+          suppliers={suppliersProp}
+          customFields={customFields}
+          currentUser={currentUser}
+          usageAreas={usageAreas}
+          onProductUpdate={onProductUpdate}
+          onProductDelete={onProductDelete}
+          onAddFieldDefinition={onAddFieldDefinition}
+          onAddTreeNode={onAddTreeNode}
+        />
+      </div>
+    );
+  };
+
   const renderActiveTab = () => {
     if (loading && !overviewData && !productData && !systemData && !taxonomyData && !coverageData && !benchmarkData) {
       return <LoadingState />;
@@ -926,6 +1039,7 @@ const TechnicalIntelligenceDashboard: React.FC = () => {
       case 'taxonomy': return renderTaxonomySupplier();
       case 'coverage': return renderCoverage();
       case 'benchmark': return renderBenchmark();
+      case 'usage-density': return renderUsageDensity();
       default: return renderOverview();
     }
   };
@@ -1065,9 +1179,9 @@ const TechnicalIntelligenceDashboard: React.FC = () => {
   );
 };
 
-const TechnicalIntelligenceDashboardWithBoundary: React.FC = () => (
+const TechnicalIntelligenceDashboardWithBoundary: React.FC<TechnicalIntelligenceDashboardProps> = (props) => (
   <DashboardErrorBoundary>
-    <TechnicalIntelligenceDashboard />
+    <TechnicalIntelligenceDashboard {...props} />
   </DashboardErrorBoundary>
 );
 

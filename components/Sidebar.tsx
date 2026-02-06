@@ -11,13 +11,11 @@ interface SidebarProps {
 
 const Sidebar: React.FC<SidebarProps> = ({ currentView, setView, user }) => {
   const menuItems: { id: ViewMode; label: string; icon: React.ReactNode }[] = [
-    { id: 'dashboard', label: 'Dashboard', icon: ICONS.Dashboard },
+    { id: 'technical-intelligence', label: 'Intelligence Hub', icon: ICONS.TechIntelligence },
     { id: 'taxonomy-manager', label: 'Taxonomy Builder', icon: ICONS.Tree },
     { id: 'suppliers', label: 'Suppliers', icon: ICONS.Users },
     { id: 'inventory', label: 'Product Inventory', icon: ICONS.Inventory },
     { id: 'system-builder', label: 'System Builder', icon: ICONS.SystemBuilder },
-    { id: 'technical-intelligence', label: 'Tech Intelligence', icon: ICONS.TechIntelligence },
-    { id: 'visualize', label: 'Visualization', icon: ICONS.Visualize },
     { id: 'add-product', label: 'Add Product', icon: ICONS.Add },
   ];
 
