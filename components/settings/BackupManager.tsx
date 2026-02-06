@@ -299,41 +299,30 @@ export default function BackupManager() {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
-        <div>
-          <h2 className="text-xl font-semibold text-gray-900 flex items-center gap-2">
-            <Archive className="h-6 w-6 text-indigo-600" />
-            Backup & Versioning
-          </h2>
-          <p className="text-sm text-gray-500 mt-1">
-            Manage system backups with compression and point-in-time recovery
-          </p>
-        </div>
-        <div className="flex items-center gap-3">
-          <input
-            type="file"
-            ref={fileInputRef}
-            onChange={handleImport}
-            accept=".backup,.gz"
-            className="hidden"
-          />
-          <button
-            onClick={() => fileInputRef.current?.click()}
-            disabled={actionLoading}
-            className="flex items-center gap-2 px-4 py-2 text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 disabled:opacity-50"
-          >
-            <Upload className="h-4 w-4" />
-            Import
-          </button>
-          <button
-            onClick={() => setShowCreateModal(true)}
-            disabled={actionLoading}
-            className="flex items-center gap-2 px-4 py-2 text-white bg-indigo-600 rounded-lg hover:bg-indigo-700 disabled:opacity-50"
-          >
-            <Plus className="h-4 w-4" />
-            Create Backup
-          </button>
-        </div>
+      <div className="flex items-center justify-end gap-3">
+        <input
+          type="file"
+          ref={fileInputRef}
+          onChange={handleImport}
+          accept=".backup,.gz"
+          className="hidden"
+        />
+        <button
+          onClick={() => fileInputRef.current?.click()}
+          disabled={actionLoading}
+          className="flex items-center gap-2 px-4 py-2.5 text-slate-700 bg-white border border-slate-300 rounded-xl hover:bg-slate-50 disabled:opacity-50 transition-colors text-sm font-medium"
+        >
+          <Upload className="h-4 w-4" />
+          Import
+        </button>
+        <button
+          onClick={() => setShowCreateModal(true)}
+          disabled={actionLoading}
+          className="flex items-center gap-2 px-4 py-2.5 text-white bg-indigo-600 rounded-xl hover:bg-indigo-700 disabled:opacity-50 transition-colors text-sm font-medium shadow-sm"
+        >
+          <Plus className="h-4 w-4" />
+          Create Backup
+        </button>
       </div>
 
       <div className="grid grid-cols-3 gap-4">

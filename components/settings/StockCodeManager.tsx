@@ -428,8 +428,8 @@ const StockCodeManager: React.FC<StockCodeManagerProps> = ({ colors, onColorsCha
   ];
 
   return (
-    <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
-      <div className="p-6 border-b border-slate-100">
+    <div>
+      <div className="px-8 py-6 border-b border-slate-100 bg-gradient-to-r from-amber-50/50 to-transparent">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-3">
             <div className="p-2.5 bg-gradient-to-br from-amber-100 to-orange-100 rounded-xl">
@@ -452,7 +452,7 @@ const StockCodeManager: React.FC<StockCodeManagerProps> = ({ colors, onColorsCha
       </div>
 
       <div className="border-b border-slate-100">
-        <div className="flex gap-1 px-4 py-2 overflow-x-auto">
+        <div className="flex gap-1 px-6 py-2 overflow-x-auto">
           {tabs.map(tab => (
             <button
               key={tab.id}
@@ -470,7 +470,7 @@ const StockCodeManager: React.FC<StockCodeManagerProps> = ({ colors, onColorsCha
         </div>
       </div>
 
-      <div className="p-6">
+      <div className="p-8">
         {activeTab === 'overview' && stats && (
           <div className="space-y-6">
             <div className="p-4 bg-gradient-to-r from-amber-50 to-orange-50 border border-amber-200 rounded-xl">
