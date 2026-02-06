@@ -1110,14 +1110,15 @@ const ProductUsageHeatmap: React.FC<ProductUsageHeatmapProps> = ({
         >
           <ResponsiveHeatMap
             data={activeData}
-            margin={{ top: 120, right: 90, bottom: 30, left: leftMargin }}
+            margin={{ top: 20, right: 90, bottom: 120, left: leftMargin }}
             valueFormat=">-.0f"
-            axisTop={{
+            axisTop={null}
+            axisBottom={{
               tickSize: 5,
               tickPadding: 5,
               tickRotation: -55,
               legend: 'Usage Areas',
-              legendOffset: -55,
+              legendOffset: 90,
               legendPosition: 'middle'
             }}
             axisLeft={{
