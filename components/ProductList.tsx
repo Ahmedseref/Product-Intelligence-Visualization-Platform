@@ -195,6 +195,7 @@ const ProductList: React.FC<ProductListProps> = ({
   });
   const inputRef = useRef<HTMLInputElement>(null);
   const skipBlurRef = useRef(false);
+  const taxonomyCellRefs = useRef<Record<string, HTMLTableCellElement | null>>({});
   
   const [columnWidths, setColumnWidths] = useState<Record<ColumnKey, number>>({
     id: 180,
@@ -1305,35 +1306,58 @@ const ProductList: React.FC<ProductListProps> = ({
                     )}
                     {visibleColumns.has('taxonomyPath') && (
                       <td 
+                        ref={(el) => { taxonomyCellRefs.current[p.id] = el; }}
                         className="px-3 py-3 overflow-visible" 
                         style={{ width: columnWidths.taxonomyPath, minWidth: columnWidths.taxonomyPath, maxWidth: columnWidths.taxonomyPath, position: 'relative', zIndex: isEditing(p.id, 'taxonomyPath') ? 1000 : 'auto' }}
                         onClick={(e) => e.stopPropagation()}
                       >
                         {isEditing(p.id, 'taxonomyPath') ? (
-                          <div className="fixed bg-white border border-slate-300 rounded-lg shadow-2xl w-96 max-h-80 overflow-auto" style={{ zIndex: 9999 }}>
-                            <TaxonomyNodeSelector
-                              treeNodes={treeNodes}
-                              selectedNodeId={p.nodeId}
-                              onSelect={(nodeId, path) => {
-                                const updatedProduct = { ...p, nodeId };
-                                let sector = 'Unknown';
-                                let current = treeNodes.find(n => n.id === nodeId);
-                                while(current) {
-                                  if(!current.parentId) {
-                                    sector = current.name;
-                                    break;
-                                  }
-                                  current = treeNodes.find(n => n.id === current?.parentId);
-                                }
-                                updatedProduct.sector = sector;
-                                updatedProduct.category = path[path.length - 1] || 'Uncategorized';
-                                onUpdate(updatedProduct);
-                                setEditingCell(null);
-                              }}
-                              inline
-                              className="bg-white"
-                            />
-                          </div>
+                          (() => {
+                            const cellEl = taxonomyCellRefs.current[p.id];
+                            const rect = cellEl?.getBoundingClientRect();
+                            const viewportHeight = window.innerHeight;
+                            const spaceBelow = rect ? viewportHeight - rect.bottom : 300;
+                            const dropdownHeight = 320;
+                            const openUpward = spaceBelow < dropdownHeight && rect && rect.top > dropdownHeight;
+                            const posStyle: React.CSSProperties = {
+                              position: 'fixed' as const,
+                              zIndex: 9999,
+                              left: rect ? rect.left : undefined,
+                              width: 384,
+                              maxHeight: 320,
+                            };
+                            if (openUpward) {
+                              posStyle.bottom = rect ? viewportHeight - rect.top + 4 : undefined;
+                            } else {
+                              posStyle.top = rect ? rect.bottom + 4 : undefined;
+                            }
+                            return (
+                              <div className="bg-white border border-slate-300 rounded-lg shadow-2xl overflow-auto" style={posStyle}>
+                                <TaxonomyNodeSelector
+                                  treeNodes={treeNodes}
+                                  selectedNodeId={p.nodeId}
+                                  onSelect={(nodeId, path) => {
+                                    const updatedProduct = { ...p, nodeId };
+                                    let sector = 'Unknown';
+                                    let current = treeNodes.find(n => n.id === nodeId);
+                                    while(current) {
+                                      if(!current.parentId) {
+                                        sector = current.name;
+                                        break;
+                                      }
+                                      current = treeNodes.find(n => n.id === current?.parentId);
+                                    }
+                                    updatedProduct.sector = sector;
+                                    updatedProduct.category = path[path.length - 1] || 'Uncategorized';
+                                    onUpdate(updatedProduct);
+                                    setEditingCell(null);
+                                  }}
+                                  inline
+                                  className="bg-white"
+                                />
+                              </div>
+                            );
+                          })()
                         ) : (
                           <div 
                             className="flex items-center gap-2 cursor-pointer hover:bg-blue-50 rounded px-1 py-0.5 -mx-1"
