@@ -3,35 +3,39 @@ import { treeNodes, products, colors, stockCodeHistory } from "@shared/schema";
 import { eq } from "drizzle-orm";
 
 export function generateBranchCodeFromName(name: string, existingCodes: string[]): string {
-  const words = name.trim().toUpperCase().split(/\s+/);
-  let code = '';
+  const cleanName = name.trim().toUpperCase();
+  const words = cleanName.split(/\s+/).filter(w => w.length > 0);
+  
+  const candidates: string[] = [];
   
   if (words.length === 1) {
     const word = words[0];
+    candidates.push(word.substring(0, 2));
+    candidates.push(word.substring(0, 3));
     const consonants = word.replace(/[AEIOU]/g, '');
-    code = consonants.length >= 2 ? consonants.substring(0, 2) : word.substring(0, 2);
+    if (consonants.length >= 2) candidates.push(consonants.substring(0, 2));
+    if (consonants.length >= 3) candidates.push(consonants.substring(0, 3));
   } else {
-    code = words.map(w => w[0]).join('').substring(0, 5);
+    candidates.push(words.map(w => w[0]).join('').substring(0, 5));
+    if (words.length >= 2) {
+      candidates.push((words[0].substring(0, 1) + words[1].substring(0, 1)));
+      candidates.push((words[0].substring(0, 2) + words[1].substring(0, 1)));
+    }
+    const consonants = words[0].replace(/[AEIOU]/g, '');
+    if (consonants.length >= 2) candidates.push(consonants.substring(0, 2));
   }
   
-  code = code.substring(0, 5);
-  
-  if (!existingCodes.includes(code)) return code;
-  
-  const word = words[0].toUpperCase();
-  const consonants = word.replace(/[AEIOU]/g, '');
-  if (consonants.length >= 3) {
-    code = consonants.substring(0, 3);
-    if (!existingCodes.includes(code)) return code;
+  for (const c of candidates) {
+    if (c.length >= 2 && !existingCodes.includes(c)) return c;
   }
   
-  const base = code.substring(0, 4);
-  for (let i = 1; i <= 9; i++) {
+  const base = candidates[0] || cleanName.substring(0, 2);
+  for (let i = 1; i <= 99; i++) {
     const candidate = `${base}${i}`;
-    if (!existingCodes.includes(candidate)) return candidate;
+    if (candidate.length <= 5 && !existingCodes.includes(candidate)) return candidate;
   }
   
-  return `${code}${Date.now() % 100}`;
+  return `${base}${Date.now() % 100}`;
 }
 
 export function validateBranchCode(code: string): { valid: boolean; error?: string } {
