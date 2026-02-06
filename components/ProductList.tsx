@@ -1543,26 +1543,18 @@ const ProductList: React.FC<ProductListProps> = ({
                               if (allAreas.length === 0) {
                                 return <span className="text-xs text-slate-400">-</span>;
                               }
+                              const invalidAreas = allAreas.filter(a => !usageAreas.includes(a));
                               return (
-                                <div className="flex flex-wrap gap-1">
-                                  {allAreas.slice(0, 3).map(area => {
-                                    const isValid = usageAreas.includes(area);
-                                    return (
-                                      <span 
-                                        key={area} 
-                                        className={`px-1.5 py-0.5 text-xs rounded ${
-                                          isValid 
-                                            ? 'bg-blue-50 text-blue-600' 
-                                            : 'bg-amber-50 text-amber-600 line-through'
-                                        }`}
-                                        title={isValid ? area : `"${area}" no longer exists in Settings`}
-                                      >
-                                        {area}
-                                      </span>
-                                    );
-                                  })}
-                                  {allAreas.length > 3 && (
-                                    <span className="text-xs text-slate-400">+{allAreas.length - 3} more</span>
+                                <div 
+                                  className="text-xs text-slate-700 truncate"
+                                  title={allAreas.join(', ')}
+                                >
+                                  {allAreas.slice(0, 2).join(', ')}
+                                  {allAreas.length > 2 && (
+                                    <span className="text-slate-400"> +{allAreas.length - 2}</span>
+                                  )}
+                                  {invalidAreas.length > 0 && (
+                                    <span className="text-amber-500 ml-1" title={`Invalid: ${invalidAreas.join(', ')}`}>⚠</span>
                                   )}
                                 </div>
                               );
