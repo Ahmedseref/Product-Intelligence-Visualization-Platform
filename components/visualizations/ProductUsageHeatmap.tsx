@@ -2,9 +2,10 @@ import React, { useState, useMemo, useCallback, useRef } from 'react';
 import { ResponsiveHeatMap } from '@nivo/heatmap';
 import { Product, TreeNode, Supplier, CustomField, User } from '../../types';
 import NivoChartWrapper, { nivoTheme, CHART_COLORS } from '../charts/NivoChartWrapper';
-import { Filter, X, Download, ChevronDown, ChevronUp, Layers, Edit2, Copy, Trash2, Tag, Check } from 'lucide-react';
+import { Filter, X, Download, ChevronDown, ChevronUp, Layers, Edit2, Copy, Trash2, Tag, Check, Camera, Loader2, Palette } from 'lucide-react';
 import ProductForm from '../ProductForm';
 import { api } from '../../client/api';
+import html2canvas from 'html2canvas';
 
 interface ProductUsageHeatmapProps {
   products: Product[];
@@ -47,6 +48,18 @@ interface DrillDownData {
   products: Product[];
 }
 
+type MatrixMode = 'category' | 'product';
+type ColorPalette = 'blues' | 'ocean' | 'forest' | 'sunset' | 'berry' | 'multi';
+
+const PALETTE_OPTIONS: { value: ColorPalette; label: string; nivoScheme: string }[] = [
+  { value: 'blues', label: 'Blues', nivoScheme: 'blues' },
+  { value: 'ocean', label: 'Ocean', nivoScheme: 'blues' },
+  { value: 'forest', label: 'Forest', nivoScheme: 'greens' },
+  { value: 'sunset', label: 'Sunset', nivoScheme: 'oranges' },
+  { value: 'berry', label: 'Berry', nivoScheme: 'purples' },
+  { value: 'multi', label: 'Multi-Color', nivoScheme: 'blues' },
+];
+
 const ProductUsageHeatmap: React.FC<ProductUsageHeatmapProps> = ({
   products,
   treeNodes,
@@ -70,8 +83,12 @@ const ProductUsageHeatmap: React.FC<ProductUsageHeatmapProps> = ({
   const [showFilters, setShowFilters] = useState(true);
   const [drillDown, setDrillDown] = useState<DrillDownData | null>(null);
   const containerRef = useRef<HTMLDivElement>(null);
-  
-  // Product action states
+
+  const [matrixMode, setMatrixMode] = useState<MatrixMode>('category');
+  const [colorPalette, setColorPalette] = useState<ColorPalette>('blues');
+  const [isCapturing, setIsCapturing] = useState(false);
+  const [hoveredCell, setHoveredCell] = useState<{ serieId: string; dataX: string } | null>(null);
+
   const [editingProduct, setEditingProduct] = useState<Product | null>(null);
   const [duplicatingProduct, setDuplicatingProduct] = useState<Product | null>(null);
   const [deletingProduct, setDeletingProduct] = useState<Product | null>(null);
@@ -100,8 +117,8 @@ const ProductUsageHeatmap: React.FC<ProductUsageHeatmapProps> = ({
 
   const getProductUsageAreas = useCallback((product: Product): string[] => {
     if (Array.isArray(product.customFields)) {
-      const usageField = product.customFields.find((cf: any) => 
-        cf.fieldId?.toLowerCase().includes('usage') || 
+      const usageField = product.customFields.find((cf: any) =>
+        cf.fieldId?.toLowerCase().includes('usage') ||
         cf.fieldId?.toLowerCase().includes('application')
       );
       if (usageField?.value) {
@@ -125,7 +142,7 @@ const ProductUsageHeatmap: React.FC<ProductUsageHeatmapProps> = ({
       }
       return undefined;
     }
-    
+
     const findCategoryAtLevel = (nodeId: string): TreeNode | undefined => {
       const node = treeNodes.find(n => n.id === nodeId);
       if (!node) return undefined;
@@ -159,12 +176,12 @@ const ProductUsageHeatmap: React.FC<ProductUsageHeatmapProps> = ({
   }, [products, selectedSuppliers, selectedManufacturers, priceRange]);
 
   const heatmapData = useMemo((): HeatmapSeriesData[] => {
-    const categories = selectedCategories.length > 0 
+    const categories = selectedCategories.length > 0
       ? categoriesByLevel.filter(c => selectedCategories.includes(c.id))
       : categoriesByLevel;
-    
-    const usageAreas = selectedUsageAreas.length > 0 
-      ? selectedUsageAreas 
+
+    const usageAreas = selectedUsageAreas.length > 0
+      ? selectedUsageAreas
       : allUsageAreas;
 
     return categories.map(cat => {
@@ -179,7 +196,7 @@ const ProductUsageHeatmap: React.FC<ProductUsageHeatmapProps> = ({
         const prices = matchingProducts.map(p => p.price).filter(p => p > 0);
         const suppliersSet = new Set<string>(matchingProducts.map(p => p.supplier));
         const manufacturersSet = new Set<string>(matchingProducts.map(p => p.manufacturer).filter((m): m is string => Boolean(m)));
-        
+
         const certifications: string[] = [];
         matchingProducts.forEach(p => {
           if (p.customFields && typeof p.customFields === 'object') {
@@ -220,18 +237,79 @@ const ProductUsageHeatmap: React.FC<ProductUsageHeatmapProps> = ({
     });
   }, [filteredProducts, categoriesByLevel, selectedCategories, selectedUsageAreas, allUsageAreas, getProductCategory, getProductUsageAreas]);
 
+  const productHeatmapData = useMemo((): HeatmapSeriesData[] => {
+    if (matrixMode !== 'product') return [];
+
+    const usageAreas = selectedUsageAreas.length > 0
+      ? selectedUsageAreas
+      : allUsageAreas;
+
+    let prods = filteredProducts;
+    if (selectedCategories.length > 0) {
+      prods = prods.filter(p => {
+        const cat = getProductCategory(p);
+        return cat && selectedCategories.includes(cat.id);
+      });
+    }
+
+    const nameOccurrences: Record<string, number> = {};
+    prods.forEach(p => { nameOccurrences[p.name] = (nameOccurrences[p.name] || 0) + 1; });
+    const nameIndex: Record<string, number> = {};
+
+    return prods.map(product => {
+      const productAreas = getProductUsageAreas(product);
+      const dataPoints: HeatmapDataPoint[] = usageAreas.map(area => {
+        const hasArea = productAreas.includes(area);
+        return {
+          x: area,
+          y: hasArea ? 1 : 0,
+          meta: {
+            products: [product],
+            suppliers: new Set<string>([product.supplier]),
+            manufacturers: new Set<string>(product.manufacturer ? [product.manufacturer] : []),
+            avgPrice: product.price,
+            minPrice: product.price,
+            maxPrice: product.price,
+            certifications: [],
+          }
+        };
+      });
+
+      let displayName = product.name;
+      if (nameOccurrences[product.name] > 1) {
+        nameIndex[product.name] = (nameIndex[product.name] || 0) + 1;
+        displayName = `${product.name} [${product.supplier || ''} #${nameIndex[product.name]}]`;
+      }
+      return {
+        id: `pid_${product.id}`,
+        categoryId: product.id,
+        categoryName: displayName,
+        data: dataPoints
+      };
+    });
+  }, [matrixMode, filteredProducts, selectedCategories, selectedUsageAreas, allUsageAreas, getProductCategory, getProductUsageAreas]);
+
+  const activeData = matrixMode === 'category' ? heatmapData : productHeatmapData;
+
+  const seriesIdToName = useMemo(() => {
+    const map: Record<string, string> = {};
+    activeData.forEach(s => { map[s.id] = s.categoryName; });
+    return map;
+  }, [activeData]);
+
   const maxValue = useMemo(() => {
     let max = 0;
-    heatmapData.forEach(series => {
+    activeData.forEach(series => {
       series.data.forEach(d => {
         if (d.y > max) max = d.y;
       });
     });
     return max;
-  }, [heatmapData]);
+  }, [activeData]);
 
   const handleCellClick = useCallback((cell: any) => {
-    const series = heatmapData.find(s => s.id === cell.serieId || s.categoryName === cell.serieId);
+    const data = activeData;
+    const series = data.find(s => s.id === cell.serieId || s.categoryName === cell.serieId);
     const dataPoint = series?.data.find(d => d.x === cell.data.x);
     if (dataPoint && dataPoint.meta.products.length > 0) {
       setDrillDown({
@@ -243,7 +321,7 @@ const ProductUsageHeatmap: React.FC<ProductUsageHeatmapProps> = ({
         onCellClick(series?.categoryId || '', cell.data.x, dataPoint.meta.products);
       }
     }
-  }, [heatmapData, onCellClick]);
+  }, [activeData, onCellClick]);
 
   const exportToCSV = useCallback(() => {
     if (!drillDown) return;
@@ -268,16 +346,14 @@ const ProductUsageHeatmap: React.FC<ProductUsageHeatmapProps> = ({
     URL.revokeObjectURL(url);
   }, [drillDown]);
 
-  // Product action handlers
   const handleEditProduct = useCallback((product: Product) => {
     setEditingProduct(product);
   }, []);
 
   const handleDuplicateProduct = useCallback((product: Product) => {
-    // Create a duplicate with new ID
     const duplicated: Product = {
       ...product,
-      id: '', // Will be generated by backend
+      id: '',
       name: `${product.name} (Copy)`,
       dateAdded: new Date().toISOString(),
       lastUpdated: new Date().toISOString()
@@ -291,18 +367,18 @@ const ProductUsageHeatmap: React.FC<ProductUsageHeatmapProps> = ({
     const newAreas = currentAreas.includes(area)
       ? currentAreas.filter(a => a !== area)
       : [...currentAreas, area];
-    
+
     const updatedCustomFields = {
       ...(typeof product.customFields === 'object' && !Array.isArray(product.customFields) ? product.customFields : {}),
       'Usage Areas': newAreas
     };
-    
+
     const updatedProduct: Product = {
       ...product,
       customFields: updatedCustomFields,
       lastUpdated: new Date().toISOString()
     };
-    
+
     try {
       await api.updateProduct(product.id, { customFields: updatedCustomFields } as any);
       onProductUpdate(updatedProduct);
@@ -323,7 +399,6 @@ const ProductUsageHeatmap: React.FC<ProductUsageHeatmapProps> = ({
     try {
       await api.deleteProduct(deletingProduct.id);
       onProductDelete(deletingProduct.id);
-      // Remove from drill-down list
       if (drillDown) {
         setDrillDown({
           ...drillDown,
@@ -341,7 +416,6 @@ const ProductUsageHeatmap: React.FC<ProductUsageHeatmapProps> = ({
   const handleProductFormSubmit = useCallback((updatedProduct: Product) => {
     if (editingProduct && onProductUpdate) {
       onProductUpdate(updatedProduct);
-      // Update in drill-down list
       if (drillDown) {
         setDrillDown({
           ...drillDown,
@@ -350,7 +424,6 @@ const ProductUsageHeatmap: React.FC<ProductUsageHeatmapProps> = ({
       }
     } else if (duplicatingProduct && onProductUpdate) {
       onProductUpdate(updatedProduct);
-      // Add to drill-down list if in same category
       if (drillDown && updatedProduct.category === drillDown.category) {
         setDrillDown({
           ...drillDown,
@@ -362,8 +435,240 @@ const ProductUsageHeatmap: React.FC<ProductUsageHeatmapProps> = ({
     setDuplicatingProduct(null);
   }, [editingProduct, duplicatingProduct, onProductUpdate, drillDown]);
 
+  const handleDownloadImage = useCallback(async () => {
+    if (!containerRef.current) return;
+    setIsCapturing(true);
+    try {
+      const canvas = await html2canvas(containerRef.current, {
+        backgroundColor: '#ffffff',
+        scale: 2,
+        useCORS: true,
+      });
+      const dateStr = new Date().toISOString().split('T')[0];
+      const filterParts: string[] = [];
+      if (selectedSuppliers.length > 0) filterParts.push(`supplier-${selectedSuppliers[0].replace(/\s+/g, '')}`);
+      if (selectedManufacturers.length > 0) filterParts.push(`mfr-${selectedManufacturers[0].replace(/\s+/g, '')}`);
+      if (priceRange.min) filterParts.push(`min${priceRange.min}`);
+      if (priceRange.max) filterParts.push(`max${priceRange.max}`);
+      const filterStr = filterParts.length > 0 ? `_${filterParts.join('_')}` : '';
+      const levelStr = matrixMode === 'category' ? `_${categoryLevel}` : '';
+      const filename = `matrix_${matrixMode}${levelStr}${filterStr}_${dateStr}.png`;
+      const link = document.createElement('a');
+      link.download = filename;
+      link.href = canvas.toDataURL('image/png');
+      link.click();
+    } catch (error) {
+      console.error('Failed to capture image:', error);
+    } finally {
+      setIsCapturing(false);
+    }
+  }, [matrixMode, categoryLevel, selectedSuppliers, selectedManufacturers, priceRange]);
+
+  const paletteNivoScheme = useMemo(() => {
+    const found = PALETTE_OPTIONS.find(p => p.value === colorPalette);
+    return found ? found.nivoScheme : 'blues';
+  }, [colorPalette]);
+
+  const colorsConfig = useMemo(() => {
+    if (colorPalette === 'multi') {
+      return {
+        type: 'sequential' as const,
+        scheme: 'blues' as const,
+        minValue: 0,
+        maxValue: Math.max(maxValue, 1)
+      };
+    }
+    return {
+      type: 'sequential' as const,
+      scheme: paletteNivoScheme as any,
+      minValue: 0,
+      maxValue: Math.max(maxValue, 1)
+    };
+  }, [colorPalette, paletteNivoScheme, maxValue]);
+
+  const usageAreaColumns = useMemo(() => {
+    return selectedUsageAreas.length > 0 ? selectedUsageAreas : allUsageAreas;
+  }, [selectedUsageAreas, allUsageAreas]);
+
+  const getColumnColor = useCallback((colIndex: number): string => {
+    return CHART_COLORS.categorical[colIndex % CHART_COLORS.categorical.length];
+  }, []);
+
+  const CustomCellComponent = useCallback(({ cell, ...props }: any) => {
+    const isMultiColor = colorPalette === 'multi';
+    const isProductMode = matrixMode === 'product';
+
+    if (isMultiColor && isProductMode) {
+      const colIndex = usageAreaColumns.indexOf(cell.data.x);
+      const baseColor = getColumnColor(colIndex >= 0 ? colIndex : 0);
+      const value = cell.value ?? 0;
+      const opacity = value > 0 ? 1 : 0.08;
+      const fillColor = value > 0 ? baseColor : '#f1f5f9';
+
+      return (
+        <g
+          transform={`translate(${cell.x}, ${cell.y})`}
+          onMouseEnter={() => setHoveredCell({ serieId: cell.serieId, dataX: cell.data.x })}
+          onMouseLeave={() => setHoveredCell(null)}
+          style={{ cursor: 'pointer' }}
+        >
+          <rect
+            x={cell.width / -2}
+            y={cell.height / -2}
+            width={cell.width}
+            height={cell.height}
+            fill={fillColor}
+            fillOpacity={opacity}
+            strokeWidth={1}
+            stroke="#e2e8f0"
+            rx={4}
+          />
+          {value > 0 && (
+            <text
+              textAnchor="middle"
+              dominantBaseline="central"
+              fill="#ffffff"
+              fontSize={11}
+              fontWeight={600}
+            >
+              {value}
+            </text>
+          )}
+        </g>
+      );
+    }
+
+    if (isMultiColor && !isProductMode) {
+      const colIndex = usageAreaColumns.indexOf(cell.data.x);
+      const baseColor = getColumnColor(colIndex >= 0 ? colIndex : 0);
+      const value = cell.value ?? 0;
+      const maxV = Math.max(maxValue, 1);
+      const intensity = Math.min(value / maxV, 1);
+      const opacity = value > 0 ? 0.15 + intensity * 0.85 : 0.05;
+      const fillColor = value > 0 ? baseColor : '#f8fafc';
+
+      return (
+        <g
+          transform={`translate(${cell.x}, ${cell.y})`}
+          onMouseEnter={() => setHoveredCell({ serieId: cell.serieId, dataX: cell.data.x })}
+          onMouseLeave={() => setHoveredCell(null)}
+          style={{ cursor: 'pointer' }}
+        >
+          <rect
+            x={cell.width / -2}
+            y={cell.height / -2}
+            width={cell.width}
+            height={cell.height}
+            fill={fillColor}
+            fillOpacity={opacity}
+            strokeWidth={1}
+            stroke="#e2e8f0"
+            rx={4}
+          />
+          {value > 0 && (
+            <text
+              textAnchor="middle"
+              dominantBaseline="central"
+              fill={intensity > 0.5 ? '#ffffff' : '#334155'}
+              fontSize={11}
+              fontWeight={600}
+            >
+              {value}
+            </text>
+          )}
+        </g>
+      );
+    }
+
+    return (
+      <g
+        transform={`translate(${cell.x}, ${cell.y})`}
+        onMouseEnter={() => setHoveredCell({ serieId: cell.serieId, dataX: cell.data.x })}
+        onMouseLeave={() => setHoveredCell(null)}
+        style={{ cursor: 'pointer' }}
+      >
+        <rect
+          x={cell.width / -2}
+          y={cell.height / -2}
+          width={cell.width}
+          height={cell.height}
+          fill={cell.color}
+          fillOpacity={cell.opacity}
+          strokeWidth={1}
+          stroke="#e2e8f0"
+          rx={4}
+        />
+        {(cell.value ?? 0) > 0 && (
+          <text
+            textAnchor="middle"
+            dominantBaseline="central"
+            fill={cell.labelTextColor}
+            fontSize={11}
+            fontWeight={600}
+          >
+            {cell.formattedValue ?? cell.value}
+          </text>
+        )}
+      </g>
+    );
+  }, [colorPalette, matrixMode, usageAreaColumns, getColumnColor, maxValue]);
+
+  const HighlightLayer = useCallback(({ cells }: any) => {
+    if (!hoveredCell) return null;
+
+    const matchingCells = cells.filter(
+      (c: any) => c.serieId === hoveredCell.serieId || c.data.x === hoveredCell.dataX
+    );
+
+    if (matchingCells.length === 0) return null;
+
+    const rowCells = cells.filter((c: any) => c.serieId === hoveredCell.serieId);
+    const colCells = cells.filter((c: any) => c.data.x === hoveredCell.dataX);
+
+    const rects: React.ReactElement[] = [];
+
+    if (rowCells.length > 0) {
+      const minX = Math.min(...rowCells.map((c: any) => c.x - c.width / 2));
+      const maxX = Math.max(...rowCells.map((c: any) => c.x + c.width / 2));
+      const y = rowCells[0].y - rowCells[0].height / 2;
+      const h = rowCells[0].height;
+      rects.push(
+        <rect
+          key="row-highlight"
+          x={minX}
+          y={y}
+          width={maxX - minX}
+          height={h}
+          fill="rgba(59, 130, 246, 0.06)"
+          pointerEvents="none"
+        />
+      );
+    }
+
+    if (colCells.length > 0) {
+      const minY = Math.min(...colCells.map((c: any) => c.y - c.height / 2));
+      const maxY = Math.max(...colCells.map((c: any) => c.y + c.height / 2));
+      const x = colCells[0].x - colCells[0].width / 2;
+      const w = colCells[0].width;
+      rects.push(
+        <rect
+          key="col-highlight"
+          x={x}
+          y={minY}
+          width={w}
+          height={maxY - minY}
+          fill="rgba(59, 130, 246, 0.06)"
+          pointerEvents="none"
+        />
+      );
+    }
+
+    return <g>{rects}</g>;
+  }, [hoveredCell]);
+
   const CustomTooltip = ({ cell }: { cell: any }) => {
-    const series = heatmapData.find(s => s.id === cell.serieId || s.categoryName === cell.serieId);
+    const data = activeData;
+    const series = data.find(s => s.id === cell.serieId || s.categoryName === cell.serieId);
     const dataPoint = series?.data.find(d => d.x === cell.data.x);
     if (!dataPoint) return null;
 
@@ -371,11 +676,54 @@ const ProductUsageHeatmap: React.FC<ProductUsageHeatmapProps> = ({
     const supplierCount = meta.suppliers.size;
     const manufacturerCount = meta.manufacturers.size;
 
+    if (matrixMode === 'product') {
+      const product = meta.products[0];
+      return (
+        <div className="bg-white rounded-xl shadow-xl border border-slate-200 p-4 min-w-[240px]">
+          <div className="flex items-center gap-2 mb-3 pb-3 border-b border-slate-100">
+            <div
+              className="w-4 h-4 rounded-sm"
+              style={{ backgroundColor: cell.color || '#3b82f6' }}
+            />
+            <div>
+              <div className="font-bold text-slate-800">{product?.name || cell.serieId}</div>
+              <div className="text-xs text-slate-500">{cell.data.x}</div>
+            </div>
+          </div>
+          <div className="space-y-2 text-sm">
+            <div className="flex justify-between">
+              <span className="text-slate-500">Has Usage Area:</span>
+              <span className={`font-bold ${dataPoint.y > 0 ? 'text-green-600' : 'text-slate-400'}`}>
+                {dataPoint.y > 0 ? 'Yes' : 'No'}
+              </span>
+            </div>
+            {product && (
+              <>
+                <div className="flex justify-between">
+                  <span className="text-slate-500">Supplier:</span>
+                  <span className="font-semibold text-slate-700">{product.supplier}</span>
+                </div>
+                {product.price > 0 && (
+                  <div className="flex justify-between">
+                    <span className="text-slate-500">Price:</span>
+                    <span className="font-semibold text-green-600">{product.currency} {product.price.toFixed(2)}</span>
+                  </div>
+                )}
+              </>
+            )}
+          </div>
+          <div className="mt-3 pt-3 border-t border-slate-100 text-xs text-blue-600 font-medium">
+            Click to view product
+          </div>
+        </div>
+      );
+    }
+
     return (
       <div className="bg-white rounded-xl shadow-xl border border-slate-200 p-4 min-w-[240px]">
         <div className="flex items-center gap-2 mb-3 pb-3 border-b border-slate-100">
-          <div 
-            className="w-4 h-4 rounded-sm" 
+          <div
+            className="w-4 h-4 rounded-sm"
             style={{ backgroundColor: cell.color }}
           />
           <div>
@@ -383,7 +731,7 @@ const ProductUsageHeatmap: React.FC<ProductUsageHeatmapProps> = ({
             <div className="text-xs text-slate-500">{cell.data.x}</div>
           </div>
         </div>
-        
+
         <div className="space-y-2 text-sm">
           <div className="flex justify-between">
             <span className="text-slate-500">Products:</span>
@@ -397,7 +745,7 @@ const ProductUsageHeatmap: React.FC<ProductUsageHeatmapProps> = ({
             <span className="text-slate-500">Manufacturers:</span>
             <span className="font-semibold text-slate-700">{manufacturerCount}</span>
           </div>
-          
+
           {meta.avgPrice > 0 && (
             <>
               <div className="border-t border-slate-100 pt-2 mt-2">
@@ -412,7 +760,7 @@ const ProductUsageHeatmap: React.FC<ProductUsageHeatmapProps> = ({
               </div>
             </>
           )}
-          
+
           {meta.certifications.length > 0 && (
             <div className="border-t border-slate-100 pt-2 mt-2">
               <div className="text-xs text-slate-500 mb-1">Certifications:</div>
@@ -426,7 +774,7 @@ const ProductUsageHeatmap: React.FC<ProductUsageHeatmapProps> = ({
             </div>
           )}
         </div>
-        
+
         {dataPoint.y > 0 && (
           <div className="mt-3 pt-3 border-t border-slate-100 text-xs text-blue-600 font-medium">
             Click to view products
@@ -437,13 +785,13 @@ const ProductUsageHeatmap: React.FC<ProductUsageHeatmapProps> = ({
   };
 
   const toggleCategory = (id: string) => {
-    setSelectedCategories(prev => 
+    setSelectedCategories(prev =>
       prev.includes(id) ? prev.filter(c => c !== id) : [...prev, id]
     );
   };
 
   const toggleUsageArea = (area: string) => {
-    setSelectedUsageAreas(prev => 
+    setSelectedUsageAreas(prev =>
       prev.includes(area) ? prev.filter(a => a !== area) : [...prev, area]
     );
   };
@@ -456,31 +804,84 @@ const ProductUsageHeatmap: React.FC<ProductUsageHeatmapProps> = ({
     setPriceRange({ min: '', max: '' });
   };
 
-  const hasActiveFilters = selectedCategories.length > 0 || selectedUsageAreas.length > 0 || 
-    selectedSuppliers.length > 0 || selectedManufacturers.length > 0 || 
+  const hasActiveFilters = selectedCategories.length > 0 || selectedUsageAreas.length > 0 ||
+    selectedSuppliers.length > 0 || selectedManufacturers.length > 0 ||
     priceRange.min || priceRange.max;
+
+  const chartHeight = Math.max(400, activeData.length * 50 + 100);
+  const leftMargin = matrixMode === 'product' ? 200 : 160;
+
+  const chartTitle = matrixMode === 'category'
+    ? 'Product Usage Density Matrix'
+    : 'Product × Usage Area Matrix';
+
+  const chartSubtitle = matrixMode === 'category'
+    ? `${activeData.length} categories × ${usageAreaColumns.length} usage areas • Max: ${maxValue} products`
+    : `${activeData.length} products × ${usageAreaColumns.length} usage areas`;
+
+  const axisLeftLegend = matrixMode === 'category'
+    ? categoryLevel.charAt(0).toUpperCase() + categoryLevel.slice(1)
+    : 'Product';
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
-        <div className="flex items-center gap-4">
+      <div className="flex items-center justify-between flex-wrap gap-3">
+        <div className="flex items-center gap-4 flex-wrap">
+          <div className="flex items-center gap-1 bg-slate-100 rounded-xl p-1">
+            <button
+              onClick={() => setMatrixMode('category')}
+              className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-all ${
+                matrixMode === 'category'
+                  ? 'bg-white text-blue-700 shadow-sm'
+                  : 'text-slate-500 hover:text-slate-700'
+              }`}
+            >
+              Category × Usage Area
+            </button>
+            <button
+              onClick={() => setMatrixMode('product')}
+              className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-all ${
+                matrixMode === 'product'
+                  ? 'bg-white text-blue-700 shadow-sm'
+                  : 'text-slate-500 hover:text-slate-700'
+              }`}
+            >
+              Product × Usage Area
+            </button>
+          </div>
+
+          {matrixMode === 'category' && (
+            <div className="flex items-center gap-2">
+              <Layers className="w-5 h-5 text-blue-600" />
+              <span className="text-sm font-medium text-slate-600">Level:</span>
+              <select
+                value={categoryLevel}
+                onChange={e => setCategoryLevel(e.target.value as any)}
+                className="px-3 py-1.5 bg-white border border-slate-200 rounded-lg text-sm font-medium text-slate-700 focus:outline-none focus:ring-2 focus:ring-blue-500"
+              >
+                <option key="sector" value="sector">Sector</option>
+                <option key="category" value="category">Category</option>
+                <option key="subcategory" value="subcategory">Sub-Category</option>
+                <option key="group" value="group">Group</option>
+                <option key="leaf" value="leaf">Leaf Level (Product Nodes)</option>
+              </select>
+            </div>
+          )}
+
           <div className="flex items-center gap-2">
-            <Layers className="w-5 h-5 text-blue-600" />
-            <span className="text-sm font-medium text-slate-600">Level:</span>
+            <Palette className="w-4 h-4 text-slate-500" />
             <select
-              value={categoryLevel}
-              onChange={e => setCategoryLevel(e.target.value as any)}
+              value={colorPalette}
+              onChange={e => setColorPalette(e.target.value as ColorPalette)}
               className="px-3 py-1.5 bg-white border border-slate-200 rounded-lg text-sm font-medium text-slate-700 focus:outline-none focus:ring-2 focus:ring-blue-500"
             >
-              <option value="sector">Sector</option>
-              <option value="category">Category</option>
-              <option value="subcategory">Sub-Category</option>
-              <option value="group">Group</option>
-              <option value="leaf">Leaf Level (Product Nodes)</option>
+              {PALETTE_OPTIONS.map(opt => (
+                <option key={opt.value} value={opt.value}>{opt.label}</option>
+              ))}
             </select>
           </div>
         </div>
-        
+
         <div className="flex items-center gap-2">
           {hasActiveFilters && (
             <button
@@ -490,6 +891,18 @@ const ProductUsageHeatmap: React.FC<ProductUsageHeatmapProps> = ({
               Clear Filters
             </button>
           )}
+          <button
+            onClick={handleDownloadImage}
+            disabled={isCapturing}
+            className="flex items-center gap-2 px-3 py-2 bg-slate-100 text-slate-600 hover:bg-slate-200 rounded-xl text-sm font-medium transition-all disabled:opacity-50"
+            title="Download chart as image"
+          >
+            {isCapturing ? (
+              <Loader2 className="w-4 h-4 animate-spin" />
+            ) : (
+              <Camera className="w-4 h-4" />
+            )}
+          </button>
           <button
             onClick={() => setShowFilters(!showFilters)}
             className={`flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-medium transition-all ${
@@ -596,44 +1009,40 @@ const ProductUsageHeatmap: React.FC<ProductUsageHeatmapProps> = ({
 
       <div ref={containerRef}>
         <NivoChartWrapper
-          title={`Product Usage Density Matrix`}
-          subtitle={`${heatmapData.length} categories × ${selectedUsageAreas.length || allUsageAreas.length} usage areas • Max: ${maxValue} products`}
-          isEmpty={heatmapData.length === 0 || heatmapData.every(d => d.data.every(p => p.y === 0))}
+          title={chartTitle}
+          subtitle={chartSubtitle}
+          isEmpty={activeData.length === 0 || activeData.every(d => d.data.every(p => p.y === 0))}
           emptyMessage="No products match the current filters"
-          height={Math.max(400, heatmapData.length * 50 + 100)}
+          height={chartHeight}
         >
           <ResponsiveHeatMap
-            data={heatmapData}
-            margin={{ top: 60, right: 90, bottom: 60, left: 120 }}
+            data={activeData}
+            margin={{ top: 80, right: 90, bottom: 30, left: leftMargin }}
             valueFormat=">-.0f"
             axisTop={{
               tickSize: 5,
               tickPadding: 5,
-              tickRotation: -45,
+              tickRotation: -55,
               legend: 'Usage Areas',
-              legendOffset: -46,
+              legendOffset: -55,
               legendPosition: 'middle'
             }}
             axisLeft={{
               tickSize: 5,
               tickPadding: 5,
               tickRotation: 0,
-              legend: categoryLevel.charAt(0).toUpperCase() + categoryLevel.slice(1),
+              legend: axisLeftLegend,
               legendPosition: 'middle',
-              legendOffset: -100,
-              truncateTickAt: 20
+              legendOffset: -(leftMargin - 20),
+              truncateTickAt: 18,
+              format: (v: string) => seriesIdToName[v] || v
             }}
-            colors={{
-              type: 'sequential',
-              scheme: 'blues',
-              minValue: 0,
-              maxValue: Math.max(maxValue, 1)
-            }}
+            colors={colorsConfig}
             emptyColor="#f8fafc"
             borderColor="#e2e8f0"
             borderWidth={1}
             borderRadius={4}
-            enableLabels={true}
+            enableLabels={colorPalette !== 'multi'}
             labelTextColor={{ from: 'color', modifiers: [['darker', 2.5]] }}
             legends={[
               {
@@ -647,7 +1056,7 @@ const ProductUsageHeatmap: React.FC<ProductUsageHeatmapProps> = ({
                 tickSize: 3,
                 tickSpacing: 4,
                 tickOverlap: false,
-                title: 'Products →',
+                title: matrixMode === 'category' ? 'Products →' : 'Has Area →',
                 titleAlign: 'start',
                 titleOffset: 4
               }
@@ -657,6 +1066,8 @@ const ProductUsageHeatmap: React.FC<ProductUsageHeatmapProps> = ({
             tooltip={CustomTooltip}
             theme={nivoTheme}
             hoverTarget="cell"
+            cellComponent={CustomCellComponent}
+            layers={['grid', 'axes', HighlightLayer, 'cells', 'legends', 'annotations']}
             animate={true}
             motionConfig="gentle"
           />
@@ -689,7 +1100,7 @@ const ProductUsageHeatmap: React.FC<ProductUsageHeatmapProps> = ({
                 </button>
               </div>
             </div>
-            
+
             <div className="overflow-auto max-h-[calc(80vh-80px)]">
               <table className="w-full">
                 <thead className="bg-slate-50 sticky top-0">
@@ -741,14 +1152,14 @@ const ProductUsageHeatmap: React.FC<ProductUsageHeatmapProps> = ({
                               </button>
                             </div>
                           ) : (
-                            <div 
+                            <div
                               className="flex flex-wrap gap-1 cursor-pointer group/usage"
                               onClick={() => setEditingUsageProductId(product.id)}
                               title="Click to edit usage areas"
                             >
                               {productAreas.length > 0 ? (
                                 productAreas.map(area => (
-                                  <span 
+                                  <span
                                     key={area}
                                     className="px-2 py-0.5 bg-blue-50 text-blue-700 text-xs rounded-full"
                                   >
@@ -800,7 +1211,6 @@ const ProductUsageHeatmap: React.FC<ProductUsageHeatmapProps> = ({
         </div>
       )}
 
-      {/* Edit Product Modal */}
       {editingProduct && currentUser && onAddFieldDefinition && onAddTreeNode && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[60] overflow-y-auto p-4">
           <div className="bg-white rounded-2xl shadow-2xl w-full max-w-5xl max-h-[90vh] overflow-y-auto">
@@ -820,7 +1230,6 @@ const ProductUsageHeatmap: React.FC<ProductUsageHeatmapProps> = ({
         </div>
       )}
 
-      {/* Duplicate Product Modal */}
       {duplicatingProduct && currentUser && onAddFieldDefinition && onAddTreeNode && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[60] overflow-y-auto p-4">
           <div className="bg-white rounded-2xl shadow-2xl w-full max-w-5xl max-h-[90vh] overflow-y-auto">
@@ -840,7 +1249,6 @@ const ProductUsageHeatmap: React.FC<ProductUsageHeatmapProps> = ({
         </div>
       )}
 
-      {/* Delete Confirmation Modal */}
       {deletingProduct && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[60] p-4">
           <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md p-6">
@@ -854,7 +1262,7 @@ const ProductUsageHeatmap: React.FC<ProductUsageHeatmapProps> = ({
               </div>
             </div>
             <p className="text-slate-600 mb-6">
-              Are you sure you want to delete <span className="font-semibold">{deletingProduct.name}</span>? 
+              Are you sure you want to delete <span className="font-semibold">{deletingProduct.name}</span>?
               This will permanently remove the product from your inventory.
             </p>
             <div className="flex justify-end gap-3">
