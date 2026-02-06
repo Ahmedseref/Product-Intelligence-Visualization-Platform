@@ -498,10 +498,14 @@ const ProductUsageHeatmap: React.FC<ProductUsageHeatmapProps> = ({
     const isMultiColor = colorPalette === 'multi';
     const isProductMode = matrixMode === 'product';
 
+    const value = cell.value ?? 0;
+    const cellLabel = isProductMode && value > 0 ? 'X' : (value > 0 ? value : null);
+    const cellFontSize = isProductMode ? 13 : 11;
+    const cellFontWeight = isProductMode ? 800 : 600;
+
     if (isMultiColor && isProductMode) {
       const colIndex = usageAreaColumns.indexOf(cell.data.x);
       const baseColor = getColumnColor(colIndex >= 0 ? colIndex : 0);
-      const value = cell.value ?? 0;
       const opacity = value > 0 ? 1 : 0.08;
       const fillColor = value > 0 ? baseColor : '#f1f5f9';
 
@@ -523,15 +527,15 @@ const ProductUsageHeatmap: React.FC<ProductUsageHeatmapProps> = ({
             stroke="#e2e8f0"
             rx={4}
           />
-          {value > 0 && (
+          {cellLabel && (
             <text
               textAnchor="middle"
               dominantBaseline="central"
               fill="#ffffff"
-              fontSize={11}
-              fontWeight={600}
+              fontSize={cellFontSize}
+              fontWeight={cellFontWeight}
             >
-              {value}
+              {cellLabel}
             </text>
           )}
         </g>
@@ -541,7 +545,6 @@ const ProductUsageHeatmap: React.FC<ProductUsageHeatmapProps> = ({
     if (isMultiColor && !isProductMode) {
       const colIndex = usageAreaColumns.indexOf(cell.data.x);
       const baseColor = getColumnColor(colIndex >= 0 ? colIndex : 0);
-      const value = cell.value ?? 0;
       const maxV = Math.max(maxValue, 1);
       const intensity = Math.min(value / maxV, 1);
       const opacity = value > 0 ? 0.15 + intensity * 0.85 : 0.05;
@@ -565,7 +568,7 @@ const ProductUsageHeatmap: React.FC<ProductUsageHeatmapProps> = ({
             stroke="#e2e8f0"
             rx={4}
           />
-          {value > 0 && (
+          {cellLabel && (
             <text
               textAnchor="middle"
               dominantBaseline="central"
@@ -573,12 +576,14 @@ const ProductUsageHeatmap: React.FC<ProductUsageHeatmapProps> = ({
               fontSize={11}
               fontWeight={600}
             >
-              {value}
+              {cellLabel}
             </text>
           )}
         </g>
       );
     }
+
+    const defaultTextColor = isProductMode ? (value > 0 ? '#ffffff' : cell.labelTextColor) : cell.labelTextColor;
 
     return (
       <g
@@ -598,15 +603,15 @@ const ProductUsageHeatmap: React.FC<ProductUsageHeatmapProps> = ({
           stroke="#e2e8f0"
           rx={4}
         />
-        {(cell.value ?? 0) > 0 && (
+        {cellLabel && (
           <text
             textAnchor="middle"
             dominantBaseline="central"
-            fill={cell.labelTextColor}
-            fontSize={11}
-            fontWeight={600}
+            fill={defaultTextColor}
+            fontSize={cellFontSize}
+            fontWeight={cellFontWeight}
           >
-            {cell.formattedValue ?? cell.value}
+            {cellLabel}
           </text>
         )}
       </g>
@@ -1056,7 +1061,7 @@ const ProductUsageHeatmap: React.FC<ProductUsageHeatmapProps> = ({
                 tickSize: 3,
                 tickSpacing: 4,
                 tickOverlap: false,
-                title: matrixMode === 'category' ? 'Products →' : 'Has Area →',
+                title: matrixMode === 'category' ? 'Products →' : 'X = Assigned',
                 titleAlign: 'start',
                 titleOffset: 4
               }
