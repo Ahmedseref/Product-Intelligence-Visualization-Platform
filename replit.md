@@ -69,6 +69,21 @@ I prefer detailed explanations and thorough code comments. I value iterative dev
         - Backend: server/systemRoutes.ts with full REST API
         - Frontend: components/systemBuilder/ (SystemBuilder, SystemDashboard, SystemImport)
 
+    - **Technical Intelligence Dashboard**: Multi-supplier intelligence and comparison layer with:
+        - 7 tabs: Overview (12 KPIs), Product Intelligence, System Intelligence, Supplier Matrix, Taxonomy & Supplier, Technical Coverage, Competitive Benchmark
+        - Global filter panel (Supplier, Sector, Branch) applied across all tabs and API calls
+        - Overview: 12 KPI cards (products, systems, suppliers, variants, coverage, concentration index, etc.)
+        - Product Intelligence: Product utilization by supplier (stacked bar), supplier dependency pie chart
+        - System Intelligence: System variants by sector (grouped bar), complexity scatter, layer supplier flexibility
+        - Supplier Matrix: 6-mode heatmap (supplier-system, supplier-layer, supplier-sector, supplier-taxonomy, supplier-stockcode, supplier-complexity)
+        - Taxonomy & Supplier: Branch distribution (grouped bar), supplier specialization treemap, stock code vs supplier heatmap
+        - Technical Coverage: 6-dimension radar chart (sector coverage, layer coverage, system complexity, taxonomy depth, product variety, system reusability)
+        - Competitive Benchmark: System comparison table and per-system supplier radar
+        - Export engine: PNG/SVG image export and CSV data export for all chart types
+        - Error boundary wrapper preventing white-screen crashes
+        - Backend: server/analyticsRoutes.ts with 8 endpoints (overview, product-intelligence, system-intelligence, supplier-heatmap, taxonomy-supplier, coverage-radar, competitive-benchmark, filters)
+        - Frontend: components/technicalIntelligence/TechnicalIntelligenceDashboard.tsx
+
 ### Authentication
 - **Default Credentials**: admin / 1111 (must change on first login)
 - **Password Requirements**: Minimum 6 characters
