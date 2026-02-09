@@ -100,6 +100,7 @@ const ProductForm: React.FC<ProductFormProps> = ({ onSubmit, onCancel, currentUs
     certifications: [],
     shelfLife: '',
     storageConditions: '',
+    hsCode: '',
     customFields: [],
     technicalSpecs: [],
     dateAdded: new Date().toISOString(),
@@ -858,6 +859,93 @@ const ProductForm: React.FC<ProductFormProps> = ({ onSubmit, onCancel, currentUs
                 </div>
               </div>
             </div>
+
+            <div className="bg-white p-8 rounded-2xl border border-slate-200 shadow-sm space-y-6">
+              <h3 className="text-lg font-bold text-slate-800 flex items-center gap-2">
+                <span className="w-1.5 h-6 bg-teal-500 rounded-full"></span> Packing & Fulfillment
+              </h3>
+
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-6">
+                <div className="space-y-1">
+                  <label className="text-xs font-bold text-slate-500 uppercase tracking-wider">Packaging Type</label>
+                  <input 
+                    type="text"
+                    placeholder="e.g. Bag, Box, Pallet..."
+                    className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-sm outline-none"
+                    value={formData.packagingType || ''}
+                    onChange={e => setFormData({...formData, packagingType: e.target.value})}
+                  />
+                </div>
+                <div className="space-y-1">
+                  <label className="text-xs font-bold text-slate-500 uppercase tracking-wider">Shelf Life</label>
+                  <input 
+                    type="text"
+                    placeholder="e.g. 12 months, 2 years..."
+                    className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-sm outline-none"
+                    value={formData.shelfLife || ''}
+                    onChange={e => setFormData({...formData, shelfLife: e.target.value})}
+                  />
+                </div>
+                <div className="space-y-1">
+                  <label className="text-xs font-bold text-slate-500 uppercase tracking-wider">HS Code</label>
+                  <input 
+                    type="text"
+                    placeholder="e.g. 6907.21.00"
+                    className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-sm outline-none"
+                    value={formData.hsCode || ''}
+                    onChange={e => setFormData({...formData, hsCode: e.target.value})}
+                  />
+                </div>
+                <div className="space-y-1">
+                  <label className="text-xs font-bold text-slate-500 uppercase tracking-wider">Lead Time (Days)</label>
+                  <input 
+                    type="number"
+                    className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-sm outline-none"
+                    value={formData.leadTime}
+                    onChange={e => setFormData({...formData, leadTime: parseInt(e.target.value) || 0})}
+                  />
+                </div>
+              </div>
+
+              <div className="space-y-1">
+                <label className="text-xs font-bold text-slate-500 uppercase tracking-wider">Storage Conditions</label>
+                <input 
+                  type="text"
+                  placeholder="e.g. Store in cool, dry place. Keep away from direct sunlight..."
+                  className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-sm outline-none"
+                  value={formData.storageConditions || ''}
+                  onChange={e => setFormData({...formData, storageConditions: e.target.value})}
+                />
+              </div>
+
+              <div className="space-y-2">
+                <label className="text-xs font-bold text-slate-500 uppercase tracking-wider">Certifications</label>
+                <p className="text-[10px] text-slate-400">Add certifications separated by comma (e.g. ISO 9001, CE, EN 13813)</p>
+                <input 
+                  type="text"
+                  placeholder="ISO 9001, CE, EN 13813..."
+                  className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-sm outline-none"
+                  value={(formData.certifications || []).join(', ')}
+                  onChange={e => setFormData({...formData, certifications: e.target.value.split(',').map(c => c.trim()).filter(Boolean)})}
+                />
+                {(formData.certifications || []).length > 0 && (
+                  <div className="flex flex-wrap gap-1.5 mt-1">
+                    {formData.certifications!.map((cert, idx) => (
+                      <span key={idx} className="inline-flex items-center gap-1 text-xs font-semibold px-2.5 py-1 rounded-full bg-amber-50 text-amber-700 border border-amber-200">
+                        {cert}
+                        <button
+                          type="button"
+                          onClick={() => setFormData({...formData, certifications: formData.certifications!.filter((_, i) => i !== idx)})}
+                          className="text-amber-400 hover:text-amber-700 ml-0.5"
+                        >
+                          &times;
+                        </button>
+                      </span>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </div>
           </div>
 
           <div className="space-y-6">
@@ -880,15 +968,6 @@ const ProductForm: React.FC<ProductFormProps> = ({ onSubmit, onCancel, currentUs
                     className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-2 text-sm outline-none"
                     value={formData.manufacturingLocation}
                     onChange={e => setFormData({...formData, manufacturingLocation: e.target.value})}
-                  />
-                </div>
-                <div className="space-y-1">
-                  <label className="text-xs font-bold text-slate-500 uppercase tracking-wider">Lead Time (days)</label>
-                  <input 
-                    type="number"
-                    className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-2 text-sm outline-none"
-                    value={formData.leadTime}
-                    onChange={e => setFormData({...formData, leadTime: parseInt(e.target.value) || 0})}
                   />
                 </div>
               </div>
