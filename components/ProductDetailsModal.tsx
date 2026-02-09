@@ -263,11 +263,62 @@ const ProductDetailsModal: React.FC<ProductDetailsModalProps> = ({ product, onCl
                       )}
                     </div>
                     <div className="flex justify-between border-b border-slate-50 pb-2">
-                      <span className="text-sm text-slate-500">Packaging</span>
-                      <span className="text-sm font-semibold text-slate-800">{product.packagingType}</span>
+                      <span className="text-sm text-slate-500">Packaging Type</span>
+                      <span className="text-sm font-semibold text-slate-800">{product.packagingType || '—'}</span>
                     </div>
+                    {product.shelfLife && (
+                      <div className="flex justify-between border-b border-slate-50 pb-2">
+                        <span className="text-sm text-slate-500">Shelf Life</span>
+                        <span className="text-sm font-semibold text-slate-800">{product.shelfLife}</span>
+                      </div>
+                    )}
+                    {product.storageConditions && (
+                      <div className="flex justify-between border-b border-slate-50 pb-2">
+                        <span className="text-sm text-slate-500">Storage Conditions</span>
+                        <span className="text-sm font-semibold text-slate-800">{product.storageConditions}</span>
+                      </div>
+                    )}
+                    {product.hsCode && (
+                      <div className="flex justify-between border-b border-slate-50 pb-2">
+                        <span className="text-sm text-slate-500">HS Code</span>
+                        <span className="text-sm font-mono font-semibold text-slate-800">{product.hsCode}</span>
+                      </div>
+                    )}
+                    {product.certifications && product.certifications.length > 0 && (
+                      <div className="border-b border-slate-50 pb-2">
+                        <span className="text-sm text-slate-500 block mb-2">Certifications</span>
+                        <div className="flex flex-wrap gap-1.5">
+                          {product.certifications.map((cert, idx) => (
+                            <span key={idx} className="text-xs font-semibold px-2 py-0.5 rounded-full bg-amber-50 text-amber-700 border border-amber-200">
+                              {cert}
+                            </span>
+                          ))}
+                        </div>
+                      </div>
+                    )}
                   </div>
                 </section>
+
+                {(() => {
+                  const usageAreas = product.customFields?.['Usage Areas'];
+                  const areas = Array.isArray(usageAreas) ? usageAreas : [];
+                  return areas.length > 0 ? (
+                    <section>
+                      <h3 className="text-xs font-bold text-slate-400 uppercase tracking-widest mb-4 flex items-center gap-2">
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z"></path><path d="M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z"></path></svg>
+                        Usage Areas
+                      </h3>
+                      <div className="flex flex-wrap gap-2">
+                        {areas.map((area: string, idx: number) => (
+                          <span key={idx} className="inline-flex items-center gap-1.5 text-xs font-semibold px-3 py-1.5 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200">
+                            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>
+                            {area}
+                          </span>
+                        ))}
+                      </div>
+                    </section>
+                  ) : null;
+                })()}
 
                 <section>
                    <h3 className="text-xs font-bold text-slate-400 uppercase tracking-widest mb-2">Technical Description</h3>
