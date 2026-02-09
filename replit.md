@@ -45,6 +45,14 @@ I prefer detailed explanations and thorough code comments. I value iterative dev
         - Auto-discovery of new units during mass import (auto-added to database)
         - API routes: GET/PUT /api/settings/units
         - Default units: kg, ton, piece, liter, box, pallet, m, m², m³, ft, ft², ft³, inch, cm, mm, gallon, oz, lb, set, pair, roll, sheet, pack, carton
+    - **Inventory Column Management**: Database-backed column configuration (app_settings table, key: 'inventory_columns') with:
+        - Settings page section for managing inventory table columns
+        - Show/hide toggles for each column with eye icon
+        - Drag-and-drop column reordering (arrangement done in Settings)
+        - Quick actions: Show All, Defaults Only, Reset Order & Visibility
+        - Real-time sync: changes in Settings immediately apply to ProductList inventory table
+        - API routes: GET/PUT /api/settings/inventory-columns
+        - 19 configurable columns: stockCode, name, supplier, taxonomyPath, price, usageAreas, id, sector, category, subCategory, currency, unit, moq, leadTime, manufacturer, location, description, dateAdded, lastUpdated
     - **Backup & Versioning System**: Full data protection with gzip compression, point-in-time recovery, scheduled auto-backups (every 6 hours), manual backup creation, export/import functionality, and restore preview with safety net backups.
     - **Authentication System**: Secure session-based authentication with bcrypt password hashing (12 rounds), cryptographically secure tokens (crypto.randomBytes), rate-limited login (10 attempts/15 min), first-login password change enforcement, and logout functionality.
     - **Dynamic Stock Code Engine**: Structured product codes in format `P.BRANCH.BRANCH.COLOR.0001` with:

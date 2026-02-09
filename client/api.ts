@@ -403,6 +403,21 @@ export const api = {
     return res.json();
   },
 
+  async getInventoryColumns(): Promise<{ key: string; label: string; visible: boolean; order: number }[]> {
+    const res = await authFetch(`${API_BASE}/settings/inventory-columns`);
+    if (!res.ok) throw new Error('Failed to fetch inventory columns');
+    return res.json();
+  },
+
+  async updateInventoryColumns(columns: { key: string; label: string; visible: boolean; order: number }[]): Promise<{ key: string; label: string; visible: boolean; order: number }[]> {
+    const res = await authFetch(`${API_BASE}/settings/inventory-columns`, {
+      method: 'PUT',
+      body: JSON.stringify({ columns }),
+    });
+    if (!res.ok) throw new Error('Failed to update inventory columns');
+    return res.json();
+  },
+
   async listBackups(): Promise<BackupSummary[]> {
     const res = await authFetch(`${API_BASE}/backups`);
     if (!res.ok) throw new Error('Failed to fetch backups');

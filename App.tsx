@@ -10,7 +10,7 @@ import TaxonomyBuilder from './components/TaxonomyBuilder';
 import SupplierManager from './components/SupplierManager';
 import MassImportWizard from './components/MassImportWizard';
 import FloatingNotesWidget from './components/FloatingNotesWidget';
-import Settings from './components/Settings';
+import Settings, { InventoryColumnConfig } from './components/Settings';
 import Login from './components/Login';
 import ChangePassword from './components/ChangePassword';
 import SystemBuilder from './components/systemBuilder/SystemBuilder';
@@ -40,6 +40,7 @@ const App: React.FC = () => {
   const [usageAreas, setUsageAreas] = useState<string[]>([]);
   const [units, setUnits] = useState<string[]>([]);
   const [colorsList, setColorsList] = useState<any[]>([]);
+  const [inventoryColumns, setInventoryColumns] = useState<InventoryColumnConfig[]>([]);
   const [taxonomyPanelWidth, setTaxonomyPanelWidth] = useState(288);
   const [showTaxonomyPanel, setShowTaxonomyPanel] = useState(true);
   const [isResizingPanel, setIsResizingPanel] = useState(false);
@@ -236,6 +237,15 @@ const App: React.FC = () => {
         setColorsList(colorsData);
       } catch (e) {
         console.log('Failed to fetch colors');
+      }
+
+      try {
+        const columnsData = await api.getInventoryColumns();
+        if (columnsData && columnsData.length > 0) {
+          setInventoryColumns(columnsData);
+        }
+      } catch (e) {
+        console.log('Failed to fetch inventory columns config');
       }
 
       setIsDbConnected(true);
@@ -789,6 +799,7 @@ const App: React.FC = () => {
                 usageAreas={usageAreas}
                 units={units}
                 colors={colorsList}
+                inventoryColumnsConfig={inventoryColumns}
               />
             )}
             {viewMode === 'add-product' && (
@@ -957,6 +968,15 @@ const App: React.FC = () => {
                     setUnits(updated);
                   } catch (e) {
                     console.error('Failed to update units:', e);
+                  }
+                }}
+                inventoryColumns={inventoryColumns}
+                onUpdateInventoryColumns={async (cols: InventoryColumnConfig[]) => {
+                  try {
+                    const updated = await api.updateInventoryColumns(cols);
+                    setInventoryColumns(updated);
+                  } catch (e) {
+                    console.error('Failed to update inventory columns:', e);
                   }
                 }}
                 onRenameUsageArea={async (oldName: string, newName: string) => {

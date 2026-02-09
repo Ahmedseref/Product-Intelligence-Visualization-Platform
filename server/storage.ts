@@ -257,6 +257,24 @@ export class DatabaseStorage implements IStorage {
     return units;
   }
 
+  async getInventoryColumns(): Promise<{ key: string; label: string; visible: boolean; order: number }[]> {
+    const [setting] = await db.select().from(appSettings).where(eq(appSettings.key, 'inventory_columns'));
+    if (setting && Array.isArray(setting.value)) {
+      return setting.value as { key: string; label: string; visible: boolean; order: number }[];
+    }
+    return [];
+  }
+
+  async setInventoryColumns(columns: { key: string; label: string; visible: boolean; order: number }[]): Promise<{ key: string; label: string; visible: boolean; order: number }[]> {
+    const [existing] = await db.select().from(appSettings).where(eq(appSettings.key, 'inventory_columns'));
+    if (existing) {
+      await db.update(appSettings).set({ value: columns, updatedAt: new Date() }).where(eq(appSettings.key, 'inventory_columns'));
+    } else {
+      await db.insert(appSettings).values({ key: 'inventory_columns', value: columns });
+    }
+    return columns;
+  }
+
   async getColors(): Promise<Color[]> {
     return await db.select().from(colors).orderBy(colors.sortOrder);
   }

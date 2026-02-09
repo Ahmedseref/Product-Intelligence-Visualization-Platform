@@ -751,6 +751,30 @@ export function registerRoutes(app: Express): void {
     }
   });
 
+  app.get("/api/settings/inventory-columns", async (req, res) => {
+    try {
+      const columns = await storage.getInventoryColumns();
+      res.json(columns);
+    } catch (error) {
+      console.error("Error fetching inventory columns:", error);
+      res.status(500).json({ error: "Failed to fetch inventory columns" });
+    }
+  });
+
+  app.put("/api/settings/inventory-columns", async (req, res) => {
+    try {
+      const { columns } = req.body;
+      if (!Array.isArray(columns)) {
+        return res.status(400).json({ error: "Columns must be an array" });
+      }
+      const updated = await storage.setInventoryColumns(columns);
+      res.json(updated);
+    } catch (error) {
+      console.error("Error updating inventory columns:", error);
+      res.status(500).json({ error: "Failed to update inventory columns" });
+    }
+  });
+
   app.post("/api/backups/create", async (req, res) => {
     try {
       const { description } = req.body;

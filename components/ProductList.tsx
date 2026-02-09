@@ -6,6 +6,13 @@ import ProductForm from './ProductForm';
 import TaxonomyNodeSelector from './TaxonomyNodeSelector';
 import { Check, X, Download, Filter, FileText, ChevronDown, ChevronRight, Copy, Trash2, Columns, Eye, EyeOff, FolderTree, Search, ChevronsUpDown } from 'lucide-react';
 
+interface InventoryColumnSetting {
+  key: string;
+  label: string;
+  visible: boolean;
+  order: number;
+}
+
 interface ProductListProps {
   products: Product[];
   onUpdate: (p: Product) => void;
@@ -20,6 +27,7 @@ interface ProductListProps {
   usageAreas?: string[];
   units?: string[];
   colors?: any[];
+  inventoryColumnsConfig?: InventoryColumnSetting[];
 }
 
 interface EditingCell {
@@ -164,7 +172,8 @@ const UsageAreasEditor: React.FC<UsageAreasEditorProps> = ({ product, usageAreas
 
 const ProductList: React.FC<ProductListProps> = ({ 
   products, onUpdate, onDelete, onCreate, customFields, treeNodes,
-  suppliers = [], currentUser, onAddFieldDefinition, onAddTreeNode, usageAreas = [], units: unitsProp, colors = []
+  suppliers = [], currentUser, onAddFieldDefinition, onAddTreeNode, usageAreas = [], units: unitsProp, colors = [],
+  inventoryColumnsConfig
 }) => {
   const dynamicUnits = unitsProp && unitsProp.length > 0 ? unitsProp : UNITS;
   const [selectedProduct, setSelectedProduct] = useState<Product | null>(null);
@@ -231,6 +240,34 @@ const ProductList: React.FC<ProductListProps> = ({
   const resizeStartX = useRef(0);
   const resizeStartWidth = useRef(0);
 
+  const effectiveColumns = useMemo(() => {
+    if (!inventoryColumnsConfig || inventoryColumnsConfig.length === 0) {
+      return ALL_COLUMNS;
+    }
+    const configMap = new Map(inventoryColumnsConfig.map(c => [c.key, c]));
+    const ordered: ColumnConfig[] = [];
+    const sorted = [...inventoryColumnsConfig].sort((a, b) => a.order - b.order);
+    for (const cfg of sorted) {
+      const col = ALL_COLUMNS.find(c => c.key === cfg.key);
+      if (col) {
+        ordered.push({ ...col, defaultVisible: cfg.visible });
+      }
+    }
+    for (const col of ALL_COLUMNS) {
+      if (!configMap.has(col.key)) {
+        ordered.push(col);
+      }
+    }
+    return ordered;
+  }, [inventoryColumnsConfig]);
+
+  useEffect(() => {
+    if (inventoryColumnsConfig && inventoryColumnsConfig.length > 0) {
+      const visibleKeys = inventoryColumnsConfig.filter(c => c.visible).map(c => c.key as ColumnKey);
+      setVisibleColumns(new Set(visibleKeys));
+    }
+  }, [inventoryColumnsConfig]);
+
   useEffect(() => {
     if (editingCell && inputRef.current) {
       inputRef.current.focus();
@@ -276,7 +313,7 @@ const ProductList: React.FC<ProductListProps> = ({
   };
 
   const autoFitColumn = (columnKey: ColumnKey) => {
-    const col = ALL_COLUMNS.find(c => c.key === columnKey);
+    const col = effectiveColumns.find(c => c.key === columnKey);
     const headerWidth = col ? (col.label.length * 9) + 50 : 100;
     
     const getContentWidth = (field: keyof Product, charWidth = 8) => {
@@ -333,11 +370,11 @@ const ProductList: React.FC<ProductListProps> = ({
   };
 
   const showAllColumns = () => {
-    setVisibleColumns(new Set(ALL_COLUMNS.map(c => c.key)));
+    setVisibleColumns(new Set(effectiveColumns.map(c => c.key)));
   };
 
   const resetColumns = () => {
-    setVisibleColumns(new Set(ALL_COLUMNS.filter(c => c.defaultVisible).map(c => c.key)));
+    setVisibleColumns(new Set(effectiveColumns.filter(c => c.defaultVisible).map(c => c.key)));
   };
 
   const getProductPathString = (nodeId: string) => {
@@ -1234,7 +1271,7 @@ const ProductList: React.FC<ProductListProps> = ({
                     Reset
                   </button>
                 </div>
-                {ALL_COLUMNS.map(col => (
+                {effectiveColumns.map(col => (
                   <label 
                     key={col.key}
                     className="flex items-center gap-2 px-3 py-2 hover:bg-slate-50 cursor-pointer"
@@ -1344,7 +1381,7 @@ const ProductList: React.FC<ProductListProps> = ({
                   />
                 </th>
                 <th className="px-1 py-1.5 w-8 bg-slate-50"></th>
-                {ALL_COLUMNS.filter(col => visibleColumns.has(col.key)).map(col => (
+                {effectiveColumns.filter(col => visibleColumns.has(col.key)).map(col => (
                   <th 
                     key={col.key}
                     className={`px-3 py-1.5 text-[10px] font-bold text-slate-500 uppercase tracking-widest whitespace-nowrap relative ${col.sortable ? 'cursor-pointer hover:bg-slate-100' : ''}`}
@@ -1413,230 +1450,194 @@ const ProductList: React.FC<ProductListProps> = ({
                         )}
                       </button>
                     </td>
-                    {visibleColumns.has('stockCode') && (
-                      <td className="px-3 py-1 overflow-hidden text-ellipsis" style={{ width: columnWidths.stockCode, minWidth: columnWidths.stockCode, maxWidth: columnWidths.stockCode }}>
-                        {p.stockCode ? (
-                          <span className="text-xs font-mono font-semibold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded">{p.stockCode}</span>
-                        ) : (
-                          <span className="text-xs text-slate-400 italic">Not assigned</span>
-                        )}
-                      </td>
-                    )}
-                    {visibleColumns.has('name') && (
-                      <td className="px-3 py-1 overflow-hidden text-ellipsis" style={{ width: columnWidths.name, minWidth: columnWidths.name, maxWidth: columnWidths.name }}>
-                        {renderEditableCell(
-                          p, 
-                          'name', 
-                          <span className="text-sm font-semibold text-slate-900 group-hover:text-blue-700 transition-colors truncate block">
-                            {p.name || '-'}
-                          </span>,
-                          p.name || ''
-                        )}
-                      </td>
-                    )}
-                    {visibleColumns.has('supplier') && (
-                      <td className="px-3 py-1 overflow-hidden text-ellipsis" style={{ width: columnWidths.supplier, minWidth: columnWidths.supplier, maxWidth: columnWidths.supplier }}>
-                        {renderEditableCell(
-                          p,
-                          'supplier',
-                          <span className="text-sm text-slate-600 truncate block">{p.supplier}</span>,
-                          p.supplier
-                        )}
-                      </td>
-                    )}
-                    {visibleColumns.has('taxonomyPath') && (
-                      <td 
-                        ref={(el) => { taxonomyCellRefs.current[p.id] = el; }}
-                        className="px-3 py-1 overflow-visible" 
-                        style={{ width: columnWidths.taxonomyPath, minWidth: columnWidths.taxonomyPath, maxWidth: columnWidths.taxonomyPath, position: 'relative', zIndex: isEditing(p.id, 'taxonomyPath') ? 1000 : 'auto' }}
-                        onClick={(e) => e.stopPropagation()}
-                      >
-                        {isEditing(p.id, 'taxonomyPath') ? (
-                          (() => {
-                            const cellEl = taxonomyCellRefs.current[p.id];
-                            const rect = cellEl?.getBoundingClientRect();
-                            const viewportHeight = window.innerHeight;
-                            const spaceBelow = rect ? viewportHeight - rect.bottom : 300;
-                            const dropdownHeight = 320;
-                            const openUpward = spaceBelow < dropdownHeight && rect && rect.top > dropdownHeight;
-                            const posStyle: React.CSSProperties = {
-                              position: 'fixed' as const,
-                              zIndex: 9999,
-                              left: rect ? rect.left : undefined,
-                              width: 384,
-                              maxHeight: 320,
-                            };
-                            if (openUpward) {
-                              posStyle.bottom = rect ? viewportHeight - rect.top + 4 : undefined;
-                            } else {
-                              posStyle.top = rect ? rect.bottom + 4 : undefined;
-                            }
-                            return (
-                              <div className="bg-white border border-slate-300 rounded-lg shadow-2xl overflow-auto" style={posStyle}>
-                                <TaxonomyNodeSelector
-                                  treeNodes={treeNodes}
-                                  selectedNodeId={p.nodeId}
-                                  onSelect={(nodeId, path) => {
-                                    const updatedProduct = { ...p, nodeId };
-                                    let sector = 'Unknown';
-                                    let current = treeNodes.find(n => n.id === nodeId);
-                                    while(current) {
-                                      if(!current.parentId) {
-                                        sector = current.name;
-                                        break;
-                                      }
-                                      current = treeNodes.find(n => n.id === current?.parentId);
-                                    }
-                                    updatedProduct.sector = sector;
-                                    updatedProduct.category = path[path.length - 1] || 'Uncategorized';
-                                    onUpdate(updatedProduct);
-                                    setEditingCell(null);
-                                  }}
-                                  inline
-                                  className="bg-white"
-                                />
-                              </div>
-                            );
-                          })()
-                        ) : (
-                          <div 
-                            className="flex items-center gap-2 cursor-pointer hover:bg-blue-50 rounded px-1 py-0.5 -mx-1"
-                            onDoubleClick={() => {
-                              setEditingCell({ productId: p.id, field: 'taxonomyPath' });
-                            }}
-                          >
-                            <FolderTree className="w-3.5 h-3.5 text-slate-400 flex-shrink-0" />
-                            <span className="text-xs text-slate-600 truncate" title={hierarchy.fullPath}>
-                              {hierarchy.fullPath || '-'}
-                            </span>
-                          </div>
-                        )}
-                      </td>
-                    )}
-                    {visibleColumns.has('id') && (
-                      <td className="px-3 py-1 text-xs font-mono font-bold text-blue-600 overflow-hidden text-ellipsis" style={{ width: columnWidths.id, minWidth: columnWidths.id, maxWidth: columnWidths.id }}>{p.id}</td>
-                    )}
-                    {visibleColumns.has('sector') && (
-                      <td className="px-3 py-1 text-xs text-slate-600 overflow-hidden text-ellipsis" style={{ width: columnWidths.sector, minWidth: columnWidths.sector, maxWidth: columnWidths.sector }}>{hierarchy.sector || '-'}</td>
-                    )}
-                    {visibleColumns.has('category') && (
-                      <td className="px-3 py-1 text-xs text-slate-600 overflow-hidden text-ellipsis" style={{ width: columnWidths.category, minWidth: columnWidths.category, maxWidth: columnWidths.category }}>{hierarchy.category || '-'}</td>
-                    )}
-                    {visibleColumns.has('subCategory') && (
-                      <td className="px-3 py-1 text-xs text-slate-600 overflow-hidden text-ellipsis" style={{ width: columnWidths.subCategory, minWidth: columnWidths.subCategory, maxWidth: columnWidths.subCategory }}>{hierarchy.subCategory || '-'}</td>
-                    )}
-                    {visibleColumns.has('price') && (
-                      <td className="px-3 py-1 overflow-hidden text-ellipsis" style={{ width: columnWidths.price, minWidth: columnWidths.price, maxWidth: columnWidths.price }}>
-                        {renderEditableCell(
-                          p,
-                          'price',
-                          <span className="text-sm font-semibold text-slate-900">{p.price.toLocaleString()}</span>,
-                          p.price
-                        )}
-                      </td>
-                    )}
-                    {visibleColumns.has('currency') && (
-                      <td className="px-3 py-1 text-xs text-slate-600" style={{ width: columnWidths.currency, minWidth: columnWidths.currency, maxWidth: columnWidths.currency }}>{p.currency}</td>
-                    )}
-                    {visibleColumns.has('unit') && (
-                      <td className="px-3 py-1 text-xs text-slate-600" style={{ width: columnWidths.unit, minWidth: columnWidths.unit, maxWidth: columnWidths.unit }}>{p.unit}</td>
-                    )}
-                    {visibleColumns.has('moq') && (
-                      <td className="px-3 py-1 overflow-hidden text-ellipsis" style={{ width: columnWidths.moq, minWidth: columnWidths.moq, maxWidth: columnWidths.moq }}>
-                        {renderEditableCell(
-                          p,
-                          'moq',
-                          <span className="text-xs text-slate-600">{p.moq}</span>,
-                          p.moq
-                        )}
-                      </td>
-                    )}
-                    {visibleColumns.has('leadTime') && (
-                      <td className="px-3 py-1 overflow-hidden text-ellipsis" style={{ width: columnWidths.leadTime, minWidth: columnWidths.leadTime, maxWidth: columnWidths.leadTime }}>
-                        {renderEditableCell(
-                          p,
-                          'leadTime',
-                          <div className="flex items-center gap-2">
-                            <span className={`w-2 h-2 rounded-full ${p.leadTime > 30 ? 'bg-amber-400' : 'bg-emerald-400'}`}></span>
-                            <span className="text-xs text-slate-600">{p.leadTime}d</span>
-                          </div>,
-                          p.leadTime
-                        )}
-                      </td>
-                    )}
-                    {visibleColumns.has('manufacturer') && (
-                      <td className="px-3 py-1 overflow-hidden text-ellipsis" style={{ width: columnWidths.manufacturer, minWidth: columnWidths.manufacturer, maxWidth: columnWidths.manufacturer }}>
-                        {renderEditableCell(
-                          p,
-                          'manufacturer',
-                          <span className="text-xs text-slate-600 truncate block">{p.manufacturer || '-'}</span>,
-                          p.manufacturer || ''
-                        )}
-                      </td>
-                    )}
-                    {visibleColumns.has('location') && (
-                      <td className="px-3 py-1 text-xs text-slate-600 overflow-hidden text-ellipsis truncate" style={{ width: columnWidths.location, minWidth: columnWidths.location, maxWidth: columnWidths.location }}>{p.manufacturingLocation || '-'}</td>
-                    )}
-                    {visibleColumns.has('description') && (
-                      <td className="px-3 py-1 text-xs text-slate-500 truncate overflow-hidden text-ellipsis" style={{ width: columnWidths.description, minWidth: columnWidths.description, maxWidth: columnWidths.description }} title={p.description}>{p.description || '-'}</td>
-                    )}
-                    {visibleColumns.has('usageAreas') && (
-                      <td className="px-3 py-1 overflow-hidden" style={{ width: columnWidths.usageAreas, minWidth: columnWidths.usageAreas, maxWidth: columnWidths.usageAreas }}>
-                        {isEditing(p.id, 'usageAreas') ? (
-                          <UsageAreasEditor
-                            product={p}
-                            usageAreas={usageAreas}
-                            onUpdate={onUpdate}
-                            onClose={() => setEditingCell(null)}
-                          />
-                        ) : (
-                          <div 
-                            className="cursor-text hover:bg-blue-50 hover:ring-1 hover:ring-blue-200 rounded px-1 py-0.5 transition-all"
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              if (clickTimeoutRef.current) {
-                                clearTimeout(clickTimeoutRef.current);
-                                clickTimeoutRef.current = null;
-                              }
-                              setEditingCell({ productId: p.id, field: 'usageAreas' });
-                            }}
-                            title="Click to edit usage areas"
-                          >
-                            {(() => {
-                              const allAreas = getProductUsageAreas(p);
-                              if (allAreas.length === 0) {
-                                return <span className="text-xs text-slate-400">-</span>;
-                              }
-                              const invalidAreas = allAreas.filter(a => !usageAreas.includes(a));
-                              return (
-                                <div 
-                                  className="text-xs text-slate-700 truncate"
-                                  title={allAreas.join(', ')}
-                                >
-                                  {allAreas.slice(0, 2).join(', ')}
-                                  {allAreas.length > 2 && (
-                                    <span className="text-slate-400"> +{allAreas.length - 2}</span>
-                                  )}
-                                  {invalidAreas.length > 0 && (
-                                    <span className="text-amber-500 ml-1" title={`Invalid: ${invalidAreas.join(', ')}`}>⚠</span>
-                                  )}
+                    {effectiveColumns.filter(col => visibleColumns.has(col.key)).map(col => {
+                      const colKey = col.key;
+                      const w = columnWidths[colKey];
+                      const cellStyle = { width: w, minWidth: w, maxWidth: w };
+                      switch(colKey) {
+                        case 'stockCode':
+                          return (
+                            <td key={colKey} className="px-3 py-1 overflow-hidden text-ellipsis" style={cellStyle}>
+                              {p.stockCode ? (
+                                <span className="text-xs font-mono font-semibold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded">{p.stockCode}</span>
+                              ) : (
+                                <span className="text-xs text-slate-400 italic">Not assigned</span>
+                              )}
+                            </td>
+                          );
+                        case 'name':
+                          return (
+                            <td key={colKey} className="px-3 py-1 overflow-hidden text-ellipsis" style={cellStyle}>
+                              {renderEditableCell(p, 'name',
+                                <span className="text-sm font-semibold text-slate-900 group-hover:text-blue-700 transition-colors truncate block">{p.name || '-'}</span>,
+                                p.name || ''
+                              )}
+                            </td>
+                          );
+                        case 'supplier':
+                          return (
+                            <td key={colKey} className="px-3 py-1 overflow-hidden text-ellipsis" style={cellStyle}>
+                              {renderEditableCell(p, 'supplier',
+                                <span className="text-sm text-slate-600 truncate block">{p.supplier}</span>,
+                                p.supplier
+                              )}
+                            </td>
+                          );
+                        case 'taxonomyPath':
+                          return (
+                            <td key={colKey}
+                              ref={(el) => { taxonomyCellRefs.current[p.id] = el; }}
+                              className="px-3 py-1 overflow-visible"
+                              style={{ ...cellStyle, position: 'relative', zIndex: isEditing(p.id, 'taxonomyPath') ? 1000 : 'auto' }}
+                              onClick={(e) => e.stopPropagation()}
+                            >
+                              {isEditing(p.id, 'taxonomyPath') ? (
+                                (() => {
+                                  const cellEl = taxonomyCellRefs.current[p.id];
+                                  const rect = cellEl?.getBoundingClientRect();
+                                  const viewportHeight = window.innerHeight;
+                                  const spaceBelow = rect ? viewportHeight - rect.bottom : 300;
+                                  const dropdownHeight = 320;
+                                  const openUpward = spaceBelow < dropdownHeight && rect && rect.top > dropdownHeight;
+                                  const posStyle: React.CSSProperties = {
+                                    position: 'fixed' as const, zIndex: 9999,
+                                    left: rect ? rect.left : undefined, width: 384, maxHeight: 320,
+                                  };
+                                  if (openUpward) { posStyle.bottom = rect ? viewportHeight - rect.top + 4 : undefined; }
+                                  else { posStyle.top = rect ? rect.bottom + 4 : undefined; }
+                                  return (
+                                    <div className="bg-white border border-slate-300 rounded-lg shadow-2xl overflow-auto" style={posStyle}>
+                                      <TaxonomyNodeSelector
+                                        treeNodes={treeNodes}
+                                        selectedNodeId={p.nodeId}
+                                        onSelect={(nodeId, path) => {
+                                          const updatedProduct = { ...p, nodeId };
+                                          let sector = 'Unknown';
+                                          let current = treeNodes.find(n => n.id === nodeId);
+                                          while(current) {
+                                            if(!current.parentId) { sector = current.name; break; }
+                                            current = treeNodes.find(n => n.id === current?.parentId);
+                                          }
+                                          updatedProduct.sector = sector;
+                                          updatedProduct.category = path[path.length - 1] || 'Uncategorized';
+                                          onUpdate(updatedProduct);
+                                          setEditingCell(null);
+                                        }}
+                                        inline className="bg-white"
+                                      />
+                                    </div>
+                                  );
+                                })()
+                              ) : (
+                                <div className="flex items-center gap-2 cursor-pointer hover:bg-blue-50 rounded px-1 py-0.5 -mx-1"
+                                  onDoubleClick={() => { setEditingCell({ productId: p.id, field: 'taxonomyPath' }); }}>
+                                  <FolderTree className="w-3.5 h-3.5 text-slate-400 flex-shrink-0" />
+                                  <span className="text-xs text-slate-600 truncate" title={hierarchy.fullPath}>{hierarchy.fullPath || '-'}</span>
                                 </div>
-                              );
-                            })()}
-                          </div>
-                        )}
-                      </td>
-                    )}
-                    {visibleColumns.has('dateAdded') && (
-                      <td className="px-3 py-1 text-xs text-slate-500 overflow-hidden text-ellipsis" style={{ width: columnWidths.dateAdded, minWidth: columnWidths.dateAdded, maxWidth: columnWidths.dateAdded }}>
-                        {p.dateAdded ? new Date(p.dateAdded).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }) : '-'}
-                      </td>
-                    )}
-                    {visibleColumns.has('lastUpdated') && (
-                      <td className="px-3 py-1 text-xs text-slate-500 overflow-hidden text-ellipsis" style={{ width: columnWidths.lastUpdated, minWidth: columnWidths.lastUpdated, maxWidth: columnWidths.lastUpdated }}>
-                        {p.lastUpdated ? new Date(p.lastUpdated).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }) : '-'}
-                      </td>
-                    )}
+                              )}
+                            </td>
+                          );
+                        case 'id':
+                          return <td key={colKey} className="px-3 py-1 text-xs font-mono font-bold text-blue-600 overflow-hidden text-ellipsis" style={cellStyle}>{p.id}</td>;
+                        case 'sector':
+                          return <td key={colKey} className="px-3 py-1 text-xs text-slate-600 overflow-hidden text-ellipsis" style={cellStyle}>{hierarchy.sector || '-'}</td>;
+                        case 'category':
+                          return <td key={colKey} className="px-3 py-1 text-xs text-slate-600 overflow-hidden text-ellipsis" style={cellStyle}>{hierarchy.category || '-'}</td>;
+                        case 'subCategory':
+                          return <td key={colKey} className="px-3 py-1 text-xs text-slate-600 overflow-hidden text-ellipsis" style={cellStyle}>{hierarchy.subCategory || '-'}</td>;
+                        case 'price':
+                          return (
+                            <td key={colKey} className="px-3 py-1 overflow-hidden text-ellipsis" style={cellStyle}>
+                              {renderEditableCell(p, 'price',
+                                <span className="text-sm font-semibold text-slate-900">{p.price.toLocaleString()}</span>,
+                                p.price
+                              )}
+                            </td>
+                          );
+                        case 'currency':
+                          return <td key={colKey} className="px-3 py-1 text-xs text-slate-600" style={cellStyle}>{p.currency}</td>;
+                        case 'unit':
+                          return <td key={colKey} className="px-3 py-1 text-xs text-slate-600" style={cellStyle}>{p.unit}</td>;
+                        case 'moq':
+                          return (
+                            <td key={colKey} className="px-3 py-1 overflow-hidden text-ellipsis" style={cellStyle}>
+                              {renderEditableCell(p, 'moq',
+                                <span className="text-xs text-slate-600">{p.moq}</span>,
+                                p.moq
+                              )}
+                            </td>
+                          );
+                        case 'leadTime':
+                          return (
+                            <td key={colKey} className="px-3 py-1 overflow-hidden text-ellipsis" style={cellStyle}>
+                              {renderEditableCell(p, 'leadTime',
+                                <div className="flex items-center gap-2">
+                                  <span className={`w-2 h-2 rounded-full ${p.leadTime > 30 ? 'bg-amber-400' : 'bg-emerald-400'}`}></span>
+                                  <span className="text-xs text-slate-600">{p.leadTime}d</span>
+                                </div>,
+                                p.leadTime
+                              )}
+                            </td>
+                          );
+                        case 'manufacturer':
+                          return (
+                            <td key={colKey} className="px-3 py-1 overflow-hidden text-ellipsis" style={cellStyle}>
+                              {renderEditableCell(p, 'manufacturer',
+                                <span className="text-xs text-slate-600 truncate block">{p.manufacturer || '-'}</span>,
+                                p.manufacturer || ''
+                              )}
+                            </td>
+                          );
+                        case 'location':
+                          return <td key={colKey} className="px-3 py-1 text-xs text-slate-600 overflow-hidden text-ellipsis truncate" style={cellStyle}>{p.manufacturingLocation || '-'}</td>;
+                        case 'description':
+                          return <td key={colKey} className="px-3 py-1 text-xs text-slate-500 truncate overflow-hidden text-ellipsis" style={cellStyle} title={p.description}>{p.description || '-'}</td>;
+                        case 'usageAreas':
+                          return (
+                            <td key={colKey} className="px-3 py-1 overflow-hidden" style={cellStyle}>
+                              {isEditing(p.id, 'usageAreas') ? (
+                                <UsageAreasEditor product={p} usageAreas={usageAreas} onUpdate={onUpdate} onClose={() => setEditingCell(null)} />
+                              ) : (
+                                <div className="cursor-text hover:bg-blue-50 hover:ring-1 hover:ring-blue-200 rounded px-1 py-0.5 transition-all"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    if (clickTimeoutRef.current) { clearTimeout(clickTimeoutRef.current); clickTimeoutRef.current = null; }
+                                    setEditingCell({ productId: p.id, field: 'usageAreas' });
+                                  }}
+                                  title="Click to edit usage areas"
+                                >
+                                  {(() => {
+                                    const allAreas = getProductUsageAreas(p);
+                                    if (allAreas.length === 0) return <span className="text-xs text-slate-400">-</span>;
+                                    const invalidAreas = allAreas.filter(a => !usageAreas.includes(a));
+                                    return (
+                                      <div className="text-xs text-slate-700 truncate" title={allAreas.join(', ')}>
+                                        {allAreas.slice(0, 2).join(', ')}
+                                        {allAreas.length > 2 && <span className="text-slate-400"> +{allAreas.length - 2}</span>}
+                                        {invalidAreas.length > 0 && <span className="text-amber-500 ml-1" title={`Invalid: ${invalidAreas.join(', ')}`}>⚠</span>}
+                                      </div>
+                                    );
+                                  })()}
+                                </div>
+                              )}
+                            </td>
+                          );
+                        case 'dateAdded':
+                          return (
+                            <td key={colKey} className="px-3 py-1 text-xs text-slate-500 overflow-hidden text-ellipsis" style={cellStyle}>
+                              {p.dateAdded ? new Date(p.dateAdded).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }) : '-'}
+                            </td>
+                          );
+                        case 'lastUpdated':
+                          return (
+                            <td key={colKey} className="px-3 py-1 text-xs text-slate-500 overflow-hidden text-ellipsis" style={cellStyle}>
+                              {p.lastUpdated ? new Date(p.lastUpdated).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }) : '-'}
+                            </td>
+                          );
+                        default:
+                          return null;
+                      }
+                    })}
                     <td className="px-2 py-1 text-right w-24">
                     <div className="flex items-center justify-end gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity duration-150" onClick={e => e.stopPropagation()}>
                       <button 
