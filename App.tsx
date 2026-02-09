@@ -38,6 +38,7 @@ const App: React.FC = () => {
   const [isDbConnected, setIsDbConnected] = useState(false);
   const [addProductMode, setAddProductMode] = useState<'single' | 'mass'>('single');
   const [usageAreas, setUsageAreas] = useState<string[]>([]);
+  const [units, setUnits] = useState<string[]>([]);
   const [colorsList, setColorsList] = useState<any[]>([]);
   const [taxonomyPanelWidth, setTaxonomyPanelWidth] = useState(288);
   const [showTaxonomyPanel, setShowTaxonomyPanel] = useState(true);
@@ -220,6 +221,14 @@ const App: React.FC = () => {
       } catch (e) {
         console.log('Failed to fetch usage areas, using defaults');
         setUsageAreas(['Commercial', 'Food & Beverage', 'Healthcare', 'Industrial', 'Infrastructure', 'Parking', 'Residential', 'Sports']);
+      }
+
+      try {
+        const unitsData = await api.getUnits();
+        setUnits(unitsData);
+      } catch (e) {
+        console.log('Failed to fetch units, using defaults');
+        setUnits(['kg', 'ton', 'piece', 'liter', 'box', 'pallet', 'm', 'm²', 'm³']);
       }
 
       try {
@@ -778,6 +787,7 @@ const App: React.FC = () => {
                 onAddFieldDefinition={addCustomFieldDefinition}
                 onAddTreeNode={addTreeNode}
                 usageAreas={usageAreas}
+                units={units}
                 colors={colorsList}
               />
             )}
@@ -818,6 +828,7 @@ const App: React.FC = () => {
                     treeNodes={treeNodes}
                     suppliers={suppliers}
                     usageAreas={usageAreas}
+                    units={units}
                     colors={colorsList}
                     onAddFieldDefinition={addCustomFieldDefinition}
                     onAddTreeNode={addTreeNode}
@@ -829,6 +840,15 @@ const App: React.FC = () => {
                     treeNodes={treeNodes}
                     suppliers={suppliers}
                     usageAreas={usageAreas}
+                    units={units}
+                    onUnitsChange={async (newUnits) => {
+                      try {
+                        const updated = await api.updateUnits(newUnits);
+                        setUnits(updated);
+                      } catch (e) {
+                        console.error('Failed to auto-add units:', e);
+                      }
+                    }}
                   />
                 )}
               </div>
@@ -870,6 +890,7 @@ const App: React.FC = () => {
             {viewMode === 'settings' && (
               <Settings
                 usageAreas={usageAreas}
+                units={units}
                 colors={colorsList}
                 onColorsChange={setColorsList}
                 onDataRefreshNeeded={async () => {
@@ -927,6 +948,14 @@ const App: React.FC = () => {
                     setUsageAreas(updated);
                   } catch (e) {
                     console.error('Failed to update usage areas:', e);
+                  }
+                }}
+                onUpdateUnits={async (newUnits: string[]) => {
+                  try {
+                    const updated = await api.updateUnits(newUnits);
+                    setUnits(updated);
+                  } catch (e) {
+                    console.error('Failed to update units:', e);
                   }
                 }}
                 onRenameUsageArea={async (oldName: string, newName: string) => {

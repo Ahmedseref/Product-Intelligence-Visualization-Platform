@@ -237,6 +237,26 @@ export class DatabaseStorage implements IStorage {
     return areas;
   }
 
+  async getUnits(): Promise<string[]> {
+    const [setting] = await db.select().from(appSettings).where(eq(appSettings.key, 'units'));
+    if (setting && Array.isArray(setting.value)) {
+      return setting.value as string[];
+    }
+    const defaultUnits = ['kg', 'ton', 'piece', 'liter', 'box', 'pallet', 'm', 'm²', 'm³', 'ft', 'ft²', 'ft³', 'inch', 'cm', 'mm', 'gallon', 'oz', 'lb', 'set', 'pair', 'roll', 'sheet', 'pack', 'carton'];
+    await db.insert(appSettings).values({ key: 'units', value: defaultUnits }).onConflictDoNothing();
+    return defaultUnits;
+  }
+
+  async setUnits(units: string[]): Promise<string[]> {
+    const [existing] = await db.select().from(appSettings).where(eq(appSettings.key, 'units'));
+    if (existing) {
+      await db.update(appSettings).set({ value: units, updatedAt: new Date() }).where(eq(appSettings.key, 'units'));
+    } else {
+      await db.insert(appSettings).values({ key: 'units', value: units });
+    }
+    return units;
+  }
+
   async getColors(): Promise<Color[]> {
     return await db.select().from(colors).orderBy(colors.sortOrder);
   }

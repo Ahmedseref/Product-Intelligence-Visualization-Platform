@@ -39,6 +39,12 @@ I prefer detailed explanations and thorough code comments. I value iterative dev
     - Real-time database synchronization.
     - **Settings page with dynamic Usage Areas management** (add/edit/delete) stored in database.
     - Usage Areas are used system-wide in ProductForm, MassImportWizard, and ProductUsageHeatmap.
+    - **Dynamic Units Management**: Database-backed unit system (app_settings table, key: 'units') with:
+        - CRUD management in Settings page (add/edit/delete units)
+        - Dynamic unit dropdowns in ProductForm, ProductList (inline edit), and MassImportWizard
+        - Auto-discovery of new units during mass import (auto-added to database)
+        - API routes: GET/PUT /api/settings/units
+        - Default units: kg, ton, piece, liter, box, pallet, m, m², m³, ft, ft², ft³, inch, cm, mm, gallon, oz, lb, set, pair, roll, sheet, pack, carton
     - **Backup & Versioning System**: Full data protection with gzip compression, point-in-time recovery, scheduled auto-backups (every 6 hours), manual backup creation, export/import functionality, and restore preview with safety net backups.
     - **Authentication System**: Secure session-based authentication with bcrypt password hashing (12 rounds), cryptographically secure tokens (crypto.randomBytes), rate-limited login (10 attempts/15 min), first-login password change enforcement, and logout functionality.
     - **Dynamic Stock Code Engine**: Structured product codes in format `P.BRANCH.BRANCH.COLOR.0001` with:

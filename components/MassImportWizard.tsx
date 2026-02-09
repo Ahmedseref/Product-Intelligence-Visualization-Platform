@@ -27,6 +27,8 @@ interface MassImportWizardProps {
   treeNodes: TreeNode[];
   suppliers: Supplier[];
   usageAreas?: string[];
+  units?: string[];
+  onUnitsChange?: (units: string[]) => void;
 }
 
 type WizardStep = 1 | 2 | 3 | 4;
@@ -62,7 +64,8 @@ const PRODUCT_FIELDS = [
   { key: 'storageConditions', label: 'Storage Conditions', required: false },
 ];
 
-const MassImportWizard: React.FC<MassImportWizardProps> = ({ onImport, onCancel, treeNodes, suppliers, usageAreas = [] }) => {
+const MassImportWizard: React.FC<MassImportWizardProps> = ({ onImport, onCancel, treeNodes, suppliers, usageAreas = [], units: unitsProp, onUnitsChange }) => {
+  const dynamicUnits = unitsProp && unitsProp.length > 0 ? unitsProp : UNITS;
   const USAGE_AREAS = usageAreas;
   const [importMode, setImportMode] = useState<ImportMode>('file');
   const [currentStep, setCurrentStep] = useState<WizardStep>(1);
@@ -490,6 +493,17 @@ const MassImportWizard: React.FC<MassImportWizardProps> = ({ onImport, onCancel,
   const handleImport = () => {
     const products = importMode === 'paste' ? generatePasteProducts() : generateProducts();
     if (products.length > 0) {
+      if (onUnitsChange) {
+        const newUnits = new Set<string>();
+        products.forEach(p => {
+          if (p.unit && !dynamicUnits.includes(p.unit)) {
+            newUnits.add(p.unit);
+          }
+        });
+        if (newUnits.size > 0) {
+          onUnitsChange([...dynamicUnits, ...Array.from(newUnits)]);
+        }
+      }
       onImport(products);
     }
   };
@@ -796,7 +810,7 @@ const MassImportWizard: React.FC<MassImportWizardProps> = ({ onImport, onCancel,
                 onChange={e => setDefaults({...defaults, unit: e.target.value})}
                 className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:ring-2 focus:ring-blue-500 outline-none"
               >
-                {UNITS.map(u => <option key={u} value={u}>{u}</option>)}
+                {dynamicUnits.map(u => <option key={u} value={u}>{u}</option>)}
               </select>
             </div>
           </div>
@@ -1116,7 +1130,7 @@ const MassImportWizard: React.FC<MassImportWizardProps> = ({ onImport, onCancel,
                 onChange={e => setPasteAssignment(prev => ({ ...prev, unit: e.target.value }))}
                 className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:ring-2 focus:ring-blue-500 outline-none"
               >
-                {UNITS.map(u => <option key={u} value={u}>{u}</option>)}
+                {dynamicUnits.map(u => <option key={u} value={u}>{u}</option>)}
               </select>
               <p className="text-xs text-slate-400">Per-product unit can be set in Step 1</p>
             </div>

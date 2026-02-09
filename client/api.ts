@@ -388,6 +388,21 @@ export const api = {
     return res.json();
   },
 
+  async getUnits(): Promise<string[]> {
+    const res = await authFetch(`${API_BASE}/settings/units`);
+    if (!res.ok) throw new Error('Failed to fetch units');
+    return res.json();
+  },
+
+  async updateUnits(units: string[]): Promise<string[]> {
+    const res = await authFetch(`${API_BASE}/settings/units`, {
+      method: 'PUT',
+      body: JSON.stringify({ units }),
+    });
+    if (!res.ok) throw new Error('Failed to update units');
+    return res.json();
+  },
+
   async listBackups(): Promise<BackupSummary[]> {
     const res = await authFetch(`${API_BASE}/backups`);
     if (!res.ok) throw new Error('Failed to fetch backups');

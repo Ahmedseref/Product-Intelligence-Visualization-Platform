@@ -13,6 +13,7 @@ interface ProductFormProps {
   treeNodes: TreeNode[];
   suppliers: Supplier[];
   usageAreas?: string[];
+  units?: string[];
   colors?: any[];
   onAddFieldDefinition: (field: CustomField) => void;
   onAddTreeNode: (node: TreeNode) => void;
@@ -20,9 +21,10 @@ interface ProductFormProps {
   mode?: 'create' | 'edit';
 }
 
-const ProductForm: React.FC<ProductFormProps> = ({ onSubmit, onCancel, currentUser, customFields, treeNodes, suppliers = [], usageAreas = [], colors = [], onAddFieldDefinition, onAddTreeNode, initialProduct, mode = 'create' }) => {
+const ProductForm: React.FC<ProductFormProps> = ({ onSubmit, onCancel, currentUser, customFields, treeNodes, suppliers = [], usageAreas = [], units: unitsProp, colors = [], onAddFieldDefinition, onAddTreeNode, initialProduct, mode = 'create' }) => {
   const isEditMode = mode === 'edit' && initialProduct;
   const USAGE_AREAS = usageAreas;
+  const dynamicUnits = unitsProp && unitsProp.length > 0 ? unitsProp : UNITS;
   
   const [showNewFieldModal, setShowNewFieldModal] = useState(false);
   const [newFieldDef, setNewFieldDef] = useState<Partial<CustomField>>({ label: '', type: 'text' });
@@ -82,7 +84,7 @@ const ProductForm: React.FC<ProductFormProps> = ({ onSubmit, onCancel, currentUs
     imageUrl: `https://picsum.photos/seed/${Math.random()}/400/300`,
     price: 0,
     currency: CURRENCIES[0],
-    unit: UNITS[0],
+    unit: dynamicUnits[0] || 'kg',
     moq: 1,
     leadTime: 30,
     packagingType: '',
@@ -800,10 +802,10 @@ const ProductForm: React.FC<ProductFormProps> = ({ onSubmit, onCancel, currentUs
                 </div>
                 <div className="space-y-1">
                   <label className="text-xs font-bold text-slate-500 uppercase tracking-wider">Unit</label>
-                  {UNITS.includes(formData.unit) || formData.unit === '' ? (
+                  {[...dynamicUnits, 'Other'].includes(formData.unit) || formData.unit === '' ? (
                     <select 
                       className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-sm outline-none"
-                      value={UNITS.includes(formData.unit) ? formData.unit : 'Other'}
+                      value={dynamicUnits.includes(formData.unit) ? formData.unit : 'Other'}
                       onChange={e => {
                         if (e.target.value === 'Other') {
                           setFormData({...formData, unit: ''});
@@ -812,7 +814,8 @@ const ProductForm: React.FC<ProductFormProps> = ({ onSubmit, onCancel, currentUs
                         }
                       }}
                     >
-                      {UNITS.map(u => <option key={u} value={u}>{u}</option>)}
+                      {dynamicUnits.map(u => <option key={u} value={u}>{u}</option>)}
+                      <option value="Other">Other</option>
                     </select>
                   ) : (
                     <div className="flex gap-2">

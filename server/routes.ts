@@ -727,6 +727,30 @@ export function registerRoutes(app: Express): void {
     }
   });
 
+  app.get("/api/settings/units", async (req, res) => {
+    try {
+      const units = await storage.getUnits();
+      res.json(units);
+    } catch (error) {
+      console.error("Error fetching units:", error);
+      res.status(500).json({ error: "Failed to fetch units" });
+    }
+  });
+
+  app.put("/api/settings/units", async (req, res) => {
+    try {
+      const { units } = req.body;
+      if (!Array.isArray(units)) {
+        return res.status(400).json({ error: "Units must be an array" });
+      }
+      const updatedUnits = await storage.setUnits(units);
+      res.json(updatedUnits);
+    } catch (error) {
+      console.error("Error updating units:", error);
+      res.status(500).json({ error: "Failed to update units" });
+    }
+  });
+
   app.post("/api/backups/create", async (req, res) => {
     try {
       const { description } = req.body;

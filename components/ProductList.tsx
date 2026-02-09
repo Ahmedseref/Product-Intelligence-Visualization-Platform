@@ -18,6 +18,7 @@ interface ProductListProps {
   onAddFieldDefinition?: (field: CustomField) => void;
   onAddTreeNode?: (node: TreeNode) => void;
   usageAreas?: string[];
+  units?: string[];
   colors?: any[];
 }
 
@@ -164,8 +165,9 @@ const UsageAreasEditor: React.FC<UsageAreasEditorProps> = ({ product, usageAreas
 
 const ProductList: React.FC<ProductListProps> = ({ 
   products, onUpdate, onDelete, onCreate, customFields, treeNodes,
-  suppliers = [], currentUser, onAddFieldDefinition, onAddTreeNode, usageAreas = [], colors = []
+  suppliers = [], currentUser, onAddFieldDefinition, onAddTreeNode, usageAreas = [], units: unitsProp, colors = []
 }) => {
+  const dynamicUnits = unitsProp && unitsProp.length > 0 ? unitsProp : UNITS;
   const [selectedProduct, setSelectedProduct] = useState<Product | null>(null);
   const [editingProduct, setEditingProduct] = useState<Product | null>(null);
   const [sortField, setSortField] = useState<ColumnKey>('name');
@@ -1803,6 +1805,7 @@ const ProductList: React.FC<ProductListProps> = ({
               treeNodes={treeNodes}
               suppliers={suppliers}
               usageAreas={usageAreas}
+              units={unitsProp}
               colors={colors}
               onAddFieldDefinition={onAddFieldDefinition}
               onAddTreeNode={onAddTreeNode}

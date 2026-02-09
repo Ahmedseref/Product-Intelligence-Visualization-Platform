@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Plus, Edit2, Trash2, Check, X, AlertCircle, Tag, Hash, Archive, Settings as SettingsIcon, ChevronRight } from 'lucide-react';
+import { Plus, Edit2, Trash2, Check, X, AlertCircle, Tag, Hash, Archive, Settings as SettingsIcon, ChevronRight, Ruler } from 'lucide-react';
 import BackupManager from './settings/BackupManager';
 import StockCodeManager from './settings/StockCodeManager';
 
@@ -7,12 +7,14 @@ interface SettingsProps {
   usageAreas: string[];
   onUpdateUsageAreas: (areas: string[]) => void;
   onRenameUsageArea?: (oldName: string, newName: string) => void;
+  units?: string[];
+  onUpdateUnits?: (units: string[]) => void;
   colors: any[];
   onColorsChange: (colors: any[]) => void;
   onDataRefreshNeeded?: () => void;
 }
 
-type SettingsSection = 'usage-areas' | 'stock-codes' | 'backups';
+type SettingsSection = 'usage-areas' | 'units' | 'stock-codes' | 'backups';
 
 const NAV_ITEMS: { id: SettingsSection; label: string; description: string; icon: React.ReactNode; color: string; bgColor: string }[] = [
   { 
@@ -22,6 +24,14 @@ const NAV_ITEMS: { id: SettingsSection; label: string; description: string; icon
     icon: <Tag className="w-5 h-5" />, 
     color: 'text-blue-600',
     bgColor: 'bg-blue-50'
+  },
+  { 
+    id: 'units', 
+    label: 'Units', 
+    description: 'Measurement & packing units',
+    icon: <Ruler className="w-5 h-5" />, 
+    color: 'text-emerald-600',
+    bgColor: 'bg-emerald-50'
   },
   { 
     id: 'stock-codes', 
@@ -41,12 +51,16 @@ const NAV_ITEMS: { id: SettingsSection; label: string; description: string; icon
   },
 ];
 
-const Settings: React.FC<SettingsProps> = ({ usageAreas, onUpdateUsageAreas, onRenameUsageArea, colors, onColorsChange, onDataRefreshNeeded }) => {
+const Settings: React.FC<SettingsProps> = ({ usageAreas, onUpdateUsageAreas, onRenameUsageArea, units = [], onUpdateUnits, colors, onColorsChange, onDataRefreshNeeded }) => {
   const [activeSection, setActiveSection] = useState<SettingsSection>('usage-areas');
   const [newArea, setNewArea] = useState('');
   const [editingIndex, setEditingIndex] = useState<number | null>(null);
   const [editValue, setEditValue] = useState('');
   const [deleteConfirm, setDeleteConfirm] = useState<number | null>(null);
+  const [newUnit, setNewUnit] = useState('');
+  const [editingUnitIndex, setEditingUnitIndex] = useState<number | null>(null);
+  const [editUnitValue, setEditUnitValue] = useState('');
+  const [deleteUnitConfirm, setDeleteUnitConfirm] = useState<number | null>(null);
 
   const handleAddArea = () => {
     const trimmed = newArea.trim();
@@ -212,6 +226,147 @@ const Settings: React.FC<SettingsProps> = ({ usageAreas, onUpdateUsageAreas, onR
     </div>
   );
 
+  const handleAddUnit = () => {
+    const trimmed = newUnit.trim();
+    if (trimmed && !units.includes(trimmed) && onUpdateUnits) {
+      onUpdateUnits([...units, trimmed]);
+      setNewUnit('');
+    }
+  };
+
+  const handleEditUnitStart = (index: number) => {
+    setEditingUnitIndex(index);
+    setEditUnitValue(units[index]);
+  };
+
+  const handleEditUnitSave = () => {
+    if (editingUnitIndex === null || !onUpdateUnits) return;
+    const trimmed = editUnitValue.trim();
+    if (trimmed && trimmed !== units[editingUnitIndex] && !units.filter((_, i) => i !== editingUnitIndex).includes(trimmed)) {
+      const updated = [...units];
+      updated[editingUnitIndex] = trimmed;
+      onUpdateUnits(updated);
+    }
+    setEditingUnitIndex(null);
+    setEditUnitValue('');
+  };
+
+  const handleEditUnitCancel = () => {
+    setEditingUnitIndex(null);
+    setEditUnitValue('');
+  };
+
+  const handleDeleteUnit = (index: number) => {
+    if (!onUpdateUnits) return;
+    const updated = units.filter((_, i) => i !== index);
+    onUpdateUnits(updated);
+    setDeleteUnitConfirm(null);
+  };
+
+  const renderUnits = () => (
+    <div className="space-y-6">
+      <div className="flex gap-3">
+        <input
+          type="text"
+          value={newUnit}
+          onChange={e => setNewUnit(e.target.value)}
+          onKeyDown={e => e.key === 'Enter' && handleAddUnit()}
+          placeholder="Enter new unit (e.g., kg, m², piece)..."
+          className="flex-1 px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 outline-none transition-all"
+        />
+        <button
+          onClick={handleAddUnit}
+          disabled={!newUnit.trim() || units.includes(newUnit.trim())}
+          className="px-6 py-3 bg-emerald-600 text-white rounded-xl font-medium hover:bg-emerald-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2 shadow-sm"
+        >
+          <Plus className="w-4 h-4" />
+          Add
+        </button>
+      </div>
+
+      {units.length === 0 ? (
+        <div className="text-center py-16 text-slate-400">
+          <div className="w-16 h-16 mx-auto mb-4 rounded-2xl bg-slate-100 flex items-center justify-center">
+            <Ruler className="w-8 h-8 text-slate-300" />
+          </div>
+          <p className="font-medium text-slate-500">No units defined yet</p>
+          <p className="text-sm mt-1">Add your first unit using the input above.</p>
+        </div>
+      ) : (
+        <div className="grid grid-cols-2 gap-2">
+          {units.map((unit, index) => (
+            <div
+              key={index}
+              className={`flex items-center justify-between p-3 rounded-xl border transition-all ${
+                deleteUnitConfirm === index 
+                  ? 'bg-red-50 border-red-200 shadow-sm col-span-2' 
+                  : 'bg-white border-slate-200 hover:border-slate-300 hover:shadow-sm'
+              }`}
+            >
+              {editingUnitIndex === index ? (
+                <div className="flex-1 flex items-center gap-2">
+                  <input
+                    type="text"
+                    value={editUnitValue}
+                    onChange={e => setEditUnitValue(e.target.value)}
+                    onKeyDown={e => {
+                      if (e.key === 'Enter') handleEditUnitSave();
+                      if (e.key === 'Escape') handleEditUnitCancel();
+                    }}
+                    autoFocus
+                    className="flex-1 px-3 py-1.5 bg-white border border-emerald-300 rounded-lg text-sm focus:ring-2 focus:ring-emerald-500 outline-none"
+                  />
+                  <button onClick={handleEditUnitSave} className="p-1.5 text-green-600 hover:bg-green-100 rounded-lg transition-colors">
+                    <Check className="w-3.5 h-3.5" />
+                  </button>
+                  <button onClick={handleEditUnitCancel} className="p-1.5 text-slate-400 hover:bg-slate-200 rounded-lg transition-colors">
+                    <X className="w-3.5 h-3.5" />
+                  </button>
+                </div>
+              ) : deleteUnitConfirm === index ? (
+                <div className="flex-1 flex items-center justify-between">
+                  <div className="flex items-center gap-2 text-red-700">
+                    <AlertCircle className="w-4 h-4" />
+                    <span className="text-sm font-medium">Delete "{unit}"?</span>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <button onClick={() => handleDeleteUnit(index)} className="px-3 py-1.5 bg-red-600 text-white text-sm font-medium rounded-lg hover:bg-red-700 transition-colors">
+                      Delete
+                    </button>
+                    <button onClick={() => setDeleteUnitConfirm(null)} className="px-3 py-1.5 bg-slate-200 text-slate-700 text-sm font-medium rounded-lg hover:bg-slate-300 transition-colors">
+                      Cancel
+                    </button>
+                  </div>
+                </div>
+              ) : (
+                <>
+                  <div className="flex items-center gap-2">
+                    <div className="w-1.5 h-1.5 rounded-full bg-emerald-400"></div>
+                    <span className="font-medium text-slate-700 text-sm">{unit}</span>
+                  </div>
+                  <div className="flex items-center gap-0.5">
+                    <button onClick={() => handleEditUnitStart(index)} className="p-1.5 text-slate-400 hover:text-emerald-600 hover:bg-emerald-50 rounded-lg transition-colors" title="Edit">
+                      <Edit2 className="w-3.5 h-3.5" />
+                    </button>
+                    <button onClick={() => setDeleteUnitConfirm(index)} className="p-1.5 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors" title="Delete">
+                      <Trash2 className="w-3.5 h-3.5" />
+                    </button>
+                  </div>
+                </>
+              )}
+            </div>
+          ))}
+        </div>
+      )}
+
+      <div className="p-4 bg-emerald-50 border border-emerald-100 rounded-xl">
+        <p className="text-sm text-emerald-700">
+          <strong>Tip:</strong> Units are used in product forms, mass import, and inventory tables. Common units include measurement (m, m², ft), weight (kg, ton, lb), and packaging (piece, box, carton).
+        </p>
+      </div>
+    </div>
+  );
+
   return (
     <div className="space-y-6">
       <div className="flex items-center gap-3">
@@ -295,6 +450,30 @@ const Settings: React.FC<SettingsProps> = ({ usageAreas, onUpdateUsageAreas, onR
                 </div>
                 <div className="p-8">
                   {renderUsageAreas()}
+                </div>
+              </>
+            )}
+
+            {activeSection === 'units' && (
+              <>
+                <div className="px-8 py-6 border-b border-slate-100 bg-gradient-to-r from-emerald-50/50 to-transparent">
+                  <div className="flex items-center gap-3">
+                    <div className="p-2.5 bg-emerald-100 rounded-xl">
+                      <Ruler className="w-5 h-5 text-emerald-600" />
+                    </div>
+                    <div>
+                      <h2 className="text-lg font-bold text-slate-800">Units</h2>
+                      <p className="text-sm text-slate-500">Define and manage measurement and packing units for products</p>
+                    </div>
+                    <div className="ml-auto">
+                      <span className="text-xs font-medium bg-emerald-100 text-emerald-700 px-3 py-1.5 rounded-full">
+                        {units.length} unit{units.length !== 1 ? 's' : ''}
+                      </span>
+                    </div>
+                  </div>
+                </div>
+                <div className="p-8">
+                  {renderUnits()}
                 </div>
               </>
             )}
