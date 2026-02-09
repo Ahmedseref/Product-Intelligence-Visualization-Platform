@@ -1657,6 +1657,48 @@ const ProductList: React.FC<ProductListProps> = ({
                             <p className="text-xs font-mono font-bold text-blue-600 mt-0.5">{p.id}</p>
                           </div>
                         </div>
+                        <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-7 gap-x-6 gap-y-3 mt-3 pt-3 border-t border-slate-200">
+                          <div>
+                            <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest block">Packaging</span>
+                            <p className="text-sm text-slate-700 font-medium mt-0.5">{p.packagingType || '-'}</p>
+                          </div>
+                          <div>
+                            <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest block">Shelf Life</span>
+                            <p className="text-sm text-slate-700 font-medium mt-0.5">{p.shelfLife || '-'}</p>
+                          </div>
+                          <div>
+                            <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest block">Storage</span>
+                            <p className="text-sm text-slate-700 font-medium mt-0.5 truncate">{p.storageConditions || '-'}</p>
+                          </div>
+                          <div>
+                            <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest block">HS Code</span>
+                            <p className="text-sm text-slate-700 font-medium font-mono mt-0.5">{p.hsCode || '-'}</p>
+                          </div>
+                          <div className="col-span-2 sm:col-span-3">
+                            <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest block">Certifications</span>
+                            <div className="flex flex-wrap gap-1 mt-0.5">
+                              {p.certifications && p.certifications.length > 0 ? p.certifications.map((cert, idx) => (
+                                <span key={idx} className="text-xs font-medium px-2 py-0.5 rounded-full bg-amber-50 text-amber-700 border border-amber-200">{cert}</span>
+                              )) : <span className="text-sm text-slate-700 font-medium">-</span>}
+                            </div>
+                          </div>
+                        </div>
+                        {(() => {
+                          const productUsageAreas = getProductUsageAreas(p);
+                          return productUsageAreas.length > 0 ? (
+                            <div className="mt-3 pt-3 border-t border-slate-200">
+                              <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest block mb-1">Usage Areas</span>
+                              <div className="flex flex-wrap gap-1.5">
+                                {productUsageAreas.map((area: string, idx: number) => (
+                                  <span key={idx} className="inline-flex items-center gap-1 text-xs font-semibold px-2.5 py-1 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200">
+                                    <Check size={10} />
+                                    {area}
+                                  </span>
+                                ))}
+                              </div>
+                            </div>
+                          ) : null;
+                        })()}
                       </div>
                     </td>
                   </tr>
