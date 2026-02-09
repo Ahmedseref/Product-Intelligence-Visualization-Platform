@@ -14,7 +14,19 @@ interface ProductDetailsModalProps {
 const ProductDetailsModal: React.FC<ProductDetailsModalProps> = ({ product, onClose, onUpdate, onEdit, treeNodes }) => {
   const [activeTab, setActiveTab] = useState<'details' | 'history' | 'custom'>('details');
   const [isEditingCustom, setIsEditingCustom] = useState(false);
-  const [editedCustomFields, setEditedCustomFields] = useState<CustomFieldValue[]>(product.customFields || []);
+
+  const getCustomFieldsArray = (cf: any): CustomFieldValue[] => {
+    if (Array.isArray(cf)) return cf;
+    if (cf && typeof cf === 'object') {
+      return Object.entries(cf)
+        .filter(([key]) => key !== 'Usage Areas')
+        .map(([key, value]) => ({ fieldId: key, value }));
+    }
+    return [];
+  };
+
+  const [editedCustomFields, setEditedCustomFields] = useState<CustomFieldValue[]>(getCustomFieldsArray(product.customFields));
+  const history = Array.isArray(product.history) ? product.history : [];
   
   const [editingField, setEditingField] = useState<string | null>(null);
   const [editPrice, setEditPrice] = useState(product.price);
@@ -45,7 +57,7 @@ const ProductDetailsModal: React.FC<ProductDetailsModalProps> = ({ product, onCl
       ...product,
       [field]: newValue,
       lastUpdated: new Date().toISOString(),
-      history: [historyEntry, ...(product.history || [])]
+      history: [historyEntry, ...history]
     };
     
     onUpdate(updatedProduct);
@@ -68,7 +80,7 @@ const ProductDetailsModal: React.FC<ProductDetailsModalProps> = ({ product, onCl
           },
           snapshot: {}
         },
-        ...(product.history || [])
+        ...history
       ]
     };
     onUpdate(updatedProduct);
@@ -137,7 +149,7 @@ const ProductDetailsModal: React.FC<ProductDetailsModalProps> = ({ product, onCl
             onClick={() => setActiveTab('history')}
             className={`px-4 py-3 text-sm font-semibold transition-all border-b-2 ${activeTab === 'history' ? 'border-blue-600 text-blue-600' : 'border-transparent text-slate-500 hover:text-slate-700'}`}
           >
-            Audit Log ({product.history.length})
+            Audit Log ({history.length})
           </button>
           <button 
              onClick={() => setActiveTab('custom')}
@@ -332,7 +344,7 @@ const ProductDetailsModal: React.FC<ProductDetailsModalProps> = ({ product, onCl
 
           {activeTab === 'history' && (
             <div className="relative">
-              {product.history.length === 0 ? (
+              {history.length === 0 ? (
                 <div className="text-center py-20 bg-slate-50 rounded-2xl border border-dashed border-slate-300">
                   <div className="w-12 h-12 bg-slate-200 rounded-full flex items-center justify-center mx-auto text-slate-400 mb-4">
                     {ICONS.History}
@@ -341,7 +353,7 @@ const ProductDetailsModal: React.FC<ProductDetailsModalProps> = ({ product, onCl
                 </div>
               ) : (
                 <div className="space-y-8 relative before:absolute before:inset-0 before:ml-5 before:w-0.5 before:bg-slate-200">
-                  {product.history.map((entry) => (
+                  {history.map((entry) => (
                     <div key={entry.id} className="relative pl-12">
                       <div className="absolute left-0 top-1 w-10 h-10 rounded-full bg-white border-2 border-slate-200 flex items-center justify-center z-10">
                         <div className="w-3 h-3 bg-blue-500 rounded-full"></div>
@@ -389,12 +401,12 @@ const ProductDetailsModal: React.FC<ProductDetailsModalProps> = ({ product, onCl
                 </div>
 
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                  {(isEditingCustom ? editedCustomFields : product.customFields).length === 0 && !isEditingCustom ? (
+                  {(isEditingCustom ? editedCustomFields : getCustomFieldsArray(product.customFields)).length === 0 && !isEditingCustom ? (
                     <div className="col-span-2 text-center py-20 bg-slate-50 rounded-2xl">
                         <p className="text-slate-400 italic">No technical attributes provided.</p>
                     </div>
                   ) : (
-                    (isEditingCustom ? editedCustomFields : product.customFields).map((field, idx) => (
+                    (isEditingCustom ? editedCustomFields : getCustomFieldsArray(product.customFields)).map((field, idx) => (
                       <div key={idx} className="p-4 bg-white border border-slate-200 rounded-xl flex flex-col gap-1 shadow-sm">
                         <label className="text-[10px] font-bold text-slate-400 uppercase tracking-tighter">{field.fieldId}</label>
                         {isEditingCustom ? (

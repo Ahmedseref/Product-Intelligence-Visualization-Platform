@@ -1318,7 +1318,10 @@ const ProductList: React.FC<ProductListProps> = ({
                   <tr 
                     className={`group hover:bg-blue-50/30 transition-colors cursor-pointer ${selectedIds.has(p.id) ? 'bg-blue-50/50' : ''}`}
                     onClick={() => {
-                      if (editingCell) return;
+                      if (editingCell) {
+                        setEditingCell(null);
+                        return;
+                      }
                       if (clickTimeoutRef.current) {
                         clearTimeout(clickTimeoutRef.current);
                       }
