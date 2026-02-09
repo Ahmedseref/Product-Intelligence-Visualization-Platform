@@ -59,9 +59,18 @@ const ProductForm: React.FC<ProductFormProps> = ({ onSubmit, onCancel, currentUs
   
   const getInitialUsageAreas = (): string[] => {
     if (initialProduct?.customFields) {
-      const usageAreas = initialProduct.customFields['Usage Areas'];
-      if (Array.isArray(usageAreas)) {
-        return [...usageAreas];
+      if (typeof initialProduct.customFields === 'object' && !Array.isArray(initialProduct.customFields)) {
+        const areas = initialProduct.customFields['Usage Areas'];
+        if (Array.isArray(areas)) return [...areas];
+      }
+      if (Array.isArray(initialProduct.customFields)) {
+        const usageField = initialProduct.customFields.find((cf: any) =>
+          cf.fieldId?.toLowerCase().includes('usage') || cf.fieldId?.toLowerCase().includes('application')
+        );
+        if (usageField?.value) {
+          if (Array.isArray(usageField.value)) return [...usageField.value];
+          return String(usageField.value).split(',').map((v: string) => v.trim()).filter(Boolean);
+        }
       }
     }
     return [];

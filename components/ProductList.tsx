@@ -98,22 +98,15 @@ const getProductUsageAreas = (product: Product): string[] => {
 };
 
 const setProductUsageAreas = (product: Product, areas: string[]): Product => {
-  if (Array.isArray(product.customFields)) {
-    const otherFields = product.customFields.filter((cf: any) => 
-      !cf.fieldId?.toLowerCase().includes('usage') && 
-      !cf.fieldId?.toLowerCase().includes('application')
-    );
-    return {
-      ...product,
-      customFields: [
-        ...otherFields,
-        { fieldId: 'usage_areas', value: areas.join(', ') }
-      ]
-    };
-  }
+  const existingFields = product.customFields && typeof product.customFields === 'object' && !Array.isArray(product.customFields)
+    ? { ...product.customFields }
+    : {};
   return {
     ...product,
-    customFields: [{ fieldId: 'usage_areas', value: areas.join(', ') }]
+    customFields: {
+      ...existingFields,
+      'Usage Areas': areas
+    }
   };
 };
 
