@@ -12,6 +12,10 @@ const PASTE_FIELDS = [
   { key: 'name', label: 'Product Name', required: true, placeholder: 'Paste product names here (one per line)' },
   { key: 'description', label: 'Description', required: false, placeholder: 'Paste descriptions here' },
   { key: 'price', label: 'Price', required: false, placeholder: 'Paste prices here' },
+  { key: 'unit', label: 'Unit', required: false, placeholder: 'Paste units here (e.g., kg, m², piece)' },
+  { key: 'packagingType', label: 'Packing', required: false, placeholder: 'Paste packing info here (e.g., 25kg bag, 20L drum, 1L can)' },
+  { key: 'moq', label: 'MOQ', required: false, placeholder: 'Paste MOQ values here' },
+  { key: 'leadTime', label: 'Lead Time (days)', required: false, placeholder: 'Paste lead times here' },
   { key: 'hsCode', label: 'HS Code', required: false, placeholder: 'HS codes' },
   { key: 'shelfLife', label: 'Shelf Life', required: false, placeholder: 'Shelf life info' },
   { key: 'storageConditions', label: 'Storage Conditions', required: false, placeholder: 'Storage requirements' },
@@ -461,11 +465,11 @@ const MassImportWizard: React.FC<MassImportWizardProps> = ({ onImport, onCancel,
         description: getFieldValue('description'),
         imageUrl: '',
         price: parseFloat(getFieldValue('price')) || 0,
-        currency: pasteAssignment.currency || 'USD',
-        unit: pasteAssignment.unit || 'piece',
-        moq: parseInt(pasteAssignment.moq) || 1,
-        leadTime: parseInt(pasteAssignment.leadTime) || 30,
-        packagingType: pasteAssignment.packagingType,
+        currency: getFieldValue('currency') || pasteAssignment.currency || 'USD',
+        unit: getFieldValue('unit') || pasteAssignment.unit || 'piece',
+        moq: parseInt(getFieldValue('moq')) || parseInt(pasteAssignment.moq) || 1,
+        leadTime: parseInt(getFieldValue('leadTime')) || parseInt(pasteAssignment.leadTime) || 30,
+        packagingType: getFieldValue('packagingType') || pasteAssignment.packagingType || '',
         certifications: [],
         shelfLife: getFieldValue('shelfLife'),
         storageConditions: getFieldValue('storageConditions'),
@@ -1106,28 +1110,15 @@ const MassImportWizard: React.FC<MassImportWizardProps> = ({ onImport, onCancel,
             </div>
 
             <div className="space-y-2">
-              <label className="text-sm font-medium text-slate-600">Unit</label>
+              <label className="text-sm font-medium text-slate-600">Default Unit</label>
               <select
                 value={pasteAssignment.unit}
                 onChange={e => setPasteAssignment(prev => ({ ...prev, unit: e.target.value }))}
                 className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:ring-2 focus:ring-blue-500 outline-none"
               >
-                <option value="piece">Piece</option>
-                <option value="kg">Kilogram (kg)</option>
-                <option value="g">Gram (g)</option>
-                <option value="lb">Pound (lb)</option>
-                <option value="oz">Ounce (oz)</option>
-                <option value="m">Meter (m)</option>
-                <option value="cm">Centimeter (cm)</option>
-                <option value="ft">Foot (ft)</option>
-                <option value="in">Inch (in)</option>
-                <option value="l">Liter (l)</option>
-                <option value="ml">Milliliter (ml)</option>
-                <option value="gal">Gallon (gal)</option>
-                <option value="box">Box</option>
-                <option value="case">Case</option>
-                <option value="pallet">Pallet</option>
+                {UNITS.map(u => <option key={u} value={u}>{u}</option>)}
               </select>
+              <p className="text-xs text-slate-400">Per-product unit can be set in Step 1</p>
             </div>
 
             <div className="space-y-2">
@@ -1155,7 +1146,7 @@ const MassImportWizard: React.FC<MassImportWizardProps> = ({ onImport, onCancel,
             </div>
 
             <div className="space-y-2">
-              <label className="text-sm font-medium text-slate-600">Packaging Type</label>
+              <label className="text-sm font-medium text-slate-600">Default Packaging Type</label>
               <input
                 type="text"
                 value={pasteAssignment.packagingType}
@@ -1163,6 +1154,7 @@ const MassImportWizard: React.FC<MassImportWizardProps> = ({ onImport, onCancel,
                 placeholder="Box, Pallet, etc."
                 className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:ring-2 focus:ring-blue-500 outline-none"
               />
+              <p className="text-xs text-slate-400">Per-product packing can be set in Step 1</p>
             </div>
           </div>
         </div>
@@ -1205,19 +1197,23 @@ const MassImportWizard: React.FC<MassImportWizardProps> = ({ onImport, onCancel,
               <table className="w-full text-sm">
                 <thead className="bg-slate-50">
                   <tr>
-                    <th className="text-left px-4 py-3 font-bold text-slate-600">Name</th>
-                    <th className="text-left px-4 py-3 font-bold text-slate-600">Brand</th>
-                    <th className="text-left px-4 py-3 font-bold text-slate-600">Category</th>
-                    <th className="text-left px-4 py-3 font-bold text-slate-600">Price</th>
+                    <th className="text-left px-3 py-2 font-bold text-slate-600 text-xs">Name</th>
+                    <th className="text-left px-3 py-2 font-bold text-slate-600 text-xs">Brand</th>
+                    <th className="text-left px-3 py-2 font-bold text-slate-600 text-xs">Category</th>
+                    <th className="text-left px-3 py-2 font-bold text-slate-600 text-xs">Price</th>
+                    <th className="text-left px-3 py-2 font-bold text-slate-600 text-xs">Unit</th>
+                    <th className="text-left px-3 py-2 font-bold text-slate-600 text-xs">Packing</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100">
                   {previewProducts.map((p, i) => (
                     <tr key={i}>
-                      <td className="px-4 py-3 font-medium text-slate-800">{p.name}</td>
-                      <td className="px-4 py-3 text-slate-600">{p.manufacturer || '-'}</td>
-                      <td className="px-4 py-3 text-slate-600">{p.category || '-'}</td>
-                      <td className="px-4 py-3 text-slate-600">{p.currency} {p.price}</td>
+                      <td className="px-3 py-2 font-medium text-slate-800 text-sm">{p.name}</td>
+                      <td className="px-3 py-2 text-slate-600 text-sm">{p.manufacturer || '-'}</td>
+                      <td className="px-3 py-2 text-slate-600 text-sm">{p.category || '-'}</td>
+                      <td className="px-3 py-2 text-slate-600 text-sm">{p.currency} {p.price}</td>
+                      <td className="px-3 py-2 text-slate-600 text-sm">{p.unit || '-'}</td>
+                      <td className="px-3 py-2 text-slate-600 text-sm">{p.packagingType || '-'}</td>
                     </tr>
                   ))}
                 </tbody>
