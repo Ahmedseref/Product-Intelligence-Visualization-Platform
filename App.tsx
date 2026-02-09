@@ -839,6 +839,7 @@ const App: React.FC = () => {
                     onCancel={() => { setViewMode('inventory'); setAddProductMode('single'); }}
                     treeNodes={treeNodes}
                     suppliers={suppliers}
+                    existingProducts={products}
                     usageAreas={usageAreas}
                     units={units}
                     onUnitsChange={async (newUnits) => {

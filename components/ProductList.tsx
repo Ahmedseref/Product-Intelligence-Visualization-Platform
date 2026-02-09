@@ -39,9 +39,13 @@ interface FilterState {
   leadTimeMax: string;
   moqMin: string;
   moqMax: string;
+  dateAddedFrom: string;
+  dateAddedTo: string;
+  lastUpdatedFrom: string;
+  lastUpdatedTo: string;
 }
 
-type ColumnKey = 'id' | 'stockCode' | 'name' | 'supplier' | 'sector' | 'category' | 'subCategory' | 'taxonomyPath' | 'price' | 'currency' | 'unit' | 'moq' | 'leadTime' | 'manufacturer' | 'location' | 'description' | 'usageAreas';
+type ColumnKey = 'id' | 'stockCode' | 'name' | 'supplier' | 'sector' | 'category' | 'subCategory' | 'taxonomyPath' | 'price' | 'currency' | 'unit' | 'moq' | 'leadTime' | 'manufacturer' | 'location' | 'description' | 'usageAreas' | 'dateAdded' | 'lastUpdated';
 
 interface ColumnConfig {
   key: ColumnKey;
@@ -68,6 +72,8 @@ const ALL_COLUMNS: ColumnConfig[] = [
   { key: 'manufacturer', label: 'Manufacturer', sortable: true, defaultVisible: false },
   { key: 'location', label: 'Location', sortable: true, defaultVisible: false },
   { key: 'description', label: 'Description', sortable: false, defaultVisible: false },
+  { key: 'dateAdded', label: 'Date Added', sortable: true, defaultVisible: false },
+  { key: 'lastUpdated', label: 'Last Updated', sortable: true, defaultVisible: false },
 ];
 
 const SECONDARY_COLUMNS: ColumnKey[] = ['description', 'moq', 'leadTime', 'manufacturer', 'location', 'currency', 'unit', 'id'];
@@ -190,7 +196,11 @@ const ProductList: React.FC<ProductListProps> = ({
     leadTimeMin: '',
     leadTimeMax: '',
     moqMin: '',
-    moqMax: ''
+    moqMax: '',
+    dateAddedFrom: '',
+    dateAddedTo: '',
+    lastUpdatedFrom: '',
+    lastUpdatedTo: ''
   });
   const inputRef = useRef<HTMLInputElement>(null);
   const skipBlurRef = useRef(false);
@@ -213,7 +223,9 @@ const ProductList: React.FC<ProductListProps> = ({
     leadTime: 100,
     manufacturer: 150,
     location: 150,
-    description: 200
+    description: 200,
+    dateAdded: 140,
+    lastUpdated: 140
   });
   const [resizingColumn, setResizingColumn] = useState<ColumnKey | null>(null);
   const resizeStartX = useRef(0);
@@ -293,7 +305,9 @@ const ProductList: React.FC<ProductListProps> = ({
       manufacturer: Math.min(200, Math.max(headerWidth, getContentWidth('manufacturer'))),
       location: Math.min(200, Math.max(headerWidth, getContentWidth('manufacturingLocation'))),
       description: Math.min(280, Math.max(headerWidth, getContentWidth('description', 6))),
-      usageAreas: Math.min(300, Math.max(headerWidth, 180))
+      usageAreas: Math.min(300, Math.max(headerWidth, 180)),
+      dateAdded: Math.max(headerWidth, 130),
+      lastUpdated: Math.max(headerWidth, 130)
     };
     
     setColumnWidths(prev => ({ ...prev, [columnKey]: widthMap[columnKey] }));
@@ -550,6 +564,10 @@ const ProductList: React.FC<ProductListProps> = ({
     if (filters.leadTimeMax && p.leadTime > parseInt(filters.leadTimeMax)) return false;
     if (filters.moqMin && p.moq < parseInt(filters.moqMin)) return false;
     if (filters.moqMax && p.moq > parseInt(filters.moqMax)) return false;
+    if (filters.dateAddedFrom && p.dateAdded && new Date(p.dateAdded) < new Date(filters.dateAddedFrom)) return false;
+    if (filters.dateAddedTo && p.dateAdded && new Date(p.dateAdded) > new Date(filters.dateAddedTo + 'T23:59:59')) return false;
+    if (filters.lastUpdatedFrom && p.lastUpdated && new Date(p.lastUpdated) < new Date(filters.lastUpdatedFrom)) return false;
+    if (filters.lastUpdatedTo && p.lastUpdated && new Date(p.lastUpdated) > new Date(filters.lastUpdatedTo + 'T23:59:59')) return false;
     return true;
   });
 
@@ -575,6 +593,8 @@ const ProductList: React.FC<ProductListProps> = ({
       case 'usageAreas': {
         return getProductUsageAreas(p).join(', ');
       }
+      case 'dateAdded': return p.dateAdded || '';
+      case 'lastUpdated': return p.lastUpdated || '';
       default: return '';
     }
   };
@@ -806,6 +826,7 @@ const ProductList: React.FC<ProductListProps> = ({
     setFilters({ 
       sector: '', 
       category: '',
+      taxonomyNodeId: '',
       supplier: '',
       manufacturer: '',
       priceMin: '', 
@@ -813,13 +834,18 @@ const ProductList: React.FC<ProductListProps> = ({
       leadTimeMin: '',
       leadTimeMax: '',
       moqMin: '',
-      moqMax: ''
+      moqMax: '',
+      dateAddedFrom: '',
+      dateAddedTo: '',
+      lastUpdatedFrom: '',
+      lastUpdatedTo: ''
     });
   };
 
   const hasActiveFilters = filters.sector || filters.category || filters.supplier || filters.manufacturer || 
     filters.priceMin || filters.priceMax || filters.leadTimeMin || filters.leadTimeMax || 
-    filters.moqMin || filters.moqMax || filters.taxonomyNodeId;
+    filters.moqMin || filters.moqMax || filters.taxonomyNodeId ||
+    filters.dateAddedFrom || filters.dateAddedTo || filters.lastUpdatedFrom || filters.lastUpdatedTo;
 
   const toggleRowExpanded = (productId: string) => {
     setExpandedRows(prev => {
@@ -1120,6 +1146,46 @@ const ProductList: React.FC<ProductListProps> = ({
                         onChange={e => setFilters({...filters, moqMax: e.target.value})}
                         className="w-full px-2 py-1.5 border border-slate-200 rounded-lg text-sm"
                         placeholder="∞"
+                      />
+                    </div>
+                  </div>
+                  <div className="grid grid-cols-2 gap-2">
+                    <div>
+                      <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Date Added From</label>
+                      <input 
+                        type="date"
+                        value={filters.dateAddedFrom}
+                        onChange={e => setFilters({...filters, dateAddedFrom: e.target.value})}
+                        className="w-full px-2 py-1.5 border border-slate-200 rounded-lg text-sm"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Date Added To</label>
+                      <input 
+                        type="date"
+                        value={filters.dateAddedTo}
+                        onChange={e => setFilters({...filters, dateAddedTo: e.target.value})}
+                        className="w-full px-2 py-1.5 border border-slate-200 rounded-lg text-sm"
+                      />
+                    </div>
+                  </div>
+                  <div className="grid grid-cols-2 gap-2">
+                    <div>
+                      <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Last Updated From</label>
+                      <input 
+                        type="date"
+                        value={filters.lastUpdatedFrom}
+                        onChange={e => setFilters({...filters, lastUpdatedFrom: e.target.value})}
+                        className="w-full px-2 py-1.5 border border-slate-200 rounded-lg text-sm"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Last Updated To</label>
+                      <input 
+                        type="date"
+                        value={filters.lastUpdatedTo}
+                        onChange={e => setFilters({...filters, lastUpdatedTo: e.target.value})}
+                        className="w-full px-2 py-1.5 border border-slate-200 rounded-lg text-sm"
                       />
                     </div>
                   </div>
@@ -1559,6 +1625,16 @@ const ProductList: React.FC<ProductListProps> = ({
                             })()}
                           </div>
                         )}
+                      </td>
+                    )}
+                    {visibleColumns.has('dateAdded') && (
+                      <td className="px-3 py-1 text-xs text-slate-500 overflow-hidden text-ellipsis" style={{ width: columnWidths.dateAdded, minWidth: columnWidths.dateAdded, maxWidth: columnWidths.dateAdded }}>
+                        {p.dateAdded ? new Date(p.dateAdded).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }) : '-'}
+                      </td>
+                    )}
+                    {visibleColumns.has('lastUpdated') && (
+                      <td className="px-3 py-1 text-xs text-slate-500 overflow-hidden text-ellipsis" style={{ width: columnWidths.lastUpdated, minWidth: columnWidths.lastUpdated, maxWidth: columnWidths.lastUpdated }}>
+                        {p.lastUpdated ? new Date(p.lastUpdated).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }) : '-'}
                       </td>
                     )}
                     <td className="px-2 py-1 text-right w-24">

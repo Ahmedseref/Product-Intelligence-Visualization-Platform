@@ -26,6 +26,7 @@ interface MassImportWizardProps {
   onCancel: () => void;
   treeNodes: TreeNode[];
   suppliers: Supplier[];
+  existingProducts?: Product[];
   usageAreas?: string[];
   units?: string[];
   onUnitsChange?: (units: string[]) => void;
@@ -64,7 +65,7 @@ const PRODUCT_FIELDS = [
   { key: 'storageConditions', label: 'Storage Conditions', required: false },
 ];
 
-const MassImportWizard: React.FC<MassImportWizardProps> = ({ onImport, onCancel, treeNodes, suppliers, usageAreas = [], units: unitsProp, onUnitsChange }) => {
+const MassImportWizard: React.FC<MassImportWizardProps> = ({ onImport, onCancel, treeNodes, suppliers, existingProducts = [], usageAreas = [], units: unitsProp, onUnitsChange }) => {
   const dynamicUnits = unitsProp && unitsProp.length > 0 ? unitsProp : UNITS;
   const USAGE_AREAS = usageAreas;
   const [importMode, setImportMode] = useState<ImportMode>('file');
@@ -490,8 +491,32 @@ const MassImportWizard: React.FC<MassImportWizardProps> = ({ onImport, onCancel,
     return products;
   };
 
-  const handleImport = () => {
-    const products = importMode === 'paste' ? generatePasteProducts() : generateProducts();
+  const [duplicateResults, setDuplicateResults] = useState<{ duplicates: Product[]; unique: Product[] } | null>(null);
+  const [showDuplicateWarning, setShowDuplicateWarning] = useState(false);
+
+  const checkDuplicates = (products: Product[]): { duplicates: Product[]; unique: Product[] } => {
+    const existingKeys = new Set(
+      existingProducts.map(p => `${p.name.trim().toLowerCase()}|||${(p.supplier || '').trim().toLowerCase()}`)
+    );
+    
+    const seenInBatch = new Set<string>();
+    const duplicates: Product[] = [];
+    const unique: Product[] = [];
+
+    products.forEach(p => {
+      const key = `${p.name.trim().toLowerCase()}|||${(p.supplier || '').trim().toLowerCase()}`;
+      if (existingKeys.has(key) || seenInBatch.has(key)) {
+        duplicates.push(p);
+      } else {
+        unique.push(p);
+        seenInBatch.add(key);
+      }
+    });
+
+    return { duplicates, unique };
+  };
+
+  const proceedImport = (products: Product[]) => {
     if (products.length > 0) {
       if (onUnitsChange) {
         const newUnits = new Set<string>();
@@ -505,6 +530,22 @@ const MassImportWizard: React.FC<MassImportWizardProps> = ({ onImport, onCancel,
         }
       }
       onImport(products);
+    }
+    setDuplicateResults(null);
+    setShowDuplicateWarning(false);
+  };
+
+  const handleImport = () => {
+    const products = importMode === 'paste' ? generatePasteProducts() : generateProducts();
+    if (products.length === 0) return;
+
+    const result = checkDuplicates(products);
+    
+    if (result.duplicates.length > 0) {
+      setDuplicateResults(result);
+      setShowDuplicateWarning(true);
+    } else {
+      proceedImport(products);
     }
   };
 
@@ -1289,6 +1330,74 @@ const MassImportWizard: React.FC<MassImportWizardProps> = ({ onImport, onCancel,
 
   return (
     <div className="max-w-4xl mx-auto">
+      {showDuplicateWarning && duplicateResults && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-2xl shadow-xl max-w-lg w-full max-h-[80vh] overflow-hidden">
+            <div className="p-6 border-b border-slate-200">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-full bg-amber-100 flex items-center justify-center">
+                  <AlertCircle className="w-5 h-5 text-amber-600" />
+                </div>
+                <div>
+                  <h3 className="text-lg font-bold text-slate-800">Duplicates Detected</h3>
+                  <p className="text-sm text-slate-500">
+                    {duplicateResults.duplicates.length} duplicate{duplicateResults.duplicates.length > 1 ? 's' : ''} found (matched by product name + supplier)
+                  </p>
+                </div>
+              </div>
+            </div>
+            <div className="p-4 max-h-[40vh] overflow-y-auto">
+              <p className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">Duplicate Products (will be skipped)</p>
+              <div className="space-y-1">
+                {duplicateResults.duplicates.map((p, i) => (
+                  <div key={i} className="flex items-center gap-2 px-3 py-2 bg-red-50 border border-red-100 rounded-lg">
+                    <X className="w-3.5 h-3.5 text-red-400 flex-shrink-0" />
+                    <span className="text-sm text-red-700 font-medium truncate">{p.name}</span>
+                    <span className="text-xs text-red-400 flex-shrink-0">({p.supplier})</span>
+                  </div>
+                ))}
+              </div>
+              {duplicateResults.unique.length > 0 && (
+                <>
+                  <p className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-2 mt-4">New Products ({duplicateResults.unique.length})</p>
+                  <div className="space-y-1">
+                    {duplicateResults.unique.slice(0, 10).map((p, i) => (
+                      <div key={i} className="flex items-center gap-2 px-3 py-2 bg-emerald-50 border border-emerald-100 rounded-lg">
+                        <Check className="w-3.5 h-3.5 text-emerald-500 flex-shrink-0" />
+                        <span className="text-sm text-emerald-700 font-medium truncate">{p.name}</span>
+                        <span className="text-xs text-emerald-400 flex-shrink-0">({p.supplier})</span>
+                      </div>
+                    ))}
+                    {duplicateResults.unique.length > 10 && (
+                      <p className="text-xs text-slate-400 pl-3">...and {duplicateResults.unique.length - 10} more</p>
+                    )}
+                  </div>
+                </>
+              )}
+            </div>
+            <div className="p-4 border-t border-slate-200 flex gap-3">
+              <button
+                onClick={() => { setShowDuplicateWarning(false); setDuplicateResults(null); }}
+                className="flex-1 px-4 py-2.5 text-sm font-semibold text-slate-600 bg-slate-100 hover:bg-slate-200 rounded-xl transition-colors"
+              >
+                Cancel
+              </button>
+              {duplicateResults.unique.length > 0 ? (
+                <button
+                  onClick={() => proceedImport(duplicateResults.unique)}
+                  className="flex-1 px-4 py-2.5 text-sm font-semibold text-white bg-blue-600 hover:bg-blue-700 rounded-xl transition-colors"
+                >
+                  Skip Duplicates & Import {duplicateResults.unique.length} New
+                </button>
+              ) : (
+                <div className="flex-1 px-4 py-2.5 text-sm font-semibold text-center text-amber-600 bg-amber-50 rounded-xl">
+                  All products are duplicates — nothing to import
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
       <div className="bg-white rounded-2xl border border-slate-200 shadow-sm">
         <div className="p-6 border-b border-slate-200 flex items-center justify-between">
           <div>
