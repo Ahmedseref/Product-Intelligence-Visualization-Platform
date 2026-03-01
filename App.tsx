@@ -25,7 +25,47 @@ const App: React.FC = () => {
   const [authError, setAuthError] = useState<string | null>(null);
   const [showChangePassword, setShowChangePassword] = useState(false);
 
-  const [viewMode, setViewMode] = useState<ViewMode>('technical-intelligence');
+  const hashToView: Record<string, ViewMode> = {
+    '#intelligence': 'technical-intelligence',
+    '#inventory': 'inventory',
+    '#add-product': 'add-product',
+    '#taxonomy': 'taxonomy-manager',
+    '#suppliers': 'suppliers',
+    '#system-builder': 'system-builder',
+    '#document-memory': 'document-memory',
+    '#settings': 'settings',
+  };
+  const viewToHash: Record<ViewMode, string> = Object.fromEntries(
+    Object.entries(hashToView).map(([h, v]) => [v, h])
+  ) as Record<ViewMode, string>;
+
+  const getViewFromHash = (): ViewMode => {
+    const hash = window.location.hash;
+    return hashToView[hash] || 'technical-intelligence';
+  };
+
+  const [viewMode, setViewModeState] = useState<ViewMode>(getViewFromHash);
+
+  const setViewMode = useCallback((view: ViewMode) => {
+    setViewModeState(view);
+    const hash = viewToHash[view] || '#intelligence';
+    if (window.location.hash !== hash) {
+      window.location.hash = hash;
+    }
+  }, []);
+
+  useEffect(() => {
+    const onHashChange = () => {
+      const view = getViewFromHash();
+      setViewModeState(view);
+    };
+    window.addEventListener('hashchange', onHashChange);
+    if (!window.location.hash) {
+      window.location.hash = '#intelligence';
+    }
+    return () => window.removeEventListener('hashchange', onHashChange);
+  }, []);
+
   const [products, setProducts] = useState<Product[]>(INITIAL_PRODUCTS);
   const [treeNodes, setTreeNodes] = useState<TreeNode[]>(INITIAL_TREE_NODES);
   const [suppliers, setSuppliers] = useState<Supplier[]>([]);
