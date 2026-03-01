@@ -1,7 +1,8 @@
 import type { Express } from "express";
 import { storage } from "./storage";
 import { db } from "./db";
-import { stockCodeHistory } from "@shared/schema";
+import { stockCodeHistory, products as productsTable, suppliers as suppliersTable } from "@shared/schema";
+import { eq } from "drizzle-orm";
 import * as backupService from "./backupService";
 import * as stockCodeService from "./stockCodeService";
 import { authMiddleware, requirePasswordChange } from "./authRoutes";
@@ -176,7 +177,8 @@ export function registerRoutes(app: Express): void {
           const generated = await stockCodeService.generateStockCode(
             product.nodeId, 
             product.id,
-            product.colorId || undefined
+            product.colorId || undefined,
+            product.supplierId || undefined
           );
           if (generated) {
             await storage.updateProduct(product.productId, { stockCode: generated });
@@ -199,12 +201,13 @@ export function registerRoutes(app: Express): void {
       if (!product) {
         return res.status(404).json({ error: "Product not found" });
       }
-      if (req.body.nodeId || req.body.colorId !== undefined) {
+      if (req.body.nodeId || req.body.colorId !== undefined || req.body.supplierId !== undefined) {
         try {
           const generated = await stockCodeService.generateStockCode(
             product.nodeId, 
             product.id,
-            product.colorId || undefined
+            product.colorId || undefined,
+            product.supplierId || undefined
           );
           if (generated && generated !== product.stockCode) {
             await storage.updateProduct(product.productId, { stockCode: generated });
@@ -426,6 +429,22 @@ export function registerRoutes(app: Express): void {
     }
   });
 
+  app.get("/api/suppliers/suggest-code", async (req, res) => {
+    try {
+      const { name } = req.query;
+      if (!name) return res.status(400).json({ error: "name is required" });
+      const allSuppliers = await db.select().from(suppliersTable);
+      const existingCodes = allSuppliers
+        .filter(s => s.supplierCode)
+        .map(s => s.supplierCode!);
+      const suggested = stockCodeService.generateBranchCodeFromName(name as string, existingCodes);
+      res.json({ code: suggested });
+    } catch (error) {
+      console.error("Error suggesting supplier code:", error);
+      res.status(500).json({ error: "Failed to suggest supplier code" });
+    }
+  });
+
   app.get("/api/suppliers/:supplierId", async (req, res) => {
     try {
       const supplier = await storage.getSupplier(req.params.supplierId);
@@ -454,6 +473,16 @@ export function registerRoutes(app: Express): void {
       const supplier = await storage.updateSupplier(req.params.supplierId, req.body);
       if (!supplier) {
         return res.status(404).json({ error: "Supplier not found" });
+      }
+      if (req.body.supplierCode !== undefined) {
+        try {
+          const supplierProducts = await db.select().from(productsTable).where(eq(productsTable.supplierId, req.params.supplierId));
+          for (const product of supplierProducts) {
+            await stockCodeService.updateProductStockCode(product.productId, 'Supplier code changed');
+          }
+        } catch (e) {
+          console.error("Stock code regeneration after supplier code change failed:", e);
+        }
       }
       res.json(supplier);
     } catch (error) {
@@ -1026,12 +1055,13 @@ export function registerRoutes(app: Express): void {
 
   app.get("/api/stock-codes/preview", async (req, res) => {
     try {
-      const { nodeId, colorId, productId } = req.query;
+      const { nodeId, colorId, productId, supplierId } = req.query;
       if (!nodeId) return res.status(400).json({ error: "nodeId is required" });
       const code = await stockCodeService.previewStockCode(
         nodeId as string,
         colorId ? parseInt(colorId as string) : null,
-        productId as string || null
+        productId as string || null,
+        supplierId as string || null
       );
       res.json({ stockCode: code });
     } catch (error) {

@@ -33,6 +33,7 @@ export interface HistoryEntry {
 export interface Supplier {
   id: string;
   name: string;
+  supplierCode?: string;
   country?: string;
   contactName?: string;
   contactEmail?: string;

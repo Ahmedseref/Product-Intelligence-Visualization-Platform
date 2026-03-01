@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
-import { Plus, Pencil, Trash2, Building2, Globe, Mail, Phone, X, Check, Search } from 'lucide-react';
+import { Plus, Pencil, Trash2, Building2, Globe, Mail, Phone, X, Check, Search, Tag, Sparkles } from 'lucide-react';
 import { Supplier } from '../types';
+import { api } from '../client/api';
 
 interface SupplierManagerProps {
   suppliers: Supplier[];
@@ -20,6 +21,7 @@ const SupplierManager: React.FC<SupplierManagerProps> = ({
   const [searchQuery, setSearchQuery] = useState('');
   const [formData, setFormData] = useState({
     name: '',
+    supplierCode: '',
     country: '',
     contactName: '',
     contactEmail: '',
@@ -49,6 +51,7 @@ const SupplierManager: React.FC<SupplierManagerProps> = ({
     if (editingSupplier) {
       onUpdateSupplier(editingSupplier.id, {
         name: formData.name,
+        supplierCode: formData.supplierCode.toUpperCase() || undefined,
         country: formData.country || undefined,
         contactName: formData.contactName || undefined,
         contactEmail: formData.contactEmail || undefined,
@@ -62,6 +65,7 @@ const SupplierManager: React.FC<SupplierManagerProps> = ({
       onAddSupplier({
         id: generateSupplierId(),
         name: formData.name,
+        supplierCode: formData.supplierCode.toUpperCase() || undefined,
         country: formData.country || undefined,
         contactName: formData.contactName || undefined,
         contactEmail: formData.contactEmail || undefined,
@@ -75,6 +79,7 @@ const SupplierManager: React.FC<SupplierManagerProps> = ({
 
     setFormData({
       name: '',
+      supplierCode: '',
       country: '',
       contactName: '',
       contactEmail: '',
@@ -90,6 +95,7 @@ const SupplierManager: React.FC<SupplierManagerProps> = ({
     setEditingSupplier(supplier);
     setFormData({
       name: supplier.name,
+      supplierCode: supplier.supplierCode || '',
       country: supplier.country || '',
       contactName: supplier.contactName || '',
       contactEmail: supplier.contactEmail || '',
@@ -112,6 +118,7 @@ const SupplierManager: React.FC<SupplierManagerProps> = ({
     setEditingSupplier(null);
     setFormData({
       name: '',
+      supplierCode: '',
       country: '',
       contactName: '',
       contactEmail: '',
@@ -120,6 +127,16 @@ const SupplierManager: React.FC<SupplierManagerProps> = ({
       website: '',
       notes: '',
     });
+  };
+
+  const handleSuggestCode = async () => {
+    if (!formData.name.trim()) return;
+    try {
+      const result = await api.suggestSupplierCode(formData.name);
+      setFormData(prev => ({ ...prev, supplierCode: result.code }));
+    } catch (e) {
+      console.error('Failed to suggest supplier code:', e);
+    }
   };
 
   return (
@@ -157,6 +174,7 @@ const SupplierManager: React.FC<SupplierManagerProps> = ({
             <tr>
               <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">ID</th>
               <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Supplier Name</th>
+              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Code</th>
               <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Country</th>
               <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Contact</th>
               <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
@@ -166,7 +184,7 @@ const SupplierManager: React.FC<SupplierManagerProps> = ({
           <tbody className="bg-white divide-y divide-gray-200">
             {filteredSuppliers.length === 0 ? (
               <tr>
-                <td colSpan={6} className="px-6 py-12 text-center text-gray-500">
+                <td colSpan={7} className="px-6 py-12 text-center text-gray-500">
                   <Building2 size={48} className="mx-auto mb-4 text-gray-300" />
                   <p className="text-lg font-medium">No suppliers found</p>
                   <p className="text-sm">Add your first supplier to get started</p>
@@ -190,6 +208,16 @@ const SupplierManager: React.FC<SupplierManagerProps> = ({
                         )}
                       </div>
                     </div>
+                  </td>
+                  <td className="px-6 py-4 whitespace-nowrap">
+                    {supplier.supplierCode ? (
+                      <span className="inline-flex items-center gap-1 px-2 py-1 bg-emerald-50 text-emerald-700 rounded font-mono text-xs font-bold">
+                        <Tag size={12} />
+                        {supplier.supplierCode}
+                      </span>
+                    ) : (
+                      <span className="text-xs text-gray-400">-</span>
+                    )}
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{supplier.country || '-'}</td>
                   <td className="px-6 py-4 whitespace-nowrap">
@@ -248,6 +276,32 @@ const SupplierManager: React.FC<SupplierManagerProps> = ({
                   className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                   required
                 />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Supplier Code</label>
+                <div className="flex gap-2">
+                  <input
+                    type="text"
+                    value={formData.supplierCode}
+                    onChange={(e) => {
+                      const val = e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, '').substring(0, 5);
+                      setFormData({ ...formData, supplierCode: val });
+                    }}
+                    className="flex-1 px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent font-mono uppercase"
+                    placeholder="e.g. SUP, BAS, SIK"
+                    maxLength={5}
+                  />
+                  <button
+                    type="button"
+                    onClick={handleSuggestCode}
+                    className="px-3 py-2 bg-slate-100 hover:bg-slate-200 text-slate-600 rounded-lg text-sm flex items-center gap-1 transition-colors"
+                    title="Auto-suggest code from supplier name"
+                  >
+                    <Sparkles size={14} />
+                    Suggest
+                  </button>
+                </div>
+                <p className="text-xs text-gray-400 mt-1">2-5 uppercase characters. Used in product stock codes (P.SUP.BRANCH.COLOR.0001)</p>
               </div>
               <div className="grid grid-cols-2 gap-4">
                 <div>

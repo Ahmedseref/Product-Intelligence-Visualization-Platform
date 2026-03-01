@@ -182,6 +182,7 @@ const App: React.FC = () => {
       setSuppliers(suppliersData.map(s => ({
         id: s.supplierId,
         name: s.name,
+        supplierCode: s.supplierCode || undefined,
         country: s.country || undefined,
         contactName: s.contactName || undefined,
         contactEmail: s.contactEmail || undefined,
@@ -452,6 +453,7 @@ const App: React.FC = () => {
       await api.createSupplier({
         supplierId: newSupplier.id,
         name: newSupplier.name,
+        supplierCode: newSupplier.supplierCode,
         country: newSupplier.country,
         contactName: newSupplier.contactName,
         contactEmail: newSupplier.contactEmail,
@@ -472,6 +474,7 @@ const App: React.FC = () => {
     try {
       await api.updateSupplier(id, {
         name: updates.name,
+        supplierCode: updates.supplierCode,
         country: updates.country,
         contactName: updates.contactName,
         contactEmail: updates.contactEmail,

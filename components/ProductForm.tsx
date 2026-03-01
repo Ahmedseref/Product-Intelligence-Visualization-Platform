@@ -118,13 +118,13 @@ const ProductForm: React.FC<ProductFormProps> = ({ onSubmit, onCancel, currentUs
   useEffect(() => {
     if (formData.nodeId) {
       const productId = isEditMode ? initialProduct?.id : undefined;
-      api.previewStockCode(formData.nodeId, selectedColorId || undefined, productId)
+      api.previewStockCode(formData.nodeId, selectedColorId || undefined, productId, formData.supplierId || undefined)
         .then(res => setStockCodePreview(res.stockCode || ''))
         .catch(() => setStockCodePreview(''));
     } else {
       setStockCodePreview('');
     }
-  }, [formData.nodeId, selectedColorId]);
+  }, [formData.nodeId, selectedColorId, formData.supplierId]);
 
   const sectors = useMemo(() => 
     treeNodes.filter(n => n.type === 'sector' && !n.parentId), 

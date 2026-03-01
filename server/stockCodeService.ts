@@ -1,5 +1,5 @@
 import { db } from "./db";
-import { treeNodes, products, colors, stockCodeHistory } from "@shared/schema";
+import { treeNodes, products, colors, stockCodeHistory, suppliers } from "@shared/schema";
 import { eq } from "drizzle-orm";
 
 export function generateBranchCodeFromName(name: string, existingCodes: string[]): string {
@@ -65,14 +65,26 @@ function padProductId(id: number): string {
   return String(id).padStart(4, '0');
 }
 
+async function getSupplierCode(supplierId?: string | null): Promise<string | null> {
+  if (!supplierId) return null;
+  const [supplier] = await db.select().from(suppliers).where(eq(suppliers.supplierId, supplierId));
+  return supplier?.supplierCode || null;
+}
+
 export async function generateStockCode(
   nodeId: string,
   productDbId: number,
-  colorId?: number | null
+  colorId?: number | null,
+  supplierId?: string | null
 ): Promise<string> {
   const path = await getNodePath(nodeId);
   
   const segments = ['P'];
+  
+  const supplierCode = await getSupplierCode(supplierId);
+  if (supplierCode) {
+    segments.push(supplierCode);
+  }
   
   for (const node of path) {
     if (node.branchCode) {
@@ -95,11 +107,17 @@ export async function generateStockCode(
 export async function previewStockCode(
   nodeId: string,
   colorId?: number | null,
-  productId?: string | null
+  productId?: string | null,
+  supplierId?: string | null
 ): Promise<string> {
   const path = await getNodePath(nodeId);
   
   const segments = ['P'];
+  
+  const supplierCode = await getSupplierCode(supplierId);
+  if (supplierCode) {
+    segments.push(supplierCode);
+  }
   
   for (const node of path) {
     if (node.branchCode) {
@@ -136,7 +154,7 @@ export async function updateProductStockCode(
   const [product] = await db.select().from(products).where(eq(products.productId, productId));
   if (!product) return null;
   
-  const newCode = await generateStockCode(product.nodeId, product.id, product.colorId);
+  const newCode = await generateStockCode(product.nodeId, product.id, product.colorId, product.supplierId);
   const oldCode = product.stockCode;
   
   if (oldCode === newCode) return newCode;
@@ -161,7 +179,7 @@ export async function bulkRegenerateStockCodes(changedBy?: string): Promise<numb
   let updated = 0;
   
   for (const product of allProducts) {
-    const newCode = await generateStockCode(product.nodeId, product.id, product.colorId);
+    const newCode = await generateStockCode(product.nodeId, product.id, product.colorId, product.supplierId);
     if (newCode !== product.stockCode) {
       await db.update(products)
         .set({ stockCode: newCode, lastUpdated: new Date() })
@@ -222,7 +240,7 @@ export async function regenerateStockCodesForNode(nodeId: string, changedBy?: st
   for (const nid of affectedNodeIds) {
     const nodeProducts = await db.select().from(products).where(eq(products.nodeId, nid));
     for (const product of nodeProducts) {
-      const newCode = await generateStockCode(product.nodeId, product.id, product.colorId);
+      const newCode = await generateStockCode(product.nodeId, product.id, product.colorId, product.supplierId);
       if (newCode !== product.stockCode) {
         await db.update(products)
           .set({ stockCode: newCode, lastUpdated: new Date() })

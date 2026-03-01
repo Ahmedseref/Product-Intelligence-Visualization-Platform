@@ -15,6 +15,7 @@ export const suppliers = pgTable("suppliers", {
   id: serial("id").primaryKey(),
   supplierId: varchar("supplier_id", { length: 100 }).notNull().unique(),
   name: varchar("name", { length: 255 }).notNull(),
+  supplierCode: varchar("supplier_code", { length: 5 }),
   country: varchar("country", { length: 100 }),
   contactName: varchar("contact_name", { length: 255 }),
   contactEmail: varchar("contact_email", { length: 255 }),

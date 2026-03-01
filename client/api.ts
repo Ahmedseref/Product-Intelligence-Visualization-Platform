@@ -68,6 +68,7 @@ export interface SupplierData {
   id?: number;
   supplierId: string;
   name: string;
+  supplierCode?: string;
   country?: string;
   contactName?: string;
   contactEmail?: string;
@@ -315,12 +316,20 @@ export const api = {
     return res.json();
   },
 
-  async previewStockCode(nodeId: string, colorId?: number, productId?: string): Promise<{ stockCode: string }> {
+  async previewStockCode(nodeId: string, colorId?: number, productId?: string, supplierId?: string): Promise<{ stockCode: string }> {
     const params = new URLSearchParams({ nodeId });
     if (colorId) params.append('colorId', String(colorId));
     if (productId) params.append('productId', productId);
+    if (supplierId) params.append('supplierId', supplierId);
     const res = await authFetch(`${API_BASE}/stock-codes/preview?${params}`);
     if (!res.ok) throw new Error('Failed to preview stock code');
+    return res.json();
+  },
+
+  async suggestSupplierCode(name: string): Promise<{ code: string }> {
+    const params = new URLSearchParams({ name });
+    const res = await authFetch(`${API_BASE}/suppliers/suggest-code?${params}`);
+    if (!res.ok) throw new Error('Failed to suggest supplier code');
     return res.json();
   },
 

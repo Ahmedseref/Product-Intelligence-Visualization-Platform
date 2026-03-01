@@ -55,16 +55,18 @@ I prefer detailed explanations and thorough code comments. I value iterative dev
         - 19 configurable columns: stockCode, name, supplier, taxonomyPath, price, usageAreas, id, sector, category, subCategory, currency, unit, moq, leadTime, manufacturer, location, description, dateAdded, lastUpdated
     - **Backup & Versioning System**: Full data protection with gzip compression, point-in-time recovery, scheduled auto-backups (every 6 hours), manual backup creation, export/import functionality, and restore preview with safety net backups.
     - **Authentication System**: Secure session-based authentication with bcrypt password hashing (12 rounds), cryptographically secure tokens (crypto.randomBytes), rate-limited login (10 attempts/15 min), first-login password change enforcement, and logout functionality.
-    - **Dynamic Stock Code Engine**: Structured product codes in format `P.BRANCH.BRANCH.COLOR.0001` with:
-        - Auto-generation based on taxonomy path branch codes and product color
+    - **Dynamic Stock Code Engine**: Structured product codes in format `P.SUP.BRANCH.BRANCH.COLOR.0001` with:
+        - Auto-generation based on supplier code, taxonomy path branch codes, and product color
+        - Supplier code management (2-5 uppercase chars) in SupplierManager with auto-suggestion
         - Branch code management (2-5 uppercase chars) in TaxonomyBuilder with auto-suggestion
         - Color management CRUD in Settings with hex color picker and numeric codes
-        - Stock code preview in ProductForm showing generated code before save
+        - Stock code preview in ProductForm showing generated code before save (updates live with supplier/node/color changes)
         - Stock Code column in ProductList inventory table with sort support
         - Bulk migration and regeneration tools in Settings
         - Full history tracking in stock_code_history table
+        - Supplier code changes auto-regenerate stock codes for all affected products
         - Backend: server/stockCodeService.ts handles generation, validation, preview, migration, bulk operations
-        - Database: products.stockCode, products.colorId, treeNodes.branchCode, colors table, stock_code_history table
+        - Database: products.stockCode, products.colorId, products.supplierId, treeNodes.branchCode, suppliers.supplierCode, colors table, stock_code_history table
 
     - **Systematic Product & System Management Module**: Full system builder for construction chemicals, flooring, and waterproofing systems with:
         - 3-panel layout: system list, layer editor, and live build-up preview
