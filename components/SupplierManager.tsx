@@ -1,7 +1,8 @@
-import React, { useState } from 'react';
+import React, { useState, useCallback } from 'react';
 import { Plus, Pencil, Trash2, Building2, Globe, Mail, Phone, X, Check, Search, Tag, Sparkles } from 'lucide-react';
 import { Supplier } from '../types';
 import { api } from '../client/api';
+import { useEscapeKey } from '../hooks/useEscapeKey';
 
 interface SupplierManagerProps {
   suppliers: Supplier[];
@@ -19,6 +20,12 @@ const SupplierManager: React.FC<SupplierManagerProps> = ({
   const [showAddModal, setShowAddModal] = useState(false);
   const [editingSupplier, setEditingSupplier] = useState<Supplier | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
+
+  const escCloseModal = useCallback(() => {
+    setShowAddModal(false);
+    setEditingSupplier(null);
+  }, []);
+  useEscapeKey(showAddModal || editingSupplier ? escCloseModal : null);
   const [formData, setFormData] = useState({
     name: '',
     supplierCode: '',

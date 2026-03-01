@@ -3,6 +3,7 @@ import { ResponsiveHeatMap } from '@nivo/heatmap';
 import { Product, TreeNode, Supplier, CustomField, User } from '../../types';
 import NivoChartWrapper, { nivoTheme, CHART_COLORS } from '../charts/NivoChartWrapper';
 import { Filter, X, Download, ChevronDown, ChevronUp, Layers, Edit2, Copy, Trash2, Tag, Check, Camera, Loader2, Palette } from 'lucide-react';
+import { useEscapeKey } from '../../hooks/useEscapeKey';
 import ProductForm from '../ProductForm';
 import { api } from '../../client/api';
 import html2canvas from 'html2canvas';
@@ -86,6 +87,7 @@ const ProductUsageHeatmap: React.FC<ProductUsageHeatmapProps> = ({
   const [categoryLevel, setCategoryLevel] = useState<'sector' | 'category' | 'subcategory' | 'group' | 'leaf'>('category');
   const [showFilters, setShowFilters] = useState(true);
   const [drillDown, setDrillDown] = useState<DrillDownData | null>(null);
+  useEscapeKey(drillDown ? () => setDrillDown(null) : null);
   const containerRef = useRef<HTMLDivElement>(null);
 
   const [matrixMode, setMatrixMode] = useState<MatrixMode>('category');

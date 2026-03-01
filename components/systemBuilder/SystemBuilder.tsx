@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { SystemData, SystemFull, SystemLayer, SystemProductOption, Product, Sector } from '../../types';
 import { systemsApi } from '../../client/api';
+import { useEscapeKey } from '../../hooks/useEscapeKey';
 import { 
   Plus, Search, ChevronRight, ChevronDown, GripVertical, Trash2, Edit, Save, X, 
   Download, Upload, Layers, Package, Star, StarOff, MoreVertical, Copy, 
@@ -39,6 +40,8 @@ const SystemBuilder: React.FC<SystemBuilderProps> = ({ products }) => {
   const [showHistory, setShowHistory] = useState(false);
   const [historyEntries, setHistoryEntries] = useState<any[]>([]);
   const [showExportMenu, setShowExportMenu] = useState(false);
+
+  useEscapeKey(showHistory ? () => setShowHistory(false) : null);
 
   const loadSystems = useCallback(async () => {
     try {

@@ -2,6 +2,7 @@
 import React, { useState } from 'react';
 import { Product, CustomFieldValue, TreeNode } from '../types';
 import { ICONS } from '../constants';
+import { useEscapeKey } from '../hooks/useEscapeKey';
 
 interface ProductDetailsModalProps {
   product: Product;
@@ -14,6 +15,8 @@ interface ProductDetailsModalProps {
 const ProductDetailsModal: React.FC<ProductDetailsModalProps> = ({ product, onClose, onUpdate, onEdit, treeNodes }) => {
   const [activeTab, setActiveTab] = useState<'details' | 'history' | 'custom'>('details');
   const [isEditingCustom, setIsEditingCustom] = useState(false);
+
+  useEscapeKey(onClose);
 
   const getCustomFieldsArray = (cf: any): CustomFieldValue[] => {
     if (Array.isArray(cf)) return cf;

@@ -1,5 +1,6 @@
 import React, { useState, useMemo, useCallback, useRef, useEffect } from 'react';
 import { TreeNode, Product } from '../types';
+import { useEscapeKey } from '../hooks/useEscapeKey';
 import { 
   ChevronRight, ChevronDown, Plus, Edit2, Trash2, Package, FolderTree, X, Check, 
   Search, GripVertical, Building2, Layers, Grid3X3, Tag, AlertTriangle,
@@ -114,6 +115,14 @@ const TaxonomyBuilder: React.FC<TaxonomyBuilderProps> = ({
   const [isExporting, setIsExporting] = useState(false);
   const [newBranchCode, setNewBranchCode] = useState('');
   const [branchCodeError, setBranchCodeError] = useState('');
+
+  const closeTaxonomyModal = useCallback(() => {
+    if (showDeleteConfirm) setShowDeleteConfirm(null);
+    else if (showMoveConfirm) setShowMoveConfirm(null);
+    else if (showExportModal) setShowExportModal(false);
+    else if (showAddModal) setShowAddModal(false);
+  }, [showDeleteConfirm, showMoveConfirm, showExportModal, showAddModal]);
+  useEscapeKey(showAddModal || showDeleteConfirm || showMoveConfirm || showExportModal ? closeTaxonomyModal : null);
   
   const editInputRef = useRef<HTMLInputElement>(null);
   const treeContainerRef = useRef<HTMLDivElement>(null);

@@ -1,5 +1,6 @@
 import React, { useState, useCallback, useMemo } from 'react';
 import { Product, TreeNode, Supplier, TechnicalSpec } from '../types';
+import { useEscapeKey } from '../hooks/useEscapeKey';
 import { Upload, FileSpreadsheet, CheckCircle, AlertCircle, ArrowLeft, ArrowRight, X, Loader2, MapPin, Settings, ClipboardPaste, Plus, Trash2, Check } from 'lucide-react';
 import * as XLSX from 'xlsx';
 import Papa from 'papaparse';
@@ -493,6 +494,7 @@ const MassImportWizard: React.FC<MassImportWizardProps> = ({ onImport, onCancel,
 
   const [duplicateResults, setDuplicateResults] = useState<{ duplicates: Product[]; unique: Product[] } | null>(null);
   const [showDuplicateWarning, setShowDuplicateWarning] = useState(false);
+  useEscapeKey(showDuplicateWarning ? () => setShowDuplicateWarning(false) : null);
 
   const checkDuplicates = (products: Product[]): { duplicates: Product[]; unique: Product[] } => {
     const existingKeys = new Set(

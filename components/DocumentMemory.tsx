@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { Product, Supplier, DocumentRecord } from '../types';
 import { api } from '../client/api';
+import { useEscapeKey } from '../hooks/useEscapeKey';
 import {
   Plus, Search, Filter, FileText, ExternalLink, Pencil, Trash2, X, Check,
   Tag, Link2, Building2, Package, Combine, ChevronDown, Loader2, FolderOpen
@@ -71,6 +72,8 @@ const DocumentMemory: React.FC<DocumentMemoryProps> = ({ products, suppliers, sy
 
   const [relationSearch, setRelationSearch] = useState('');
   const [showRelationDropdown, setShowRelationDropdown] = useState(false);
+
+  useEscapeKey(showModal ? () => setShowModal(false) : null);
 
   const loadDocuments = useCallback(async () => {
     try {

@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { api, BackupSummary, RestorePreview, BackupSettingsData } from '../../client/api';
+import { useEscapeKey } from '../../hooks/useEscapeKey';
 import { 
   Archive, 
   Download, 
@@ -149,6 +150,7 @@ export default function BackupManager() {
   const [loading, setLoading] = useState(true);
   const [actionLoading, setActionLoading] = useState(false);
   const [restorePreview, setRestorePreview] = useState<RestorePreview | null>(null);
+  useEscapeKey(restorePreview ? () => setRestorePreview(null) : null);
   const [selectedBackup, setSelectedBackup] = useState<BackupSummary | null>(null);
   const [showRestoreModal, setShowRestoreModal] = useState(false);
   const [showDeleteModal, setShowDeleteModal] = useState(false);

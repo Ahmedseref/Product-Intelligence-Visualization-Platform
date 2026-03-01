@@ -5,6 +5,7 @@ import ProductDetailsModal from './ProductDetailsModal';
 import ProductForm from './ProductForm';
 import TaxonomyNodeSelector from './TaxonomyNodeSelector';
 import { Check, X, Download, Filter, FileText, ChevronDown, ChevronRight, Copy, Trash2, Columns, Eye, EyeOff, FolderTree, Search, ChevronsUpDown, RefreshCw } from 'lucide-react';
+import { useEscapeKey } from '../hooks/useEscapeKey';
 
 interface InventoryColumnSetting {
   key: string;
@@ -193,6 +194,13 @@ const ProductList: React.FC<ProductListProps> = ({
   const [showPIModal, setShowPIModal] = useState(false);
   const [piName, setPIName] = useState('');
   const [isRefreshing, setIsRefreshing] = useState(false);
+
+  const closeProductListModal = useCallback(() => {
+    if (editingProduct) setEditingProduct(null);
+    else if (selectedProduct) setSelectedProduct(null);
+    else if (showPIModal) setShowPIModal(false);
+  }, [editingProduct, selectedProduct, showPIModal]);
+  useEscapeKey(editingProduct || selectedProduct || showPIModal ? closeProductListModal : null);
   const [visibleColumns, setVisibleColumns] = useState<Set<ColumnKey>>(
     new Set(ALL_COLUMNS.filter(c => c.defaultVisible).map(c => c.key))
   );
