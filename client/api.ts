@@ -388,6 +388,15 @@ export const api = {
     return res.json();
   },
 
+  async renameUsageArea(oldName: string, newName: string): Promise<{ migratedCount: number }> {
+    const res = await authFetch(`${API_BASE}/settings/usage-areas/rename`, {
+      method: 'POST',
+      body: JSON.stringify({ oldName, newName }),
+    });
+    if (!res.ok) throw new Error('Failed to rename usage area in products');
+    return res.json();
+  },
+
   async getUnits(): Promise<string[]> {
     const res = await authFetch(`${API_BASE}/settings/units`);
     if (!res.ok) throw new Error('Failed to fetch units');

@@ -727,6 +727,56 @@ export function registerRoutes(app: Express): void {
     }
   });
 
+  app.post("/api/settings/usage-areas/rename", async (req, res) => {
+    try {
+      const { oldName, newName } = req.body;
+      if (!oldName || !newName || typeof oldName !== 'string' || typeof newName !== 'string') {
+        return res.status(400).json({ error: "oldName and newName are required strings" });
+      }
+      const allProducts = await storage.getProducts();
+      let migratedCount = 0;
+      for (const product of allProducts) {
+        const cf = product.customFields as any;
+        if (!cf) continue;
+        let areas: string[] | null = null;
+        let updatedCf: any = null;
+
+        if (typeof cf === 'object' && !Array.isArray(cf) && Array.isArray(cf['Usage Areas'])) {
+          areas = cf['Usage Areas'];
+        } else if (Array.isArray(cf)) {
+          const usageField = cf.find((f: any) =>
+            f.fieldId?.toLowerCase().includes('usage') || f.fieldId?.toLowerCase().includes('application')
+          );
+          if (usageField && Array.isArray(usageField.value)) {
+            areas = usageField.value;
+          }
+        }
+
+        if (areas && areas.includes(oldName)) {
+          const newAreas = areas.map(a => a === oldName ? newName : a);
+          if (typeof cf === 'object' && !Array.isArray(cf)) {
+            updatedCf = { ...cf, 'Usage Areas': newAreas };
+          } else if (Array.isArray(cf)) {
+            updatedCf = cf.map((f: any) => {
+              if (f.fieldId?.toLowerCase().includes('usage') || f.fieldId?.toLowerCase().includes('application')) {
+                return { ...f, value: newAreas };
+              }
+              return f;
+            });
+          }
+          if (updatedCf) {
+            await storage.updateProduct(product.productId, { customFields: updatedCf });
+            migratedCount++;
+          }
+        }
+      }
+      res.json({ migratedCount });
+    } catch (error) {
+      console.error("Error renaming usage area in products:", error);
+      res.status(500).json({ error: "Failed to rename usage area in products" });
+    }
+  });
+
   app.get("/api/settings/units", async (req, res) => {
     try {
       const units = await storage.getUnits();

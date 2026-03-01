@@ -162,7 +162,7 @@ const App: React.FC = () => {
         certifications: (p.certifications as string[]) || [],
         shelfLife: p.shelfLife || '',
         storageConditions: p.storageConditions || '',
-        customFields: (p.customFields as any[]) || [],
+        customFields: (p.customFields as any) || {},
         technicalSpecs: (p.technicalSpecs as any[]) || [],
         category: p.category || '',
         sector: p.sector || '',
@@ -981,26 +981,40 @@ const App: React.FC = () => {
                 }}
                 onRenameUsageArea={async (oldName: string, newName: string) => {
                   try {
-                    const productsToUpdate = products.filter(p => {
-                      const usageValues = p.customFields?.['Usage Areas'] || [];
-                      return Array.isArray(usageValues) && usageValues.includes(oldName);
-                    });
-                    for (const product of productsToUpdate) {
-                      const usageValues = [...(product.customFields?.['Usage Areas'] || [])];
-                      const idx = usageValues.indexOf(oldName);
-                      if (idx !== -1) {
-                        usageValues[idx] = newName;
-                        const updated = {
-                          ...product,
-                          customFields: {
-                            ...product.customFields,
-                            'Usage Areas': usageValues
-                          }
-                        };
-                        await updateProduct(updated);
-                      }
-                    }
-                    console.log(`Migrated ${productsToUpdate.length} products from "${oldName}" to "${newName}"`);
+                    const result = await api.renameUsageArea(oldName, newName);
+                    console.log(`Server migrated ${result.migratedCount} products from "${oldName}" to "${newName}"`);
+                    const productsData = await api.getProducts();
+                    setProducts(productsData.map(p => ({
+                      id: p.productId,
+                      name: p.name,
+                      supplier: p.supplier || '',
+                      supplierId: p.supplierId || undefined,
+                      nodeId: p.nodeId,
+                      stockCode: p.stockCode || undefined,
+                      colorId: p.colorId || undefined,
+                      manufacturer: p.manufacturer || '',
+                      manufacturingLocation: p.manufacturingLocation || '',
+                      description: p.description || '',
+                      imageUrl: p.imageUrl || '',
+                      price: p.price || 0,
+                      currency: p.currency || 'USD',
+                      unit: p.unit || '',
+                      moq: p.moq || 1,
+                      leadTime: p.leadTime || 0,
+                      packagingType: p.packagingType || '',
+                      hsCode: p.hsCode || undefined,
+                      certifications: (p.certifications as string[]) || [],
+                      shelfLife: p.shelfLife || '',
+                      storageConditions: p.storageConditions || '',
+                      customFields: (p.customFields as any) || {},
+                      technicalSpecs: (p.technicalSpecs as any[]) || [],
+                      category: p.category || '',
+                      sector: p.sector || '',
+                      createdBy: p.createdBy || '',
+                      dateAdded: p.dateAdded?.toString() || new Date().toISOString(),
+                      lastUpdated: p.lastUpdated?.toString() || new Date().toISOString(),
+                      history: (p.history as any[]) || [],
+                    })));
                   } catch (e) {
                     console.error('Failed to migrate usage areas in products:', e);
                   }
