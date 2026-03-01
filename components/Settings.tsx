@@ -185,16 +185,16 @@ const Settings: React.FC<SettingsProps> = ({ usageAreas, onUpdateUsageAreas, onR
     setEditValue(usageAreas[index]);
   };
 
-  const handleEditSave = () => {
+  const handleEditSave = async () => {
     if (editingIndex === null) return;
     const trimmed = editValue.trim();
     const oldName = usageAreas[editingIndex];
     if (trimmed && trimmed !== oldName && !usageAreas.filter((_, i) => i !== editingIndex).includes(trimmed)) {
       const updated = [...usageAreas];
       updated[editingIndex] = trimmed;
-      onUpdateUsageAreas(updated);
+      await onUpdateUsageAreas(updated);
       if (onRenameUsageArea) {
-        onRenameUsageArea(oldName, trimmed);
+        await onRenameUsageArea(oldName, trimmed);
       }
     }
     setEditingIndex(null);

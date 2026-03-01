@@ -739,7 +739,6 @@ export function registerRoutes(app: Express): void {
         const cf = product.customFields as any;
         if (!cf) continue;
         let areas: string[] | null = null;
-        let updatedCf: any = null;
 
         if (typeof cf === 'object' && !Array.isArray(cf) && Array.isArray(cf['Usage Areas'])) {
           areas = cf['Usage Areas'];
@@ -747,27 +746,20 @@ export function registerRoutes(app: Express): void {
           const usageField = cf.find((f: any) =>
             f.fieldId?.toLowerCase().includes('usage') || f.fieldId?.toLowerCase().includes('application')
           );
-          if (usageField && Array.isArray(usageField.value)) {
-            areas = usageField.value;
+          if (usageField) {
+            if (Array.isArray(usageField.value)) {
+              areas = usageField.value;
+            } else if (typeof usageField.value === 'string') {
+              areas = usageField.value.split(',').map((v: string) => v.trim()).filter(Boolean);
+            }
           }
         }
 
         if (areas && areas.includes(oldName)) {
           const newAreas = areas.map(a => a === oldName ? newName : a);
-          if (typeof cf === 'object' && !Array.isArray(cf)) {
-            updatedCf = { ...cf, 'Usage Areas': newAreas };
-          } else if (Array.isArray(cf)) {
-            updatedCf = cf.map((f: any) => {
-              if (f.fieldId?.toLowerCase().includes('usage') || f.fieldId?.toLowerCase().includes('application')) {
-                return { ...f, value: newAreas };
-              }
-              return f;
-            });
-          }
-          if (updatedCf) {
-            await storage.updateProduct(product.productId, { customFields: updatedCf });
-            migratedCount++;
-          }
+          const updatedCf = { 'Usage Areas': newAreas };
+          await storage.updateProduct(product.productId, { customFields: updatedCf });
+          migratedCount++;
         }
       }
       res.json({ migratedCount });
