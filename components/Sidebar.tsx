@@ -9,6 +9,17 @@ interface SidebarProps {
   user: User;
 }
 
+const viewToHash: Record<ViewMode, string> = {
+  'technical-intelligence': '#intelligence',
+  'inventory': '#inventory',
+  'add-product': '#add-product',
+  'taxonomy-manager': '#taxonomy',
+  'suppliers': '#suppliers',
+  'system-builder': '#system-builder',
+  'document-memory': '#document-memory',
+  'settings': '#settings',
+};
+
 const Sidebar: React.FC<SidebarProps> = ({ currentView, setView, user }) => {
   const menuItems: { id: ViewMode; label: string; icon: React.ReactNode }[] = [
     { id: 'technical-intelligence', label: 'Intelligence Hub', icon: ICONS.TechIntelligence },
@@ -19,6 +30,11 @@ const Sidebar: React.FC<SidebarProps> = ({ currentView, setView, user }) => {
     { id: 'document-memory', label: 'Document Memory', icon: ICONS.DocumentMemory },
     { id: 'add-product', label: 'Add Product', icon: ICONS.Add },
   ];
+
+  const handleClick = (e: React.MouseEvent, view: ViewMode) => {
+    e.preventDefault();
+    setView(view);
+  };
 
   return (
     <div className="w-64 bg-slate-900 text-slate-300 flex flex-col h-full flex-shrink-0 transition-all duration-300 ease-in-out border-r border-slate-800">
@@ -32,37 +48,43 @@ const Sidebar: React.FC<SidebarProps> = ({ currentView, setView, user }) => {
       <nav className="flex-1 py-6 px-3 space-y-1">
         <p className="px-3 text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-2">Main Menu</p>
         {menuItems.map((item) => (
-          <button
+          <a
             key={item.id}
-            onClick={() => setView(item.id)}
-            className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-all ${
+            href={viewToHash[item.id]}
+            onClick={(e) => handleClick(e, item.id)}
+            className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-all no-underline ${
               currentView === item.id
                 ? 'bg-blue-600 text-white shadow-lg shadow-blue-900/20'
-                : 'hover:bg-slate-800 hover:text-white'
+                : 'text-slate-300 hover:bg-slate-800 hover:text-white'
             }`}
           >
             {item.icon}
             {item.label}
-          </button>
+          </a>
         ))}
         
         <div className="pt-8 pb-2">
           <p className="px-3 text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-2">System</p>
-          <button className="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium hover:bg-slate-800 hover:text-white transition-all">
+          <a
+            href="#"
+            onClick={(e) => e.preventDefault()}
+            className="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium text-slate-300 hover:bg-slate-800 hover:text-white transition-all no-underline"
+          >
             {ICONS.Users}
             Team Management
-          </button>
-          <button 
-            onClick={() => setView('settings')}
-            className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-all ${
+          </a>
+          <a
+            href={viewToHash['settings']}
+            onClick={(e) => handleClick(e, 'settings')}
+            className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-all no-underline ${
               currentView === 'settings'
                 ? 'bg-blue-600 text-white shadow-lg shadow-blue-900/20'
-                : 'hover:bg-slate-800 hover:text-white'
+                : 'text-slate-300 hover:bg-slate-800 hover:text-white'
             }`}
           >
             {ICONS.Settings}
             Settings
-          </button>
+          </a>
         </div>
       </nav>
 
