@@ -23,7 +23,8 @@ import {
   ChevronRight,
   FolderTree,
   Combine,
-  Activity
+  Activity,
+  FileText
 } from 'lucide-react';
 
 export const ICONS = {
@@ -51,7 +52,8 @@ export const ICONS = {
   Tree: <FolderTree size={20} />,
   Package: <Package size={20} />,
   SystemBuilder: <Combine size={20} />,
-  TechIntelligence: <Activity size={20} />
+  TechIntelligence: <Activity size={20} />,
+  DocumentMemory: <FileText size={20} />
 };
 
 export const SECTORS = ['Retail', 'Industrial', 'Chemical', 'Textile', 'Food & Beverage', 'Electronics'];

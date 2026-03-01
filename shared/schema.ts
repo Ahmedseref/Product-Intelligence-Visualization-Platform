@@ -213,6 +213,21 @@ export const systemHistory = pgTable("system_history", {
   createdAt: timestamp("created_at").defaultNow(),
 });
 
+export const documents = pgTable("documents", {
+  id: serial("id").primaryKey(),
+  documentId: varchar("document_id", { length: 20 }).notNull().unique(),
+  name: varchar("name", { length: 255 }).notNull(),
+  link: text("link").notNull(),
+  type: varchar("type", { length: 50 }).notNull(),
+  relatedToType: varchar("related_to_type", { length: 30 }).notNull(),
+  relatedToId: varchar("related_to_id", { length: 100 }),
+  relatedToName: varchar("related_to_name", { length: 255 }),
+  tags: jsonb("tags").default([]),
+  description: text("description"),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
 export const appSettings = pgTable("app_settings", {
   id: serial("id").primaryKey(),
   key: varchar("key", { length: 100 }).notNull().unique(),
@@ -341,3 +356,5 @@ export type SystemProductOption = typeof systemProductOptions.$inferSelect;
 export type InsertSystemProductOption = typeof systemProductOptions.$inferInsert;
 export type SystemHistory = typeof systemHistory.$inferSelect;
 export type InsertSystemHistory = typeof systemHistory.$inferInsert;
+export type Document = typeof documents.$inferSelect;
+export type InsertDocument = typeof documents.$inferInsert;

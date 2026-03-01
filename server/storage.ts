@@ -1,17 +1,18 @@
 import { 
   treeNodes, products, customFieldDefinitions,
   suppliers, supplierProducts, attachments, appSettings,
-  colors,
+  colors, documents,
   type TreeNode, type InsertTreeNode,
   type Product, type InsertProduct,
   type CustomFieldDefinition, type InsertCustomFieldDefinition,
   type Supplier, type InsertSupplier,
   type SupplierProduct, type InsertSupplierProduct,
   type Attachment, type InsertAttachment,
-  type Color, type InsertColor
+  type Color, type InsertColor,
+  type Document, type InsertDocument
 } from "@shared/schema";
 import { db } from "./db";
-import { eq, and, isNull } from "drizzle-orm";
+import { eq, and, isNull, desc, sql } from "drizzle-orm";
 
 export interface IStorage {
   getTreeNodes(): Promise<TreeNode[]>;
@@ -301,6 +302,50 @@ export class DatabaseStorage implements IStorage {
   async deleteColor(id: number): Promise<boolean> {
     const result = await db.delete(colors).where(eq(colors.id, id)).returning();
     return result.length > 0;
+  }
+
+  async getDocuments(): Promise<Document[]> {
+    return await db.select().from(documents).orderBy(desc(documents.createdAt));
+  }
+
+  async getDocument(documentId: string): Promise<Document | undefined> {
+    const [doc] = await db.select().from(documents).where(eq(documents.documentId, documentId));
+    return doc || undefined;
+  }
+
+  async getDocumentsByRelation(relatedToType: string, relatedToId: string): Promise<Document[]> {
+    return await db.select().from(documents).where(
+      and(eq(documents.relatedToType, relatedToType), eq(documents.relatedToId, relatedToId))
+    ).orderBy(desc(documents.createdAt));
+  }
+
+  async createDocument(doc: InsertDocument): Promise<Document> {
+    const [created] = await db.insert(documents).values(doc).returning();
+    return created;
+  }
+
+  async updateDocument(documentId: string, updates: Partial<InsertDocument>): Promise<Document | undefined> {
+    const [updated] = await db
+      .update(documents)
+      .set({ ...updates, updatedAt: new Date() })
+      .where(eq(documents.documentId, documentId))
+      .returning();
+    return updated || undefined;
+  }
+
+  async deleteDocument(documentId: string): Promise<boolean> {
+    const result = await db.delete(documents).where(eq(documents.documentId, documentId)).returning();
+    return result.length > 0;
+  }
+
+  async getNextDocumentId(): Promise<string> {
+    const result = await db.select({ maxId: sql<string>`MAX(${documents.documentId})` }).from(documents);
+    const maxId = result[0]?.maxId;
+    if (!maxId) {
+      return "D-0001";
+    }
+    const num = parseInt(maxId.replace("D-", ""), 10);
+    return `D-${String(num + 1).padStart(4, "0")}`;
   }
 }
 

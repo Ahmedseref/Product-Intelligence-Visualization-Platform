@@ -10,6 +10,7 @@ import { registerAuthRoutes } from "./authRoutes";
 import { bootstrapAdminUser } from "./authService";
 import { registerSystemRoutes } from "./systemRoutes";
 import { registerAnalyticsRoutes } from "./analyticsRoutes";
+import { registerDocumentRoutes } from "./documentRoutes";
 
 const rootDir = process.cwd();
 
@@ -48,6 +49,7 @@ registerObjectStorageRoutes(app);
 registerRoutes(app);
 registerSystemRoutes(app);
 registerAnalyticsRoutes(app);
+registerDocumentRoutes(app);
 
 function findDistPath(): string {
   const candidates = [

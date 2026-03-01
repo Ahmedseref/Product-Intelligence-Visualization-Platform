@@ -115,6 +115,21 @@ function authFetch(url: string, options: RequestInit = {}): Promise<Response> {
   return fetch(url, { ...options, headers });
 }
 
+export interface DocumentData {
+  id?: number;
+  documentId: string;
+  name: string;
+  link: string;
+  type: string;
+  relatedToType: string;
+  relatedToId?: string;
+  relatedToName?: string;
+  tags?: string[];
+  description?: string;
+  createdAt?: string;
+  updatedAt?: string;
+}
+
 export const api = {
   async getTreeNodes(): Promise<TreeNodeData[]> {
     const res = await authFetch(`${API_BASE}/tree-nodes`);
@@ -521,6 +536,43 @@ export const api = {
     });
     if (!res.ok) throw new Error('Failed to update backup settings');
     return res.json();
+  },
+
+  async getDocuments(): Promise<DocumentData[]> {
+    const res = await authFetch(`${API_BASE}/documents`);
+    if (!res.ok) throw new Error('Failed to fetch documents');
+    return res.json();
+  },
+
+  async getDocumentsByRelation(type: string, id: string): Promise<DocumentData[]> {
+    const res = await authFetch(`${API_BASE}/documents/by-relation/${type}/${id}`);
+    if (!res.ok) throw new Error('Failed to fetch documents by relation');
+    return res.json();
+  },
+
+  async createDocument(data: Partial<DocumentData>): Promise<DocumentData> {
+    const res = await authFetch(`${API_BASE}/documents`, {
+      method: 'POST',
+      body: JSON.stringify(data),
+    });
+    if (!res.ok) throw new Error('Failed to create document');
+    return res.json();
+  },
+
+  async updateDocument(documentId: string, data: Partial<DocumentData>): Promise<DocumentData> {
+    const res = await authFetch(`${API_BASE}/documents/${documentId}`, {
+      method: 'PATCH',
+      body: JSON.stringify(data),
+    });
+    if (!res.ok) throw new Error('Failed to update document');
+    return res.json();
+  },
+
+  async deleteDocument(documentId: string): Promise<void> {
+    const res = await authFetch(`${API_BASE}/documents/${documentId}`, {
+      method: 'DELETE',
+    });
+    if (!res.ok) throw new Error('Failed to delete document');
   },
 };
 

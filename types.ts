@@ -227,7 +227,22 @@ export interface SystemStats {
   systemLayerMatrix: { systemName: string; layerName: string; productCount: number }[];
 }
 
-export type ViewMode = 'technical-intelligence' | 'inventory' | 'add-product' | 'taxonomy-manager' | 'suppliers' | 'settings' | 'system-builder';
+export interface DocumentRecord {
+  id: number;
+  documentId: string;
+  name: string;
+  link: string;
+  type: string;
+  relatedToType: string;
+  relatedToId?: string;
+  relatedToName?: string;
+  tags: string[];
+  description?: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export type ViewMode = 'technical-intelligence' | 'inventory' | 'add-product' | 'taxonomy-manager' | 'suppliers' | 'settings' | 'system-builder' | 'document-memory';
 export type UserRole = 'Admin' | 'Editor' | 'Viewer';
 
 export interface User {

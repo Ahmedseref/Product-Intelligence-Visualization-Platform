@@ -85,6 +85,21 @@ I prefer detailed explanations and thorough code comments. I value iterative dev
         - Backend: server/systemRoutes.ts with full REST API
         - Frontend: components/systemBuilder/ (SystemBuilder, SystemDashboard, SystemImport)
 
+    - **Document Memory / File Manager**: Central document management system for external links with:
+        - Stores document metadata (links only, no file binaries) for Google Drive, OneDrive, SharePoint, PDFs, websites
+        - Document types: TDS, MSDS, Certificate, Technical Drawing, Commercial, Contract, Catalog, Other
+        - Relation system linking documents to Suppliers, Products, or Systems via ID
+        - Autocomplete entity search by name, stock code, supplier code, or ID
+        - Full CRUD with sequential IDs (D-0001, D-0002, etc.)
+        - Search across name, description, tags, and related entity name
+        - Filters by document type, relation type, and supplier
+        - Tags system with comma-separated input
+        - Color-coded type badges and relation icons
+        - Independent from taxonomy hierarchy (direct ID linking only)
+        - Database: documents table with documentId, name, link, type, relatedToType, relatedToId, relatedToName, tags (jsonb), description
+        - Backend: server/documentRoutes.ts with REST API (GET/POST/PATCH/DELETE)
+        - Frontend: components/DocumentMemory.tsx
+
     - **Technical Intelligence Dashboard**: Multi-supplier intelligence and comparison layer with:
         - 7 tabs: Overview (12 KPIs), Product Intelligence, System Intelligence, Supplier Matrix, Taxonomy & Supplier, Technical Coverage, Competitive Benchmark
         - Global filter panel (Supplier, Sector, Branch) applied across all tabs and API calls

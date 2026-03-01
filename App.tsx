@@ -15,6 +15,7 @@ import Login from './components/Login';
 import ChangePassword from './components/ChangePassword';
 import SystemBuilder from './components/systemBuilder/SystemBuilder';
 import TechnicalIntelligenceDashboard from './components/technicalIntelligence/TechnicalIntelligenceDashboard';
+import DocumentMemory from './components/DocumentMemory';
 import { api, authApi, setAuthToken, initAuthToken, AuthUser } from './client/api';
 import { LogOut, PanelLeftClose, PanelLeftOpen } from 'lucide-react';
 
@@ -888,6 +889,12 @@ const App: React.FC = () => {
             )}
             {viewMode === 'system-builder' && (
               <SystemBuilder products={products} />
+            )}
+            {viewMode === 'document-memory' && (
+              <DocumentMemory
+                products={products}
+                suppliers={suppliers}
+              />
             )}
             {viewMode === 'technical-intelligence' && (
               <TechnicalIntelligenceDashboard 

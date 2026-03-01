@@ -1,0 +1,124 @@
+________________________________________
+🔹 Prompt Title:
+Add a Document Memory / File Manager Module to My Product Intelligence Platform
+________________________________________
+🔹 Prompt:
+I want to add a new feature to my Product Intelligence & Visualization Platform.
+This feature will act as a central document memory system that stores external document links (Google Drive, OneDrive, SharePoint, Website URLs, PDF links, etc.) and relates them to products, suppliers, or system-level references.
+The feature must be lightweight and independent from the taxonomy hierarchy to reduce computation complexity.
+________________________________________
+🔷 Functional Requirements
+1️⃣ New Main Menu Tab
+Add a new tab in the main navigation:
+📂 Document Memory
+or
+📁 File Manager
+This tab must open a dedicated document management interface.
+________________________________________
+2️⃣ Document Creation
+The user must be able to:
+•	Paste a link (Google Drive, website, Dropbox, PDF URL, etc.)
+•	Enter document name
+•	Add description (optional)
+•	Select document type:
+o	TDS
+o	MSDS
+o	Certificate
+o	Technical Drawing
+o	Commercial
+o	Contract
+o	Catalog
+o	Other (custom)
+________________________________________
+3️⃣ Relation System (Core Feature)
+Each document must relate to one of the following:
+•	🔹 Supplier
+•	🔹 Product (Supplier Product)
+•	🔹 System (global document)
+When creating a document, the user must:
+1.	Choose relation type
+2.	Search using:
+o	Product name
+o	Stock code
+o	Supplier name
+o	Supplier ID
+Use an autocomplete search selector.
+Documents must not depend on taxonomy hierarchy.
+________________________________________
+4️⃣ Document Fields
+Each document record must contain:
+DocumentMemory {
+  id: string;                // D-0001
+  name: string;
+  link: string;
+  type: string;
+  relatedToType: "Supplier" | "SupplierProduct" | "MasterProduct" | "System";
+  relatedToId: string | null;
+  tags: string[];
+  description?: string;
+  createdAt: Date;
+  updatedAt: Date;
+}
+________________________________________
+5️⃣ Independence from Hierarchy
+The document system must:
+•	NOT depend on sector/category tree
+•	NOT trigger heavy recalculation
+•	Use direct ID linking only
+This is important for performance.
+________________________________________
+🔷 UI Requirements
+Inside Document Memory tab:
+Top Section
+•	Search bar
+•	Filter by:
+o	Document Type
+o	Relation Type
+o	Supplier
+o	Product
+Document List View
+Columns:
+•	Document Name
+•	Type
+•	Related To
+•	Link
+•	Created Date
+•	Actions (Edit / Delete / Open)
+Clicking document opens link in new tab.
+________________________________________
+🔷 Performance Requirements
+•	Use simple ID-based relations
+•	Store in local persistent storage 
+•	Must persist after closing tab
+•	No recomputation of taxonomy
+•	Lightweight rendering
+________________________________________
+Add the following if possible:
+1 Tag System
+Allow multiple tags per document for filtering.
+2 Quick Access
+Show related documents inside:
+•	Product Detail Page
+•	Supplier Detail Page
+________________________________________
+If feasible:
+•	Version control (track link changes)
+•	Drag-and-drop reorder
+•	Bulk import of document links
+________________________________________
+🔷 Storage Strategy
+•	Store metadata in local app storage
+•	Only store URL (not file binary)
+•	Use unique ID generation (D-0001 format)
+•	Ensure fast lookup by relation
+________________________________________
+🔷 Deliverables
+Implement:
+1.	New navigation tab
+2.	Full CRUD document system
+3.	Persistent storage
+4.	Search & filtering
+5.	Relation linking to products & suppliers
+6.	Clean and responsive UI
+The system must integrate smoothly with existing product and supplier models.
+
