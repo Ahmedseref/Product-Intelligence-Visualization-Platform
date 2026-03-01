@@ -196,11 +196,15 @@ const ProductList: React.FC<ProductListProps> = ({
   const [isRefreshing, setIsRefreshing] = useState(false);
 
   const closeProductListModal = useCallback(() => {
-    if (editingProduct) setEditingProduct(null);
+    if (editingCell) setEditingCell(null);
+    else if (showFilterPanel) setShowFilterPanel(false);
+    else if (showExportMenu) setShowExportMenu(false);
+    else if (showColumnsMenu) setShowColumnsMenu(false);
+    else if (editingProduct) setEditingProduct(null);
     else if (selectedProduct) setSelectedProduct(null);
     else if (showPIModal) setShowPIModal(false);
-  }, [editingProduct, selectedProduct, showPIModal]);
-  useEscapeKey(editingProduct || selectedProduct || showPIModal ? closeProductListModal : null);
+  }, [editingCell, showFilterPanel, showExportMenu, showColumnsMenu, editingProduct, selectedProduct, showPIModal]);
+  useEscapeKey(editingCell || showFilterPanel || showExportMenu || showColumnsMenu || editingProduct || selectedProduct || showPIModal ? closeProductListModal : null);
   const [visibleColumns, setVisibleColumns] = useState<Set<ColumnKey>>(
     new Set(ALL_COLUMNS.filter(c => c.defaultVisible).map(c => c.key))
   );
