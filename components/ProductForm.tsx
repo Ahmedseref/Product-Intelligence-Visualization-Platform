@@ -58,22 +58,23 @@ const ProductForm: React.FC<ProductFormProps> = ({ onSubmit, onCancel, currentUs
   const [editSpecValue, setEditSpecValue] = useState('');
   
   const getInitialUsageAreas = (): string[] => {
+    let stored: string[] = [];
     if (initialProduct?.customFields) {
       if (typeof initialProduct.customFields === 'object' && !Array.isArray(initialProduct.customFields)) {
         const areas = initialProduct.customFields['Usage Areas'];
-        if (Array.isArray(areas)) return [...areas];
+        if (Array.isArray(areas)) stored = [...areas];
       }
-      if (Array.isArray(initialProduct.customFields)) {
+      if (stored.length === 0 && Array.isArray(initialProduct.customFields)) {
         const usageField = initialProduct.customFields.find((cf: any) =>
           cf.fieldId?.toLowerCase().includes('usage') || cf.fieldId?.toLowerCase().includes('application')
         );
         if (usageField?.value) {
-          if (Array.isArray(usageField.value)) return [...usageField.value];
-          return String(usageField.value).split(',').map((v: string) => v.trim()).filter(Boolean);
+          if (Array.isArray(usageField.value)) stored = [...usageField.value];
+          else stored = String(usageField.value).split(',').map((v: string) => v.trim()).filter(Boolean);
         }
       }
     }
-    return [];
+    return stored.filter(a => USAGE_AREAS.includes(a));
   };
   const [selectedUsageAreas, setSelectedUsageAreas] = useState<string[]>(getInitialUsageAreas());
   

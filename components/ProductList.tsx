@@ -126,7 +126,7 @@ const setProductUsageAreas = (product: Product, areas: string[]): Product => {
 
 const UsageAreasEditor: React.FC<UsageAreasEditorProps> = ({ product, usageAreas, onUpdate, onClose }) => {
   const [selectedAreas, setSelectedAreas] = useState<string[]>(() => {
-    return getProductUsageAreas(product);
+    return getProductUsageAreas(product).filter(a => usageAreas.includes(a));
   });
 
   const toggleArea = (area: string) => {
