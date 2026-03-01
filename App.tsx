@@ -803,6 +803,7 @@ const App: React.FC = () => {
                 units={units}
                 colors={colorsList}
                 inventoryColumnsConfig={inventoryColumns}
+                onRefresh={syncWithDatabase}
               />
             )}
             {viewMode === 'add-product' && (

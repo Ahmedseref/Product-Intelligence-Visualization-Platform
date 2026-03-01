@@ -4,7 +4,7 @@ import { ICONS, CURRENCIES, UNITS } from '../constants';
 import ProductDetailsModal from './ProductDetailsModal';
 import ProductForm from './ProductForm';
 import TaxonomyNodeSelector from './TaxonomyNodeSelector';
-import { Check, X, Download, Filter, FileText, ChevronDown, ChevronRight, Copy, Trash2, Columns, Eye, EyeOff, FolderTree, Search, ChevronsUpDown } from 'lucide-react';
+import { Check, X, Download, Filter, FileText, ChevronDown, ChevronRight, Copy, Trash2, Columns, Eye, EyeOff, FolderTree, Search, ChevronsUpDown, RefreshCw } from 'lucide-react';
 
 interface InventoryColumnSetting {
   key: string;
@@ -28,6 +28,7 @@ interface ProductListProps {
   units?: string[];
   colors?: any[];
   inventoryColumnsConfig?: InventoryColumnSetting[];
+  onRefresh?: () => Promise<void>;
 }
 
 interface EditingCell {
@@ -173,7 +174,7 @@ const UsageAreasEditor: React.FC<UsageAreasEditorProps> = ({ product, usageAreas
 const ProductList: React.FC<ProductListProps> = ({ 
   products, onUpdate, onDelete, onCreate, customFields, treeNodes,
   suppliers = [], currentUser, onAddFieldDefinition, onAddTreeNode, usageAreas = [], units: unitsProp, colors = [],
-  inventoryColumnsConfig
+  inventoryColumnsConfig, onRefresh
 }) => {
   const dynamicUnits = unitsProp && unitsProp.length > 0 ? unitsProp : UNITS;
   const [selectedProduct, setSelectedProduct] = useState<Product | null>(null);
@@ -191,6 +192,7 @@ const ProductList: React.FC<ProductListProps> = ({
   const [showColumnsMenu, setShowColumnsMenu] = useState(false);
   const [showPIModal, setShowPIModal] = useState(false);
   const [piName, setPIName] = useState('');
+  const [isRefreshing, setIsRefreshing] = useState(false);
   const [visibleColumns, setVisibleColumns] = useState<Set<ColumnKey>>(
     new Set(ALL_COLUMNS.filter(c => c.defaultVisible).map(c => c.key))
   );
@@ -1028,6 +1030,29 @@ const ProductList: React.FC<ProductListProps> = ({
               </button>
             )}
           </div>
+
+          {onRefresh && (
+            <button
+              onClick={async () => {
+                setIsRefreshing(true);
+                try {
+                  await onRefresh();
+                } finally {
+                  setTimeout(() => setIsRefreshing(false), 500);
+                }
+              }}
+              disabled={isRefreshing}
+              className={`flex items-center gap-1.5 px-3 py-1.5 border rounded-lg text-sm font-medium transition-all ${
+                isRefreshing
+                  ? 'bg-blue-50 border-blue-300 text-blue-600 cursor-not-allowed'
+                  : 'bg-white border-slate-200 text-slate-700 hover:bg-slate-50'
+              }`}
+              title="Refresh inventory data"
+            >
+              <RefreshCw size={16} className={isRefreshing ? 'animate-spin' : ''} />
+              Refresh
+            </button>
+          )}
 
           <button
             onClick={expandedRows.size > 0 ? collapseAllRows : expandAllRows}
