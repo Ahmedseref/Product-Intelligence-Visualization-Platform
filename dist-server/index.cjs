@@ -52370,15 +52370,28 @@ __export(schema_exports, {
   attachments: () => attachments,
   attachmentsRelations: () => attachmentsRelations,
   backups: () => backups,
+  colors: () => colors,
   customFieldDefinitions: () => customFieldDefinitions,
+  documents: () => documents,
   masterProducts: () => masterProducts,
   masterProductsRelations: () => masterProductsRelations,
   products: () => products,
   productsRelations: () => productsRelations,
+  sectors: () => sectors,
+  sectorsRelations: () => sectorsRelations,
+  stockCodeHistory: () => stockCodeHistory,
   supplierProducts: () => supplierProducts,
   supplierProductsRelations: () => supplierProductsRelations,
   suppliers: () => suppliers,
   suppliersRelations: () => suppliersRelations,
+  systemHistory: () => systemHistory,
+  systemHistoryRelations: () => systemHistoryRelations,
+  systemLayers: () => systemLayers,
+  systemLayersRelations: () => systemLayersRelations,
+  systemProductOptions: () => systemProductOptions,
+  systemProductOptionsRelations: () => systemProductOptionsRelations,
+  systems: () => systems,
+  systemsRelations: () => systemsRelations,
   treeNodes: () => treeNodes,
   treeNodesRelations: () => treeNodesRelations,
   users: () => users
@@ -59065,6 +59078,7 @@ var suppliers = pgTable("suppliers", {
   id: serial("id").primaryKey(),
   supplierId: varchar("supplier_id", { length: 100 }).notNull().unique(),
   name: varchar("name", { length: 255 }).notNull(),
+  supplierCode: varchar("supplier_code", { length: 5 }),
   country: varchar("country", { length: 100 }),
   contactName: varchar("contact_name", { length: 255 }),
   contactEmail: varchar("contact_email", { length: 255 }),
@@ -59119,6 +59133,7 @@ var treeNodes = pgTable("tree_nodes", {
   parentId: varchar("parent_id", { length: 100 }),
   description: text("description"),
   metadata: jsonb("metadata"),
+  branchCode: varchar("branch_code", { length: 10 }),
   isActive: boolean("is_active").default(true),
   sortOrder: integer("sort_order").default(0),
   createdAt: timestamp("created_at").defaultNow(),
@@ -59131,6 +59146,8 @@ var products = pgTable("products", {
   supplier: varchar("supplier", { length: 255 }),
   supplierId: varchar("supplier_id", { length: 100 }),
   nodeId: varchar("node_id", { length: 100 }).notNull(),
+  stockCode: varchar("stock_code", { length: 255 }),
+  colorId: integer("color_id"),
   manufacturer: varchar("manufacturer", { length: 255 }),
   manufacturingLocation: varchar("manufacturing_location", { length: 255 }),
   description: text("description"),
@@ -59175,6 +59192,89 @@ var attachments = pgTable("attachments", {
   objectPath: text("object_path").notNull(),
   category: varchar("category", { length: 100 }),
   uploadedAt: timestamp("uploaded_at").defaultNow()
+});
+var colors = pgTable("colors", {
+  id: serial("id").primaryKey(),
+  name: varchar("name", { length: 100 }).notNull(),
+  code: varchar("code", { length: 10 }).notNull().unique(),
+  hexValue: varchar("hex_value", { length: 7 }),
+  isActive: boolean("is_active").default(true),
+  sortOrder: integer("sort_order").default(0),
+  createdAt: timestamp("created_at").defaultNow()
+});
+var stockCodeHistory = pgTable("stock_code_history", {
+  id: serial("id").primaryKey(),
+  productId: varchar("product_id", { length: 100 }).notNull(),
+  oldStockCode: varchar("old_stock_code", { length: 255 }),
+  newStockCode: varchar("new_stock_code", { length: 255 }).notNull(),
+  reason: varchar("reason", { length: 255 }).notNull(),
+  changedBy: varchar("changed_by", { length: 255 }),
+  changedAt: timestamp("changed_at").defaultNow()
+});
+var sectors = pgTable("sectors", {
+  id: serial("id").primaryKey(),
+  sectorId: varchar("sector_id", { length: 100 }).notNull().unique(),
+  name: varchar("name", { length: 255 }).notNull(),
+  description: text("description"),
+  isActive: boolean("is_active").default(true),
+  sortOrder: integer("sort_order").default(0),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow()
+});
+var systems = pgTable("systems", {
+  id: serial("id").primaryKey(),
+  systemId: varchar("system_id", { length: 100 }).notNull().unique(),
+  name: varchar("name", { length: 255 }).notNull(),
+  description: text("description"),
+  typicalUses: text("typical_uses"),
+  sectorMapping: jsonb("sector_mapping").default([]),
+  status: varchar("status", { length: 20 }).default("draft"),
+  version: integer("version").default(1),
+  isActive: boolean("is_active").default(true),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow()
+});
+var systemLayers = pgTable("system_layers", {
+  id: serial("id").primaryKey(),
+  layerId: varchar("layer_id", { length: 100 }).notNull().unique(),
+  systemId: varchar("system_id", { length: 100 }).notNull(),
+  layerName: varchar("layer_name", { length: 255 }).notNull(),
+  orderSequence: integer("order_sequence").notNull().default(0),
+  notes: text("notes"),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow()
+});
+var systemProductOptions = pgTable("system_product_options", {
+  id: serial("id").primaryKey(),
+  optionId: varchar("option_id", { length: 100 }).notNull().unique(),
+  layerId: varchar("layer_id", { length: 100 }).notNull(),
+  productId: varchar("product_id", { length: 100 }).notNull(),
+  benefit: text("benefit"),
+  isDefault: boolean("is_default").default(false),
+  createdAt: timestamp("created_at").defaultNow()
+});
+var systemHistory = pgTable("system_history", {
+  id: serial("id").primaryKey(),
+  systemId: varchar("system_id", { length: 100 }).notNull(),
+  version: integer("version").notNull(),
+  snapshotData: jsonb("snapshot_data").notNull(),
+  changeDescription: text("change_description"),
+  changedBy: varchar("changed_by", { length: 255 }),
+  createdAt: timestamp("created_at").defaultNow()
+});
+var documents = pgTable("documents", {
+  id: serial("id").primaryKey(),
+  documentId: varchar("document_id", { length: 20 }).notNull().unique(),
+  name: varchar("name", { length: 255 }).notNull(),
+  link: text("link").notNull(),
+  type: varchar("type", { length: 50 }).notNull(),
+  relatedToType: varchar("related_to_type", { length: 30 }).notNull(),
+  relatedToId: varchar("related_to_id", { length: 100 }),
+  relatedToName: varchar("related_to_name", { length: 255 }),
+  tags: jsonb("tags").default([]),
+  description: text("description"),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow()
 });
 var appSettings = pgTable("app_settings", {
   id: serial("id").primaryKey(),
@@ -59230,6 +59330,34 @@ var productsRelations = relations(products, ({ one }) => ({
   treeNode: one(treeNodes, {
     fields: [products.nodeId],
     references: [treeNodes.nodeId]
+  })
+}));
+var sectorsRelations = relations(sectors, ({}) => ({}));
+var systemsRelations = relations(systems, ({ many }) => ({
+  layers: many(systemLayers),
+  history: many(systemHistory)
+}));
+var systemLayersRelations = relations(systemLayers, ({ one, many }) => ({
+  system: one(systems, {
+    fields: [systemLayers.systemId],
+    references: [systems.systemId]
+  }),
+  productOptions: many(systemProductOptions)
+}));
+var systemProductOptionsRelations = relations(systemProductOptions, ({ one }) => ({
+  layer: one(systemLayers, {
+    fields: [systemProductOptions.layerId],
+    references: [systemLayers.layerId]
+  }),
+  product: one(products, {
+    fields: [systemProductOptions.productId],
+    references: [products.productId]
+  })
+}));
+var systemHistoryRelations = relations(systemHistory, ({ one }) => ({
+  system: one(systems, {
+    fields: [systemHistory.systemId],
+    references: [systems.systemId]
   })
 }));
 
@@ -59697,6 +59825,92 @@ var DatabaseStorage = class {
     }
     return areas;
   }
+  async getUnits() {
+    const [setting] = await db.select().from(appSettings).where(eq(appSettings.key, "units"));
+    if (setting && Array.isArray(setting.value)) {
+      return setting.value;
+    }
+    const defaultUnits = ["kg", "ton", "piece", "liter", "box", "pallet", "m", "m\xB2", "m\xB3", "ft", "ft\xB2", "ft\xB3", "inch", "cm", "mm", "gallon", "oz", "lb", "set", "pair", "roll", "sheet", "pack", "carton"];
+    await db.insert(appSettings).values({ key: "units", value: defaultUnits }).onConflictDoNothing();
+    return defaultUnits;
+  }
+  async setUnits(units) {
+    const [existing] = await db.select().from(appSettings).where(eq(appSettings.key, "units"));
+    if (existing) {
+      await db.update(appSettings).set({ value: units, updatedAt: /* @__PURE__ */ new Date() }).where(eq(appSettings.key, "units"));
+    } else {
+      await db.insert(appSettings).values({ key: "units", value: units });
+    }
+    return units;
+  }
+  async getInventoryColumns() {
+    const [setting] = await db.select().from(appSettings).where(eq(appSettings.key, "inventory_columns"));
+    if (setting && Array.isArray(setting.value)) {
+      return setting.value;
+    }
+    return [];
+  }
+  async setInventoryColumns(columns) {
+    const [existing] = await db.select().from(appSettings).where(eq(appSettings.key, "inventory_columns"));
+    if (existing) {
+      await db.update(appSettings).set({ value: columns, updatedAt: /* @__PURE__ */ new Date() }).where(eq(appSettings.key, "inventory_columns"));
+    } else {
+      await db.insert(appSettings).values({ key: "inventory_columns", value: columns });
+    }
+    return columns;
+  }
+  async getColors() {
+    return await db.select().from(colors).orderBy(colors.sortOrder);
+  }
+  async getColor(id) {
+    const [color] = await db.select().from(colors).where(eq(colors.id, id));
+    return color || void 0;
+  }
+  async createColor(color) {
+    const [created] = await db.insert(colors).values(color).returning();
+    return created;
+  }
+  async updateColor(id, updates) {
+    const [updated] = await db.update(colors).set(updates).where(eq(colors.id, id)).returning();
+    return updated || void 0;
+  }
+  async deleteColor(id) {
+    const result = await db.delete(colors).where(eq(colors.id, id)).returning();
+    return result.length > 0;
+  }
+  async getDocuments() {
+    return await db.select().from(documents).orderBy(desc(documents.createdAt));
+  }
+  async getDocument(documentId) {
+    const [doc] = await db.select().from(documents).where(eq(documents.documentId, documentId));
+    return doc || void 0;
+  }
+  async getDocumentsByRelation(relatedToType, relatedToId) {
+    return await db.select().from(documents).where(
+      and(eq(documents.relatedToType, relatedToType), eq(documents.relatedToId, relatedToId))
+    ).orderBy(desc(documents.createdAt));
+  }
+  async createDocument(doc) {
+    const [created] = await db.insert(documents).values(doc).returning();
+    return created;
+  }
+  async updateDocument(documentId, updates) {
+    const [updated] = await db.update(documents).set({ ...updates, updatedAt: /* @__PURE__ */ new Date() }).where(eq(documents.documentId, documentId)).returning();
+    return updated || void 0;
+  }
+  async deleteDocument(documentId) {
+    const result = await db.delete(documents).where(eq(documents.documentId, documentId)).returning();
+    return result.length > 0;
+  }
+  async getNextDocumentId() {
+    const result = await db.select({ maxId: sql`MAX(${documents.documentId})` }).from(documents);
+    const maxId = result[0]?.maxId;
+    if (!maxId) {
+      return "D-0001";
+    }
+    const num = parseInt(maxId.replace("D-", ""), 10);
+    return `D-${String(num + 1).padStart(4, "0")}`;
+  }
 };
 var storage = new DatabaseStorage();
 
@@ -60038,6 +60252,200 @@ function startScheduledBackups() {
   const intervalMs = autoBackupIntervalHours * 60 * 60 * 1e3;
   scheduledBackupTimer = setInterval(runScheduledBackup, intervalMs);
   console.log(`[Backup] Scheduled backups enabled (every ${autoBackupIntervalHours} hours)`);
+}
+
+// server/stockCodeService.ts
+function generateBranchCodeFromName(name, existingCodes) {
+  const cleanName = name.trim().toUpperCase();
+  const words = cleanName.split(/\s+/).filter((w) => w.length > 0);
+  const candidates = [];
+  if (words.length === 1) {
+    const word = words[0];
+    candidates.push(word.substring(0, 2));
+    candidates.push(word.substring(0, 3));
+    const consonants = word.replace(/[AEIOU]/g, "");
+    if (consonants.length >= 2) candidates.push(consonants.substring(0, 2));
+    if (consonants.length >= 3) candidates.push(consonants.substring(0, 3));
+  } else {
+    candidates.push(words.map((w) => w[0]).join("").substring(0, 5));
+    if (words.length >= 2) {
+      candidates.push(words[0].substring(0, 1) + words[1].substring(0, 1));
+      candidates.push(words[0].substring(0, 2) + words[1].substring(0, 1));
+    }
+    const consonants = words[0].replace(/[AEIOU]/g, "");
+    if (consonants.length >= 2) candidates.push(consonants.substring(0, 2));
+  }
+  for (const c of candidates) {
+    if (c.length >= 2 && !existingCodes.includes(c)) return c;
+  }
+  const base = candidates[0] || cleanName.substring(0, 2);
+  for (let i = 1; i <= 99; i++) {
+    const candidate = `${base}${i}`;
+    if (candidate.length <= 5 && !existingCodes.includes(candidate)) return candidate;
+  }
+  return `${base}${Date.now() % 100}`;
+}
+function validateBranchCode(code) {
+  if (!code) return { valid: false, error: "Branch code is required" };
+  if (code !== code.toUpperCase()) return { valid: false, error: "Must be uppercase" };
+  if (code.length > 5) return { valid: false, error: "Maximum 5 characters" };
+  if (code.length < 1) return { valid: false, error: "Minimum 1 character" };
+  if (/\s/.test(code)) return { valid: false, error: "No spaces allowed" };
+  if (!/^[A-Z0-9]+$/.test(code)) return { valid: false, error: "Only uppercase letters and numbers" };
+  return { valid: true };
+}
+async function getNodePath(nodeId) {
+  const allNodes = await db.select().from(treeNodes);
+  const path3 = [];
+  let current = allNodes.find((n) => n.nodeId === nodeId);
+  while (current) {
+    path3.unshift({ nodeId: current.nodeId, name: current.name, branchCode: current.branchCode });
+    current = allNodes.find((n) => n.nodeId === current?.parentId);
+  }
+  return path3;
+}
+function padProductId(id) {
+  return String(id).padStart(4, "0");
+}
+async function getSupplierCode(supplierId) {
+  if (!supplierId) return null;
+  const [supplier] = await db.select().from(suppliers).where(eq(suppliers.supplierId, supplierId));
+  return supplier?.supplierCode || null;
+}
+async function generateStockCode(nodeId, productDbId, colorId, supplierId) {
+  const path3 = await getNodePath(nodeId);
+  const segments = ["P"];
+  const supplierCode = await getSupplierCode(supplierId);
+  if (supplierCode) {
+    segments.push(supplierCode);
+  }
+  for (const node of path3) {
+    if (node.branchCode) {
+      segments.push(node.branchCode);
+    }
+  }
+  if (colorId) {
+    const [color] = await db.select().from(colors).where(eq(colors.id, colorId));
+    if (color) {
+      segments.push(color.code);
+    }
+  }
+  segments.push(padProductId(productDbId));
+  return segments.join(".");
+}
+async function previewStockCode(nodeId, colorId, productId, supplierId) {
+  const path3 = await getNodePath(nodeId);
+  const segments = ["P"];
+  const supplierCode = await getSupplierCode(supplierId);
+  if (supplierCode) {
+    segments.push(supplierCode);
+  }
+  for (const node of path3) {
+    if (node.branchCode) {
+      segments.push(node.branchCode);
+    }
+  }
+  if (colorId) {
+    const [color] = await db.select().from(colors).where(eq(colors.id, colorId));
+    if (color) {
+      segments.push(color.code);
+    }
+  }
+  if (productId) {
+    const [product] = await db.select().from(products).where(eq(products.productId, productId));
+    if (product) {
+      segments.push(padProductId(product.id));
+    } else {
+      segments.push("XXXX");
+    }
+  } else {
+    segments.push("XXXX");
+  }
+  return segments.join(".");
+}
+async function updateProductStockCode(productId, reason, changedBy) {
+  const [product] = await db.select().from(products).where(eq(products.productId, productId));
+  if (!product) return null;
+  const newCode = await generateStockCode(product.nodeId, product.id, product.colorId, product.supplierId);
+  const oldCode = product.stockCode;
+  if (oldCode === newCode) return newCode;
+  await db.update(products).set({ stockCode: newCode, lastUpdated: /* @__PURE__ */ new Date() }).where(eq(products.productId, productId));
+  await db.insert(stockCodeHistory).values({
+    productId,
+    oldStockCode: oldCode,
+    newStockCode: newCode,
+    reason,
+    changedBy: changedBy || "System"
+  });
+  return newCode;
+}
+async function bulkRegenerateStockCodes(changedBy) {
+  const allProducts = await db.select().from(products);
+  let updated = 0;
+  for (const product of allProducts) {
+    const newCode = await generateStockCode(product.nodeId, product.id, product.colorId, product.supplierId);
+    if (newCode !== product.stockCode) {
+      await db.update(products).set({ stockCode: newCode, lastUpdated: /* @__PURE__ */ new Date() }).where(eq(products.productId, product.productId));
+      await db.insert(stockCodeHistory).values({
+        productId: product.productId,
+        oldStockCode: product.stockCode,
+        newStockCode: newCode,
+        reason: "Bulk regeneration",
+        changedBy: changedBy || "System"
+      });
+      updated++;
+    }
+  }
+  return updated;
+}
+async function migrateExistingBranchCodes() {
+  const allNodes = await db.select().from(treeNodes);
+  const existingCodes = allNodes.filter((n) => n.branchCode).map((n) => n.branchCode);
+  let migrated = 0;
+  for (const node of allNodes) {
+    if (!node.branchCode) {
+      const code = generateBranchCodeFromName(node.name, existingCodes);
+      await db.update(treeNodes).set({ branchCode: code, updatedAt: /* @__PURE__ */ new Date() }).where(eq(treeNodes.nodeId, node.nodeId));
+      existingCodes.push(code);
+      migrated++;
+    }
+  }
+  return migrated;
+}
+async function regenerateStockCodesForNode(nodeId, changedBy) {
+  const allNodes = await db.select().from(treeNodes);
+  const affectedNodeIds = [nodeId];
+  const findDescendants = (parentId) => {
+    allNodes.forEach((node) => {
+      if (node.parentId === parentId) {
+        affectedNodeIds.push(node.nodeId);
+        findDescendants(node.nodeId);
+      }
+    });
+  };
+  findDescendants(nodeId);
+  let updated = 0;
+  for (const nid of affectedNodeIds) {
+    const nodeProducts = await db.select().from(products).where(eq(products.nodeId, nid));
+    for (const product of nodeProducts) {
+      const newCode = await generateStockCode(product.nodeId, product.id, product.colorId, product.supplierId);
+      if (newCode !== product.stockCode) {
+        await db.update(products).set({ stockCode: newCode, lastUpdated: /* @__PURE__ */ new Date() }).where(eq(products.productId, product.productId));
+        await db.insert(stockCodeHistory).values({
+          productId: product.productId,
+          oldStockCode: product.stockCode,
+          newStockCode: newCode,
+          reason: `Taxonomy branch code changed`,
+          changedBy: changedBy || "System"
+        });
+        updated++;
+      }
+    }
+  }
+  return updated;
+}
+async function getStockCodeHistoryForProduct(productId) {
+  return db.select().from(stockCodeHistory).where(eq(stockCodeHistory.productId, productId)).orderBy(stockCodeHistory.changedAt);
 }
 
 // node_modules/express-rate-limit/dist/index.mjs
@@ -62674,8 +63082,23 @@ async function hashPassword(password) {
 async function verifyPassword(password, hash2) {
   return bcryptjs_default.compare(password, hash2);
 }
+async function ensureUsersTableExists() {
+  const createTableSQL = `
+    CREATE TABLE IF NOT EXISTS users (
+      id VARCHAR(255) PRIMARY KEY DEFAULT gen_random_uuid()::text,
+      username VARCHAR(255) UNIQUE NOT NULL,
+      password_hash TEXT NOT NULL,
+      role VARCHAR(50) DEFAULT 'user',
+      is_first_login BOOLEAN DEFAULT true,
+      created_at TIMESTAMP DEFAULT NOW(),
+      updated_at TIMESTAMP DEFAULT NOW()
+    );
+  `;
+  await pool.query(createTableSQL);
+}
 async function bootstrapAdminUser() {
   try {
+    await ensureUsersTableExists();
     const existingAdmin = await db.select().from(users).where(eq(users.username, DEFAULT_ADMIN_USERNAME));
     if (existingAdmin.length === 0) {
       const passwordHash = await hashPassword(DEFAULT_ADMIN_PASSWORD);
@@ -62904,6 +63327,8 @@ function registerRoutes(app2) {
   app2.use("/api/backups", authMiddleware, requirePasswordChange);
   app2.use("/api/supplier-products", authMiddleware, requirePasswordChange);
   app2.use("/api/settings", authMiddleware, requirePasswordChange);
+  app2.use("/api/colors", authMiddleware, requirePasswordChange);
+  app2.use("/api/stock-codes", authMiddleware, requirePasswordChange);
   app2.get("/api/tree-nodes", async (req, res) => {
     try {
       const nodes = await storage.getTreeNodes();
@@ -62940,6 +63365,11 @@ function registerRoutes(app2) {
       if (!node) {
         return res.status(404).json({ error: "Node not found" });
       }
+      if (req.body.branchCode !== void 0 || req.body.parentId !== void 0) {
+        regenerateStockCodesForNode(req.params.nodeId, "System").catch(
+          (e) => console.error("Stock code regen after node update failed:", e)
+        );
+      }
       res.json(node);
     } catch (error) {
       console.error("Error updating tree node:", error);
@@ -62953,6 +63383,57 @@ function registerRoutes(app2) {
     } catch (error) {
       console.error("Error deleting tree node:", error);
       res.status(500).json({ error: "Failed to delete tree node" });
+    }
+  });
+  app2.get("/api/tree-nodes/:nodeId/path", async (req, res) => {
+    try {
+      const nodes = await storage.getTreeNodes();
+      const nodeId = req.params.nodeId;
+      const path3 = [];
+      let current = nodes.find((n) => n.nodeId === nodeId);
+      while (current) {
+        path3.unshift({ id: current.nodeId, name: current.name, type: current.type });
+        current = nodes.find((n) => n.nodeId === current?.parentId);
+      }
+      if (path3.length === 0) {
+        return res.status(404).json({ error: "Node not found" });
+      }
+      res.json({
+        nodeId,
+        path: path3,
+        pathString: path3.map((p) => p.name).join(" > ")
+      });
+    } catch (error) {
+      console.error("Error fetching node path:", error);
+      res.status(500).json({ error: "Failed to fetch node path" });
+    }
+  });
+  app2.get("/api/tree-nodes/:nodeId/descendants", async (req, res) => {
+    try {
+      const nodes = await storage.getTreeNodes();
+      const nodeId = req.params.nodeId;
+      const descendants = [];
+      const findDescendants = (parentId) => {
+        nodes.forEach((node) => {
+          if (node.parentId === parentId) {
+            descendants.push(node.nodeId);
+            findDescendants(node.nodeId);
+          }
+        });
+      };
+      const targetNode = nodes.find((n) => n.nodeId === nodeId);
+      if (!targetNode) {
+        return res.status(404).json({ error: "Node not found" });
+      }
+      findDescendants(nodeId);
+      res.json({
+        nodeId,
+        descendants,
+        includesSelf: [nodeId, ...descendants]
+      });
+    } catch (error) {
+      console.error("Error fetching node descendants:", error);
+      res.status(500).json({ error: "Failed to fetch node descendants" });
     }
   });
   app2.get("/api/products", async (req, res) => {
@@ -62988,6 +63469,22 @@ function registerRoutes(app2) {
   app2.post("/api/products", async (req, res) => {
     try {
       const product = await storage.createProduct(req.body);
+      if (product.nodeId) {
+        try {
+          const generated = await generateStockCode(
+            product.nodeId,
+            product.id,
+            product.colorId || void 0,
+            product.supplierId || void 0
+          );
+          if (generated) {
+            await storage.updateProduct(product.productId, { stockCode: generated });
+            product.stockCode = generated;
+          }
+        } catch (e) {
+          console.error("Stock code generation failed (non-critical):", e);
+        }
+      }
       res.status(201).json(product);
     } catch (error) {
       console.error("Error creating product:", error);
@@ -63000,6 +63497,22 @@ function registerRoutes(app2) {
       if (!product) {
         return res.status(404).json({ error: "Product not found" });
       }
+      if (req.body.nodeId || req.body.colorId !== void 0 || req.body.supplierId !== void 0) {
+        try {
+          const generated = await generateStockCode(
+            product.nodeId,
+            product.id,
+            product.colorId || void 0,
+            product.supplierId || void 0
+          );
+          if (generated && generated !== product.stockCode) {
+            await storage.updateProduct(product.productId, { stockCode: generated });
+            product.stockCode = generated;
+          }
+        } catch (e) {
+          console.error("Stock code regeneration failed (non-critical):", e);
+        }
+      }
       res.json(product);
     } catch (error) {
       console.error("Error updating product:", error);
@@ -63008,6 +63521,9 @@ function registerRoutes(app2) {
   });
   app2.delete("/api/products/:productId", async (req, res) => {
     try {
+      await db.delete(documents).where(
+        and(eq(documents.relatedToType, "Product"), eq(documents.relatedToId, req.params.productId))
+      );
       await storage.deleteProduct(req.params.productId);
       res.status(204).send();
     } catch (error) {
@@ -63198,6 +63714,19 @@ function registerRoutes(app2) {
       res.status(500).json({ error: "Failed to fetch suppliers" });
     }
   });
+  app2.get("/api/suppliers/suggest-code", async (req, res) => {
+    try {
+      const { name } = req.query;
+      if (!name) return res.status(400).json({ error: "name is required" });
+      const allSuppliers = await db.select().from(suppliers);
+      const existingCodes = allSuppliers.filter((s) => s.supplierCode).map((s) => s.supplierCode);
+      const suggested = generateBranchCodeFromName(name, existingCodes);
+      res.json({ code: suggested });
+    } catch (error) {
+      console.error("Error suggesting supplier code:", error);
+      res.status(500).json({ error: "Failed to suggest supplier code" });
+    }
+  });
   app2.get("/api/suppliers/:supplierId", async (req, res) => {
     try {
       const supplier = await storage.getSupplier(req.params.supplierId);
@@ -63225,6 +63754,16 @@ function registerRoutes(app2) {
       if (!supplier) {
         return res.status(404).json({ error: "Supplier not found" });
       }
+      if (req.body.supplierCode !== void 0) {
+        try {
+          const supplierProducts2 = await db.select().from(products).where(eq(products.supplierId, req.params.supplierId));
+          for (const product of supplierProducts2) {
+            await updateProductStockCode(product.productId, "Supplier code changed");
+          }
+        } catch (e) {
+          console.error("Stock code regeneration after supplier code change failed:", e);
+        }
+      }
       res.json(supplier);
     } catch (error) {
       console.error("Error updating supplier:", error);
@@ -63233,6 +63772,9 @@ function registerRoutes(app2) {
   });
   app2.delete("/api/suppliers/:supplierId", async (req, res) => {
     try {
+      await db.delete(documents).where(
+        and(eq(documents.relatedToType, "Supplier"), eq(documents.relatedToId, req.params.supplierId))
+      );
       await storage.deleteSupplier(req.params.supplierId);
       res.status(204).send();
     } catch (error) {
@@ -63469,6 +64011,89 @@ function registerRoutes(app2) {
       res.status(500).json({ error: "Failed to update usage areas" });
     }
   });
+  app2.post("/api/settings/usage-areas/rename", async (req, res) => {
+    try {
+      const { oldName, newName } = req.body;
+      if (!oldName || !newName || typeof oldName !== "string" || typeof newName !== "string") {
+        return res.status(400).json({ error: "oldName and newName are required strings" });
+      }
+      const allProducts = await storage.getProducts();
+      let migratedCount = 0;
+      for (const product of allProducts) {
+        const cf = product.customFields;
+        if (!cf) continue;
+        let areas = null;
+        if (typeof cf === "object" && !Array.isArray(cf) && Array.isArray(cf["Usage Areas"])) {
+          areas = cf["Usage Areas"];
+        } else if (Array.isArray(cf)) {
+          const usageField = cf.find(
+            (f) => f.fieldId?.toLowerCase().includes("usage") || f.fieldId?.toLowerCase().includes("application")
+          );
+          if (usageField) {
+            if (Array.isArray(usageField.value)) {
+              areas = usageField.value;
+            } else if (typeof usageField.value === "string") {
+              areas = usageField.value.split(",").map((v) => v.trim()).filter(Boolean);
+            }
+          }
+        }
+        if (areas && areas.includes(oldName)) {
+          const newAreas = areas.map((a) => a === oldName ? newName : a);
+          const updatedCf = { "Usage Areas": newAreas };
+          await storage.updateProduct(product.productId, { customFields: updatedCf });
+          migratedCount++;
+        }
+      }
+      res.json({ migratedCount });
+    } catch (error) {
+      console.error("Error renaming usage area in products:", error);
+      res.status(500).json({ error: "Failed to rename usage area in products" });
+    }
+  });
+  app2.get("/api/settings/units", async (req, res) => {
+    try {
+      const units = await storage.getUnits();
+      res.json(units);
+    } catch (error) {
+      console.error("Error fetching units:", error);
+      res.status(500).json({ error: "Failed to fetch units" });
+    }
+  });
+  app2.put("/api/settings/units", async (req, res) => {
+    try {
+      const { units } = req.body;
+      if (!Array.isArray(units)) {
+        return res.status(400).json({ error: "Units must be an array" });
+      }
+      const updatedUnits = await storage.setUnits(units);
+      res.json(updatedUnits);
+    } catch (error) {
+      console.error("Error updating units:", error);
+      res.status(500).json({ error: "Failed to update units" });
+    }
+  });
+  app2.get("/api/settings/inventory-columns", async (req, res) => {
+    try {
+      const columns = await storage.getInventoryColumns();
+      res.json(columns);
+    } catch (error) {
+      console.error("Error fetching inventory columns:", error);
+      res.status(500).json({ error: "Failed to fetch inventory columns" });
+    }
+  });
+  app2.put("/api/settings/inventory-columns", async (req, res) => {
+    try {
+      const { columns } = req.body;
+      if (!Array.isArray(columns)) {
+        return res.status(400).json({ error: "Columns must be an array" });
+      }
+      const updated = await storage.setInventoryColumns(columns);
+      res.json(updated);
+    } catch (error) {
+      console.error("Error updating inventory columns:", error);
+      res.status(500).json({ error: "Failed to update inventory columns" });
+    }
+  });
   app2.post("/api/backups/create", async (req, res) => {
     try {
       const { description } = req.body;
@@ -63607,6 +64232,212 @@ function registerRoutes(app2) {
     } catch (error) {
       console.error("Error updating backup settings:", error);
       res.status(500).json({ error: "Failed to update backup settings" });
+    }
+  });
+  app2.get("/api/colors", async (req, res) => {
+    try {
+      const allColors = await storage.getColors();
+      res.json(allColors);
+    } catch (error) {
+      console.error("Error fetching colors:", error);
+      res.status(500).json({ error: "Failed to fetch colors" });
+    }
+  });
+  app2.post("/api/colors", async (req, res) => {
+    try {
+      const { name, code, hexValue } = req.body;
+      if (!name || !code) {
+        return res.status(400).json({ error: "Name and code are required" });
+      }
+      const validation = validateBranchCode(code.toUpperCase());
+      if (!validation.valid) {
+        return res.status(400).json({ error: validation.error });
+      }
+      const color = await storage.createColor({ name, code: code.toUpperCase(), hexValue });
+      res.status(201).json(color);
+    } catch (error) {
+      if (error.message?.includes("unique") || error.code === "23505") {
+        return res.status(400).json({ error: "Color code already exists" });
+      }
+      console.error("Error creating color:", error);
+      res.status(500).json({ error: "Failed to create color" });
+    }
+  });
+  app2.patch("/api/colors/:id", async (req, res) => {
+    try {
+      const id = parseInt(req.params.id);
+      if (isNaN(id)) return res.status(400).json({ error: "Invalid ID" });
+      const color = await storage.updateColor(id, req.body);
+      if (!color) return res.status(404).json({ error: "Color not found" });
+      if (req.body.code !== void 0) {
+        const affected = await db.select().from(products).where(eq(products.colorId, id));
+        for (const p of affected) {
+          updateProductStockCode(p.productId, "Color code changed", "System").catch(
+            (e) => console.error(`Stock code regen for product ${p.productId} failed:`, e)
+          );
+        }
+      }
+      res.json(color);
+    } catch (error) {
+      console.error("Error updating color:", error);
+      res.status(500).json({ error: "Failed to update color" });
+    }
+  });
+  app2.delete("/api/colors/:id", async (req, res) => {
+    try {
+      const id = parseInt(req.params.id);
+      if (isNaN(id)) return res.status(400).json({ error: "Invalid ID" });
+      const affected = await db.select().from(products).where(eq(products.colorId, id));
+      if (affected.length > 0) {
+        await db.update(products).set({ colorId: null }).where(eq(products.colorId, id));
+        for (const p of affected) {
+          updateProductStockCode(p.productId, "Color deleted", "System").catch(
+            (e) => console.error(`Stock code regen for product ${p.productId} after color delete failed:`, e)
+          );
+        }
+      }
+      await storage.deleteColor(id);
+      res.status(204).send();
+    } catch (error) {
+      console.error("Error deleting color:", error);
+      res.status(500).json({ error: "Failed to delete color" });
+    }
+  });
+  app2.get("/api/stock-codes/preview", async (req, res) => {
+    try {
+      const { nodeId, colorId, productId, supplierId } = req.query;
+      if (!nodeId) return res.status(400).json({ error: "nodeId is required" });
+      const code = await previewStockCode(
+        nodeId,
+        colorId ? parseInt(colorId) : null,
+        productId || null,
+        supplierId || null
+      );
+      res.json({ stockCode: code });
+    } catch (error) {
+      console.error("Error previewing stock code:", error);
+      res.status(500).json({ error: "Failed to preview stock code" });
+    }
+  });
+  app2.post("/api/stock-codes/generate/:productId", async (req, res) => {
+    try {
+      const code = await updateProductStockCode(
+        req.params.productId,
+        "Manual generation",
+        req.user?.username || "Admin"
+      );
+      if (!code) return res.status(404).json({ error: "Product not found" });
+      res.json({ stockCode: code });
+    } catch (error) {
+      console.error("Error generating stock code:", error);
+      res.status(500).json({ error: "Failed to generate stock code" });
+    }
+  });
+  app2.post("/api/stock-codes/bulk-regenerate", async (req, res) => {
+    try {
+      const updated = await bulkRegenerateStockCodes(
+        req.user?.username || "Admin"
+      );
+      res.json({ updated });
+    } catch (error) {
+      console.error("Error bulk regenerating stock codes:", error);
+      res.status(500).json({ error: "Failed to regenerate stock codes" });
+    }
+  });
+  app2.post("/api/stock-codes/migrate-branch-codes", async (req, res) => {
+    try {
+      const migrated = await migrateExistingBranchCodes();
+      res.json({ migrated });
+    } catch (error) {
+      console.error("Error migrating branch codes:", error);
+      res.status(500).json({ error: "Failed to migrate branch codes" });
+    }
+  });
+  app2.get("/api/stock-codes/history/:productId", async (req, res) => {
+    try {
+      const history = await getStockCodeHistoryForProduct(req.params.productId);
+      res.json(history);
+    } catch (error) {
+      console.error("Error fetching stock code history:", error);
+      res.status(500).json({ error: "Failed to fetch stock code history" });
+    }
+  });
+  app2.get("/api/stock-codes/branch-directory", async (req, res) => {
+    try {
+      const allNodes = await storage.getTreeNodes();
+      const allProducts = await storage.getProducts();
+      const productCountMap = {};
+      for (const p of allProducts) {
+        if (p.nodeId) {
+          productCountMap[p.nodeId] = (productCountMap[p.nodeId] || 0) + 1;
+        }
+      }
+      const directory = allNodes.map((node) => {
+        const path3 = [];
+        let current = node;
+        while (current) {
+          path3.unshift(current.name);
+          current = allNodes.find((n) => n.nodeId === current?.parentId);
+        }
+        return {
+          nodeId: node.nodeId,
+          name: node.name,
+          type: node.type,
+          branchCode: node.branchCode || null,
+          parentId: node.parentId,
+          path: path3.join(" > "),
+          productCount: productCountMap[node.nodeId] || 0
+        };
+      });
+      res.json(directory);
+    } catch (error) {
+      console.error("Error fetching branch directory:", error);
+      res.status(500).json({ error: "Failed to fetch branch directory" });
+    }
+  });
+  app2.get("/api/stock-codes/stats", async (req, res) => {
+    try {
+      const allNodes = await storage.getTreeNodes();
+      const allProducts = await storage.getProducts();
+      const allColors = await storage.getColors();
+      const nodesWithBranchCode = allNodes.filter((n) => n.branchCode);
+      const productsWithStockCode = allProducts.filter((p) => p.stockCode);
+      const productsWithColor = allProducts.filter((p) => p.colorId);
+      res.json({
+        totalNodes: allNodes.length,
+        nodesWithBranchCode: nodesWithBranchCode.length,
+        nodesWithoutBranchCode: allNodes.length - nodesWithBranchCode.length,
+        totalProducts: allProducts.length,
+        productsWithStockCode: productsWithStockCode.length,
+        productsWithoutStockCode: allProducts.length - productsWithStockCode.length,
+        productsWithColor: productsWithColor.length,
+        totalColors: allColors.length
+      });
+    } catch (error) {
+      console.error("Error fetching stock code stats:", error);
+      res.status(500).json({ error: "Failed to fetch stats" });
+    }
+  });
+  app2.get("/api/stock-codes/history", async (req, res) => {
+    try {
+      const history = await db.select().from(stockCodeHistory).orderBy(stockCodeHistory.changedAt).limit(100);
+      res.json(history);
+    } catch (error) {
+      console.error("Error fetching stock code history:", error);
+      res.status(500).json({ error: "Failed to fetch stock code history" });
+    }
+  });
+  app2.post("/api/stock-codes/suggest-branch-code", async (req, res) => {
+    try {
+      const { name, excludeNodeId } = req.body;
+      if (!name) return res.status(400).json({ error: "name is required" });
+      const allNodes = await storage.getTreeNodes();
+      const existingCodes = allNodes.filter((n) => n.branchCode && n.nodeId !== excludeNodeId).map((n) => n.branchCode);
+      const suggestion = generateBranchCodeFromName(name, existingCodes);
+      res.json({ suggestion });
+    } catch (error) {
+      console.error("Error suggesting branch code:", error);
+      res.status(500).json({ error: "Failed to suggest branch code" });
     }
   });
 }
@@ -75376,6 +76207,1215 @@ function registerObjectStorageRoutes(app2) {
   });
 }
 
+// server/systemRoutes.ts
+function generateId(prefix) {
+  return `${prefix}_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+}
+function registerSystemRoutes(app2) {
+  app2.use("/api/systems", authMiddleware, requirePasswordChange);
+  app2.use("/api/system-layers", authMiddleware, requirePasswordChange);
+  app2.use("/api/system-product-options", authMiddleware, requirePasswordChange);
+  app2.use("/api/sectors", authMiddleware, requirePasswordChange);
+  app2.use("/api/system-history", authMiddleware, requirePasswordChange);
+  app2.get("/api/sectors", async (req, res) => {
+    try {
+      const allSectors = await db.select().from(sectors).orderBy(asc(sectors.sortOrder));
+      res.json(allSectors);
+    } catch (error) {
+      console.error("Error fetching sectors:", error);
+      res.status(500).json({ error: "Failed to fetch sectors" });
+    }
+  });
+  app2.post("/api/sectors", async (req, res) => {
+    try {
+      const sectorId = generateId("sec");
+      const [created] = await db.insert(sectors).values({ ...req.body, sectorId }).returning();
+      res.status(201).json(created);
+    } catch (error) {
+      console.error("Error creating sector:", error);
+      res.status(500).json({ error: "Failed to create sector" });
+    }
+  });
+  app2.put("/api/sectors/:sectorId", async (req, res) => {
+    try {
+      const [updated] = await db.update(sectors).set({ ...req.body, updatedAt: /* @__PURE__ */ new Date() }).where(eq(sectors.sectorId, req.params.sectorId)).returning();
+      if (!updated) return res.status(404).json({ error: "Sector not found" });
+      res.json(updated);
+    } catch (error) {
+      console.error("Error updating sector:", error);
+      res.status(500).json({ error: "Failed to update sector" });
+    }
+  });
+  app2.delete("/api/sectors/:sectorId", async (req, res) => {
+    try {
+      const [deleted] = await db.delete(sectors).where(eq(sectors.sectorId, req.params.sectorId)).returning();
+      if (!deleted) return res.status(404).json({ error: "Sector not found" });
+      res.json({ success: true });
+    } catch (error) {
+      console.error("Error deleting sector:", error);
+      res.status(500).json({ error: "Failed to delete sector" });
+    }
+  });
+  app2.get("/api/systems", async (req, res) => {
+    try {
+      const allSystems = await db.select().from(systems).orderBy(desc(systems.createdAt));
+      res.json(allSystems);
+    } catch (error) {
+      console.error("Error fetching systems:", error);
+      res.status(500).json({ error: "Failed to fetch systems" });
+    }
+  });
+  app2.get("/api/systems/:systemId", async (req, res) => {
+    try {
+      const [system] = await db.select().from(systems).where(eq(systems.systemId, req.params.systemId));
+      if (!system) return res.status(404).json({ error: "System not found" });
+      res.json(system);
+    } catch (error) {
+      console.error("Error fetching system:", error);
+      res.status(500).json({ error: "Failed to fetch system" });
+    }
+  });
+  app2.get("/api/systems/:systemId/full", async (req, res) => {
+    try {
+      const [system] = await db.select().from(systems).where(eq(systems.systemId, req.params.systemId));
+      if (!system) return res.status(404).json({ error: "System not found" });
+      const layers = await db.select().from(systemLayers).where(eq(systemLayers.systemId, req.params.systemId)).orderBy(asc(systemLayers.orderSequence));
+      const layersWithProducts = await Promise.all(
+        layers.map(async (layer) => {
+          const options = await db.select({
+            id: systemProductOptions.id,
+            optionId: systemProductOptions.optionId,
+            layerId: systemProductOptions.layerId,
+            productId: systemProductOptions.productId,
+            benefit: systemProductOptions.benefit,
+            isDefault: systemProductOptions.isDefault,
+            createdAt: systemProductOptions.createdAt,
+            productName: products.name,
+            productStockCode: products.stockCode,
+            productSupplier: products.supplier
+          }).from(systemProductOptions).leftJoin(products, eq(systemProductOptions.productId, products.productId)).where(eq(systemProductOptions.layerId, layer.layerId));
+          return { ...layer, productOptions: options };
+        })
+      );
+      res.json({ ...system, layers: layersWithProducts });
+    } catch (error) {
+      console.error("Error fetching full system:", error);
+      res.status(500).json({ error: "Failed to fetch full system" });
+    }
+  });
+  app2.post("/api/systems", async (req, res) => {
+    try {
+      const systemId = generateId("sys");
+      const [created] = await db.insert(systems).values({ ...req.body, systemId }).returning();
+      res.status(201).json(created);
+    } catch (error) {
+      console.error("Error creating system:", error);
+      res.status(500).json({ error: "Failed to create system" });
+    }
+  });
+  app2.put("/api/systems/:systemId", async (req, res) => {
+    try {
+      const [updated] = await db.update(systems).set({ ...req.body, updatedAt: /* @__PURE__ */ new Date() }).where(eq(systems.systemId, req.params.systemId)).returning();
+      if (!updated) return res.status(404).json({ error: "System not found" });
+      res.json(updated);
+    } catch (error) {
+      console.error("Error updating system:", error);
+      res.status(500).json({ error: "Failed to update system" });
+    }
+  });
+  app2.delete("/api/systems/:systemId", async (req, res) => {
+    try {
+      const sysLayers = await db.select().from(systemLayers).where(eq(systemLayers.systemId, req.params.systemId));
+      for (const layer of sysLayers) {
+        await db.delete(systemProductOptions).where(eq(systemProductOptions.layerId, layer.layerId));
+      }
+      await db.delete(systemLayers).where(eq(systemLayers.systemId, req.params.systemId));
+      await db.delete(systemHistory).where(eq(systemHistory.systemId, req.params.systemId));
+      await db.delete(documents).where(
+        and(eq(documents.relatedToType, "System"), eq(documents.relatedToId, req.params.systemId))
+      );
+      const [deleted] = await db.delete(systems).where(eq(systems.systemId, req.params.systemId)).returning();
+      if (!deleted) return res.status(404).json({ error: "System not found" });
+      res.json({ success: true });
+    } catch (error) {
+      console.error("Error deleting system:", error);
+      res.status(500).json({ error: "Failed to delete system" });
+    }
+  });
+  app2.get("/api/system-layers/:systemId", async (req, res) => {
+    try {
+      const layers = await db.select().from(systemLayers).where(eq(systemLayers.systemId, req.params.systemId)).orderBy(asc(systemLayers.orderSequence));
+      res.json(layers);
+    } catch (error) {
+      console.error("Error fetching layers:", error);
+      res.status(500).json({ error: "Failed to fetch layers" });
+    }
+  });
+  app2.post("/api/system-layers", async (req, res) => {
+    try {
+      const layerId = generateId("lyr");
+      const [created] = await db.insert(systemLayers).values({ ...req.body, layerId }).returning();
+      res.status(201).json(created);
+    } catch (error) {
+      console.error("Error creating layer:", error);
+      res.status(500).json({ error: "Failed to create layer" });
+    }
+  });
+  app2.put("/api/system-layers/:layerId", async (req, res) => {
+    try {
+      const [updated] = await db.update(systemLayers).set({ ...req.body, updatedAt: /* @__PURE__ */ new Date() }).where(eq(systemLayers.layerId, req.params.layerId)).returning();
+      if (!updated) return res.status(404).json({ error: "Layer not found" });
+      res.json(updated);
+    } catch (error) {
+      console.error("Error updating layer:", error);
+      res.status(500).json({ error: "Failed to update layer" });
+    }
+  });
+  app2.put("/api/system-layers/reorder/:systemId", async (req, res) => {
+    try {
+      const { layerOrder } = req.body;
+      for (let i = 0; i < layerOrder.length; i++) {
+        await db.update(systemLayers).set({ orderSequence: i, updatedAt: /* @__PURE__ */ new Date() }).where(eq(systemLayers.layerId, layerOrder[i]));
+      }
+      const layers = await db.select().from(systemLayers).where(eq(systemLayers.systemId, req.params.systemId)).orderBy(asc(systemLayers.orderSequence));
+      res.json(layers);
+    } catch (error) {
+      console.error("Error reordering layers:", error);
+      res.status(500).json({ error: "Failed to reorder layers" });
+    }
+  });
+  app2.delete("/api/system-layers/:layerId", async (req, res) => {
+    try {
+      await db.delete(systemProductOptions).where(eq(systemProductOptions.layerId, req.params.layerId));
+      const [deleted] = await db.delete(systemLayers).where(eq(systemLayers.layerId, req.params.layerId)).returning();
+      if (!deleted) return res.status(404).json({ error: "Layer not found" });
+      res.json({ success: true });
+    } catch (error) {
+      console.error("Error deleting layer:", error);
+      res.status(500).json({ error: "Failed to delete layer" });
+    }
+  });
+  app2.get("/api/system-product-options/:layerId", async (req, res) => {
+    try {
+      const options = await db.select({
+        id: systemProductOptions.id,
+        optionId: systemProductOptions.optionId,
+        layerId: systemProductOptions.layerId,
+        productId: systemProductOptions.productId,
+        benefit: systemProductOptions.benefit,
+        isDefault: systemProductOptions.isDefault,
+        createdAt: systemProductOptions.createdAt,
+        productName: products.name,
+        productStockCode: products.stockCode,
+        productSupplier: products.supplier
+      }).from(systemProductOptions).leftJoin(products, eq(systemProductOptions.productId, products.productId)).where(eq(systemProductOptions.layerId, req.params.layerId));
+      res.json(options);
+    } catch (error) {
+      console.error("Error fetching product options:", error);
+      res.status(500).json({ error: "Failed to fetch product options" });
+    }
+  });
+  app2.post("/api/system-product-options", async (req, res) => {
+    try {
+      const optionId = generateId("opt");
+      const [created] = await db.insert(systemProductOptions).values({ ...req.body, optionId }).returning();
+      res.status(201).json(created);
+    } catch (error) {
+      console.error("Error creating product option:", error);
+      res.status(500).json({ error: "Failed to create product option" });
+    }
+  });
+  app2.put("/api/system-product-options/:optionId", async (req, res) => {
+    try {
+      const [updated] = await db.update(systemProductOptions).set(req.body).where(eq(systemProductOptions.optionId, req.params.optionId)).returning();
+      if (!updated) return res.status(404).json({ error: "Option not found" });
+      res.json(updated);
+    } catch (error) {
+      console.error("Error updating product option:", error);
+      res.status(500).json({ error: "Failed to update product option" });
+    }
+  });
+  app2.delete("/api/system-product-options/:optionId", async (req, res) => {
+    try {
+      const [deleted] = await db.delete(systemProductOptions).where(eq(systemProductOptions.optionId, req.params.optionId)).returning();
+      if (!deleted) return res.status(404).json({ error: "Option not found" });
+      res.json({ success: true });
+    } catch (error) {
+      console.error("Error deleting product option:", error);
+      res.status(500).json({ error: "Failed to delete product option" });
+    }
+  });
+  app2.get("/api/system-history/:systemId", async (req, res) => {
+    try {
+      const history = await db.select().from(systemHistory).where(eq(systemHistory.systemId, req.params.systemId)).orderBy(desc(systemHistory.createdAt));
+      res.json(history);
+    } catch (error) {
+      console.error("Error fetching system history:", error);
+      res.status(500).json({ error: "Failed to fetch system history" });
+    }
+  });
+  app2.post("/api/system-history", async (req, res) => {
+    try {
+      const [created] = await db.insert(systemHistory).values(req.body).returning();
+      res.status(201).json(created);
+    } catch (error) {
+      console.error("Error creating history entry:", error);
+      res.status(500).json({ error: "Failed to create history entry" });
+    }
+  });
+  app2.get("/api/systems/stats/overview", async (req, res) => {
+    try {
+      const allSystems = await db.select().from(systems);
+      const allLayers = await db.select().from(systemLayers);
+      const allOptions = await db.select().from(systemProductOptions);
+      const allSectors = await db.select().from(sectors);
+      const productUtilization = {};
+      for (const opt of allOptions) {
+        productUtilization[opt.productId] = (productUtilization[opt.productId] || 0) + 1;
+      }
+      const systemComplexity = allSystems.map((sys) => {
+        const sysLayers = allLayers.filter((l) => l.systemId === sys.systemId);
+        const layerIds = sysLayers.map((l) => l.layerId);
+        const optionCount = allOptions.filter((o) => layerIds.includes(o.layerId)).length;
+        return { systemId: sys.systemId, name: sys.name, layerCount: sysLayers.length, optionCount };
+      });
+      const layerDistribution = {};
+      for (const layer of allLayers) {
+        const name = layer.layerName.toLowerCase();
+        if (name.includes("prime") || name.includes("primer")) layerDistribution["Primer"] = (layerDistribution["Primer"] || 0) + 1;
+        else if (name.includes("base")) layerDistribution["Base Coat"] = (layerDistribution["Base Coat"] || 0) + 1;
+        else if (name.includes("top") || name.includes("finish")) layerDistribution["Top Coat"] = (layerDistribution["Top Coat"] || 0) + 1;
+        else layerDistribution["Other"] = (layerDistribution["Other"] || 0) + 1;
+      }
+      const productSystemMatrix = [];
+      for (const sys of allSystems) {
+        const sysLayerIds = allLayers.filter((l) => l.systemId === sys.systemId).map((l) => l.layerId);
+        const sysOptions = allOptions.filter((o) => sysLayerIds.includes(o.layerId));
+        const prodCounts = {};
+        for (const opt of sysOptions) {
+          prodCounts[opt.productId] = (prodCounts[opt.productId] || 0) + 1;
+        }
+        for (const [pid, cnt] of Object.entries(prodCounts)) {
+          productSystemMatrix.push({ productId: pid, systemId: sys.systemId, systemName: sys.name, count: cnt });
+        }
+      }
+      const layerProductMatrix = [];
+      for (const layer of allLayers) {
+        const layerOpts = allOptions.filter((o) => o.layerId === layer.layerId);
+        for (const opt of layerOpts) {
+          layerProductMatrix.push({ layerName: layer.layerName, productId: opt.productId, count: 1 });
+        }
+      }
+      const systemLayerMatrix = [];
+      for (const sys of allSystems) {
+        const sysLayers = allLayers.filter((l) => l.systemId === sys.systemId);
+        for (const layer of sysLayers) {
+          const prodCount = allOptions.filter((o) => o.layerId === layer.layerId).length;
+          systemLayerMatrix.push({ systemName: sys.name, layerName: layer.layerName, productCount: prodCount });
+        }
+      }
+      res.json({
+        totalSystems: allSystems.length,
+        totalLayers: allLayers.length,
+        totalOptions: allOptions.length,
+        totalSectors: allSectors.length,
+        productUtilization,
+        systemComplexity,
+        layerDistribution,
+        productSystemMatrix,
+        layerProductMatrix,
+        systemLayerMatrix
+      });
+    } catch (error) {
+      console.error("Error fetching stats:", error);
+      res.status(500).json({ error: "Failed to fetch stats" });
+    }
+  });
+  app2.post("/api/systems/:systemId/snapshot", async (req, res) => {
+    try {
+      const [system] = await db.select().from(systems).where(eq(systems.systemId, req.params.systemId));
+      if (!system) return res.status(404).json({ error: "System not found" });
+      const layers = await db.select().from(systemLayers).where(eq(systemLayers.systemId, req.params.systemId)).orderBy(asc(systemLayers.orderSequence));
+      const layersWithProducts = await Promise.all(
+        layers.map(async (layer) => {
+          const options = await db.select().from(systemProductOptions).where(eq(systemProductOptions.layerId, layer.layerId));
+          return { ...layer, productOptions: options };
+        })
+      );
+      const snapshot = { system, layers: layersWithProducts };
+      const newVersion = (system.version || 1) + 1;
+      await db.insert(systemHistory).values({
+        systemId: system.systemId,
+        version: system.version || 1,
+        snapshotData: snapshot,
+        changeDescription: req.body.description || `Version ${system.version || 1} snapshot`,
+        changedBy: req.body.changedBy
+      });
+      await db.update(systems).set({ version: newVersion, updatedAt: /* @__PURE__ */ new Date() }).where(eq(systems.systemId, req.params.systemId));
+      res.json({ success: true, version: newVersion });
+    } catch (error) {
+      console.error("Error creating snapshot:", error);
+      res.status(500).json({ error: "Failed to create snapshot" });
+    }
+  });
+  app2.get("/api/systems/export/:systemId", async (req, res) => {
+    try {
+      const format = req.query.format || "json";
+      const [system] = await db.select().from(systems).where(eq(systems.systemId, req.params.systemId));
+      if (!system) return res.status(404).json({ error: "System not found" });
+      const layers = await db.select().from(systemLayers).where(eq(systemLayers.systemId, req.params.systemId)).orderBy(asc(systemLayers.orderSequence));
+      const layersWithProducts = await Promise.all(
+        layers.map(async (layer) => {
+          const options = await db.select({
+            optionId: systemProductOptions.optionId,
+            productId: systemProductOptions.productId,
+            benefit: systemProductOptions.benefit,
+            isDefault: systemProductOptions.isDefault,
+            productName: products.name,
+            productStockCode: products.stockCode,
+            productSupplier: products.supplier
+          }).from(systemProductOptions).leftJoin(products, eq(systemProductOptions.productId, products.productId)).where(eq(systemProductOptions.layerId, layer.layerId));
+          return { layerName: layer.layerName, order: layer.orderSequence, notes: layer.notes, products: options };
+        })
+      );
+      const exportData = {
+        name: system.name,
+        description: system.description,
+        typicalUses: system.typicalUses,
+        status: system.status,
+        version: system.version,
+        layers: layersWithProducts,
+        exportedAt: (/* @__PURE__ */ new Date()).toISOString()
+      };
+      if (format === "json") {
+        res.setHeader("Content-Type", "application/json");
+        res.setHeader("Content-Disposition", `attachment; filename="${system.name.replace(/\s+/g, "_")}_spec.json"`);
+        return res.json(exportData);
+      }
+      if (format === "csv") {
+        const rows = ["System,Layer,Order,Product,Supplier,Stock Code,Benefit,Default"];
+        for (const layer of layersWithProducts) {
+          for (const prod of layer.products) {
+            rows.push(
+              [system.name, layer.layerName, layer.order, prod.productName || "", prod.productSupplier || "", prod.productStockCode || "", prod.benefit || "", prod.isDefault ? "Yes" : "No"].map((v) => `"${String(v).replace(/"/g, '""')}"`).join(",")
+            );
+          }
+          if (layer.products.length === 0) {
+            rows.push([system.name, layer.layerName, layer.order, "", "", "", "", ""].map((v) => `"${v}"`).join(","));
+          }
+        }
+        res.setHeader("Content-Type", "text/csv");
+        res.setHeader("Content-Disposition", `attachment; filename="${system.name.replace(/\s+/g, "_")}_spec.csv"`);
+        return res.send(rows.join("\n"));
+      }
+      res.json(exportData);
+    } catch (error) {
+      console.error("Error exporting system:", error);
+      res.status(500).json({ error: "Failed to export system" });
+    }
+  });
+  app2.post("/api/systems/import", async (req, res) => {
+    try {
+      const { name, description, typicalUses, sectorMapping, layers } = req.body;
+      if (!name) return res.status(400).json({ error: "System name is required" });
+      const systemId = generateId("sys");
+      const [createdSystem] = await db.insert(systems).values({
+        systemId,
+        name,
+        description: description || "",
+        typicalUses: typicalUses || "",
+        sectorMapping: sectorMapping || [],
+        status: "draft"
+      }).returning();
+      if (layers && Array.isArray(layers)) {
+        for (let i = 0; i < layers.length; i++) {
+          const layer = layers[i];
+          const layerId = generateId("lyr");
+          await db.insert(systemLayers).values({
+            layerId,
+            systemId,
+            layerName: layer.layerName || layer.name || `Layer ${i + 1}`,
+            orderSequence: layer.orderSequence ?? layer.order ?? i,
+            notes: layer.notes || ""
+          });
+          if (layer.products && Array.isArray(layer.products)) {
+            for (const prod of layer.products) {
+              const optionId = generateId("opt");
+              await db.insert(systemProductOptions).values({
+                optionId,
+                layerId,
+                productId: prod.productId,
+                benefit: prod.benefit || "",
+                isDefault: prod.isDefault || false
+              });
+            }
+          }
+        }
+      }
+      res.status(201).json(createdSystem);
+    } catch (error) {
+      console.error("Error importing system:", error);
+      res.status(500).json({ error: "Failed to import system" });
+    }
+  });
+}
+
+// server/analyticsRoutes.ts
+function applyFilters(query, data) {
+  let { allProducts, allSystems } = data;
+  const supplierFilter = query.supplier;
+  const sectorFilter = query.sector;
+  const taxonomyFilter = query.taxonomy;
+  if (supplierFilter) {
+    allProducts = allProducts.filter((p) => p.supplierId === supplierFilter);
+  }
+  if (sectorFilter) {
+    allSystems = allSystems.filter((s) => {
+      const mapping = s.sectorMapping;
+      return Array.isArray(mapping) && mapping.includes(sectorFilter);
+    });
+  }
+  if (taxonomyFilter && data.allNodes) {
+    const descendantIds = getDescendantNodeIds(taxonomyFilter, data.allNodes);
+    allProducts = allProducts.filter((p) => descendantIds.includes(p.nodeId));
+  }
+  return { allProducts, allSystems };
+}
+function registerAnalyticsRoutes(app2) {
+  app2.use("/api/analytics", authMiddleware, requirePasswordChange);
+  app2.get("/api/analytics/overview", async (req, res) => {
+    try {
+      let allProducts = await db.select().from(products);
+      const allSuppliers = await db.select().from(suppliers);
+      let allSystems = await db.select().from(systems);
+      const allLayers = await db.select().from(systemLayers);
+      const allOptions = await db.select().from(systemProductOptions);
+      const allNodes = await db.select().from(treeNodes);
+      ({ allProducts, allSystems } = applyFilters(req.query, { allProducts, allSystems, allNodes }));
+      const supplierProductMap = {};
+      for (const p of allProducts) {
+        if (p.supplierId) {
+          if (!supplierProductMap[p.supplierId]) supplierProductMap[p.supplierId] = /* @__PURE__ */ new Set();
+          supplierProductMap[p.supplierId].add(p.productId);
+        }
+      }
+      const systemSupplierMap = {};
+      for (const sys of allSystems) {
+        systemSupplierMap[sys.systemId] = /* @__PURE__ */ new Set();
+        const sysLayerIds = allLayers.filter((l) => l.systemId === sys.systemId).map((l) => l.layerId);
+        const sysProductIds = allOptions.filter((o) => sysLayerIds.includes(o.layerId)).map((o) => o.productId);
+        for (const pid of sysProductIds) {
+          const prod = allProducts.find((p) => p.productId === pid);
+          if (prod?.supplierId) {
+            systemSupplierMap[sys.systemId].add(prod.supplierId);
+          }
+        }
+      }
+      const multiSupplierSystems = Object.values(systemSupplierMap).filter((s) => s.size > 1).length;
+      const avgSuppliersPerSystem = allSystems.length > 0 ? Object.values(systemSupplierMap).reduce((a, s) => a + s.size, 0) / allSystems.length : 0;
+      const productSupplierCount = {};
+      for (const opt of allOptions) {
+        const prod = allProducts.find((p) => p.productId === opt.productId);
+        if (prod) {
+          if (!productSupplierCount[prod.productId]) productSupplierCount[prod.productId] = /* @__PURE__ */ new Set();
+          if (prod.supplierId) productSupplierCount[prod.productId].add(prod.supplierId);
+        }
+      }
+      const productsWithMultipleSuppliers = Object.values(productSupplierCount).filter((s) => s.size > 1).length;
+      const supplierSystemCount = {};
+      for (const [sysId, supSet] of Object.entries(systemSupplierMap)) {
+        for (const sup of supSet) {
+          supplierSystemCount[sup] = (supplierSystemCount[sup] || 0) + 1;
+        }
+      }
+      const dominantSupplier = Object.entries(supplierSystemCount).sort((a, b) => b[1] - a[1])[0];
+      const dominantSupplierObj = dominantSupplier ? allSuppliers.find((s) => s.supplierId === dominantSupplier[0]) : null;
+      const mostDiverseSystem = Object.entries(systemSupplierMap).sort((a, b) => b[1].size - a[1].size)[0];
+      const mostDiverseSystemObj = mostDiverseSystem ? allSystems.find((s) => s.systemId === mostDiverseSystem[0]) : null;
+      const totalSystemVariants = allSystems.reduce((acc, sys) => {
+        const sectorMap = sys.sectorMapping;
+        return acc + Math.max(1, Array.isArray(sectorMap) ? sectorMap.length : 0);
+      }, 0);
+      const supplierConcentration = allSuppliers.length > 0 ? Object.keys(supplierSystemCount).length / allSuppliers.length * 100 : 0;
+      const uniqueProductsInSystems = new Set(allOptions.map((o) => o.productId));
+      const supplierTechCoverage = allSuppliers.length > 0 ? Object.keys(supplierProductMap).length / allSuppliers.length * 100 : 0;
+      res.json({
+        totalProducts: allProducts.length,
+        totalSystems: allSystems.length,
+        totalSuppliers: allSuppliers.length,
+        totalSystemVariants,
+        avgSuppliersPerSystem: Math.round(avgSuppliersPerSystem * 10) / 10,
+        multiSupplierSystemsPct: allSystems.length > 0 ? Math.round(multiSupplierSystems / allSystems.length * 100) : 0,
+        productsWithMultipleSuppliers,
+        systemsWithEquivalentProducts: multiSupplierSystems,
+        supplierTechCoverage: Math.round(supplierTechCoverage),
+        dominantSupplier: dominantSupplierObj?.name || "N/A",
+        mostDiverseSystem: mostDiverseSystemObj?.name || "N/A",
+        supplierConcentrationIndex: Math.round(supplierConcentration),
+        totalLayers: allLayers.length,
+        totalProductOptions: allOptions.length,
+        uniqueProductsInSystems: uniqueProductsInSystems.size,
+        totalTaxonomyNodes: allNodes.length
+      });
+    } catch (error) {
+      console.error("Analytics overview error:", error);
+      res.status(500).json({ error: "Failed to fetch analytics overview" });
+    }
+  });
+  app2.get("/api/analytics/product-intelligence", async (req, res) => {
+    try {
+      let allProducts = await db.select().from(products);
+      const allSuppliers = await db.select().from(suppliers);
+      let allSystems = await db.select().from(systems);
+      const allLayers = await db.select().from(systemLayers);
+      const allOptions = await db.select().from(systemProductOptions);
+      const allNodes = await db.select().from(treeNodes);
+      ({ allProducts, allSystems } = applyFilters(req.query, { allProducts, allSystems, allNodes }));
+      const productUtilBySupplier = {};
+      for (const opt of allOptions) {
+        const prod = allProducts.find((p) => p.productId === opt.productId);
+        if (!prod) continue;
+        const supplierName = prod.supplier || "Unknown";
+        const sysLayer = allLayers.find((l) => l.layerId === opt.layerId);
+        if (!sysLayer) continue;
+        if (!productUtilBySupplier[prod.name]) productUtilBySupplier[prod.name] = {};
+        productUtilBySupplier[prod.name][supplierName] = (productUtilBySupplier[prod.name][supplierName] || 0) + 1;
+      }
+      const supplierNames = [...new Set(allProducts.map((p) => p.supplier || "Unknown"))];
+      const productUtilChart = Object.entries(productUtilBySupplier).slice(0, 20).map(([prodName, suppliers2]) => {
+        const entry = { product: prodName.substring(0, 25) };
+        for (const sn of supplierNames) {
+          entry[sn] = suppliers2[sn] || 0;
+        }
+        return entry;
+      });
+      let singleSource = 0, dualSource = 0, multiSource = 0;
+      const productSuppliers = {};
+      for (const p of allProducts) {
+        if (!productSuppliers[p.name]) productSuppliers[p.name] = /* @__PURE__ */ new Set();
+        if (p.supplier) productSuppliers[p.name].add(p.supplier);
+      }
+      for (const suppliers2 of Object.values(productSuppliers)) {
+        if (suppliers2.size <= 1) singleSource++;
+        else if (suppliers2.size === 2) dualSource++;
+        else multiSource++;
+      }
+      res.json({
+        productUtilBySupplier: productUtilChart,
+        supplierKeys: supplierNames.slice(0, 10),
+        supplierDependency: [
+          { id: "Single Source", label: "Single Source", value: singleSource, color: "#ef4444" },
+          { id: "Dual Source", label: "Dual Source", value: dualSource, color: "#f59e0b" },
+          { id: "Multi Source", label: "Multi Source", value: multiSource, color: "#22c55e" }
+        ].filter((d) => d.value > 0)
+      });
+    } catch (error) {
+      console.error("Product intelligence error:", error);
+      res.status(500).json({ error: "Failed to fetch product intelligence" });
+    }
+  });
+  app2.get("/api/analytics/system-intelligence", async (req, res) => {
+    try {
+      let allProducts = await db.select().from(products);
+      let allSystems = await db.select().from(systems);
+      const allLayers = await db.select().from(systemLayers);
+      const allOptions = await db.select().from(systemProductOptions);
+      const allNodes = await db.select().from(treeNodes);
+      ({ allProducts, allSystems } = applyFilters(req.query, { allProducts, allSystems, allNodes }));
+      const systemVariants = allSystems.map((sys) => {
+        const sectorMap = sys.sectorMapping;
+        const sysLayers = allLayers.filter((l) => l.systemId === sys.systemId);
+        const layerIds = sysLayers.map((l) => l.layerId);
+        const sysOptions = allOptions.filter((o) => layerIds.includes(o.layerId));
+        const supplierSet = /* @__PURE__ */ new Set();
+        for (const opt of sysOptions) {
+          const prod = allProducts.find((p) => p.productId === opt.productId);
+          if (prod?.supplier) supplierSet.add(prod.supplier);
+        }
+        return {
+          name: sys.name.substring(0, 30),
+          variants: Array.isArray(sectorMap) ? sectorMap.length : 0,
+          layerCount: sysLayers.length,
+          supplierCount: supplierSet.size,
+          productCount: sysOptions.length
+        };
+      });
+      const scatterData = systemVariants.map((sv) => ({
+        x: sv.layerCount,
+        y: sv.supplierCount,
+        name: sv.name
+      }));
+      const layerFlexibility = {};
+      for (const layer of allLayers) {
+        const layerType = classifyLayerType(layer.layerName);
+        const layerOpts = allOptions.filter((o) => o.layerId === layer.layerId);
+        if (!layerFlexibility[layerType]) layerFlexibility[layerType] = {};
+        for (const opt of layerOpts) {
+          const prod = allProducts.find((p) => p.productId === opt.productId);
+          const supplierName = prod?.supplier || "Unknown";
+          layerFlexibility[layerType][supplierName] = (layerFlexibility[layerType][supplierName] || 0) + 1;
+        }
+      }
+      const allSupNames = /* @__PURE__ */ new Set();
+      for (const v of Object.values(layerFlexibility)) {
+        for (const k of Object.keys(v)) allSupNames.add(k);
+      }
+      const layerFlexChart = Object.entries(layerFlexibility).map(([layerType, suppliers2]) => {
+        const entry = { layerType };
+        for (const sn of allSupNames) {
+          entry[sn] = suppliers2[sn] || 0;
+        }
+        return entry;
+      });
+      res.json({
+        systemVariants,
+        complexityScatter: [{ id: "Systems", data: scatterData }],
+        layerFlexibility: layerFlexChart,
+        layerFlexKeys: [...allSupNames].slice(0, 10)
+      });
+    } catch (error) {
+      console.error("System intelligence error:", error);
+      res.status(500).json({ error: "Failed to fetch system intelligence" });
+    }
+  });
+  app2.get("/api/analytics/supplier-heatmap", async (req, res) => {
+    try {
+      const mode = req.query.mode || "supplier-system";
+      let allProducts = await db.select().from(products);
+      const allSuppliers = await db.select().from(suppliers);
+      let allSystems = await db.select().from(systems);
+      const allLayers = await db.select().from(systemLayers);
+      const allOptions = await db.select().from(systemProductOptions);
+      const allNodes = await db.select().from(treeNodes);
+      ({ allProducts, allSystems } = applyFilters(req.query, { allProducts, allSystems, allNodes }));
+      let heatmapData = [];
+      if (mode === "supplier-system") {
+        const supplierNames = allSuppliers.map((s) => s.name);
+        const systemNames = allSystems.map((s) => s.name);
+        heatmapData = supplierNames.map((supName) => {
+          const sup = allSuppliers.find((s) => s.name === supName);
+          const supProducts = allProducts.filter((p) => p.supplierId === sup.supplierId);
+          const supProductIds = supProducts.map((p) => p.productId);
+          return {
+            id: supName,
+            data: systemNames.map((sysName) => {
+              const sys = allSystems.find((s) => s.name === sysName);
+              const sysLayerIds = allLayers.filter((l) => l.systemId === sys.systemId).map((l) => l.layerId);
+              const count = allOptions.filter((o) => sysLayerIds.includes(o.layerId) && supProductIds.includes(o.productId)).length;
+              return { x: sysName.substring(0, 20), y: count };
+            })
+          };
+        });
+      } else if (mode === "supplier-layer") {
+        const supplierNames = allSuppliers.map((s) => s.name);
+        const layerTypes = ["Primer", "Base Coat", "Top Coat", "Intermediate", "Other"];
+        heatmapData = supplierNames.map((supName) => {
+          const sup = allSuppliers.find((s) => s.name === supName);
+          const supProductIds = allProducts.filter((p) => p.supplierId === sup.supplierId).map((p) => p.productId);
+          return {
+            id: supName,
+            data: layerTypes.map((lt2) => {
+              const matchingLayers = allLayers.filter((l) => classifyLayerType(l.layerName) === lt2);
+              const matchingLayerIds = matchingLayers.map((l) => l.layerId);
+              const count = allOptions.filter((o) => matchingLayerIds.includes(o.layerId) && supProductIds.includes(o.productId)).length;
+              return { x: lt2, y: count };
+            })
+          };
+        });
+      } else if (mode === "supplier-sector") {
+        const supplierNames = allSuppliers.map((s) => s.name);
+        const allSectorNames = /* @__PURE__ */ new Set();
+        for (const sys of allSystems) {
+          const mapping = sys.sectorMapping;
+          if (Array.isArray(mapping)) mapping.forEach((s) => allSectorNames.add(s));
+        }
+        const sectorList = [...allSectorNames];
+        if (sectorList.length === 0) {
+          return res.json([]);
+        }
+        heatmapData = supplierNames.map((supName) => {
+          const sup = allSuppliers.find((s) => s.name === supName);
+          const supProductIds = allProducts.filter((p) => p.supplierId === sup.supplierId).map((p) => p.productId);
+          return {
+            id: supName,
+            data: sectorList.map((secName) => {
+              const sectorSystems = allSystems.filter((s) => {
+                const m = s.sectorMapping;
+                return Array.isArray(m) && m.includes(secName);
+              });
+              const sectorLayerIds = sectorSystems.flatMap(
+                (s) => allLayers.filter((l) => l.systemId === s.systemId).map((l) => l.layerId)
+              );
+              const count = allOptions.filter((o) => sectorLayerIds.includes(o.layerId) && supProductIds.includes(o.productId)).length;
+              return { x: secName, y: count };
+            })
+          };
+        });
+      } else if (mode === "supplier-taxonomy") {
+        const supplierNames = allSuppliers.map((s) => s.name);
+        const rootNodes = allNodes.filter((n) => !n.parentId).slice(0, 15);
+        heatmapData = supplierNames.map((supName) => {
+          const sup = allSuppliers.find((s) => s.name === supName);
+          const supProducts = allProducts.filter((p) => p.supplierId === sup.supplierId);
+          return {
+            id: supName,
+            data: rootNodes.map((node) => {
+              const descendantIds = getDescendantNodeIds(node.nodeId, allNodes);
+              const count = supProducts.filter((p) => descendantIds.includes(p.nodeId)).length;
+              return { x: node.name.substring(0, 20), y: count };
+            })
+          };
+        });
+      } else if (mode === "supplier-stockcode") {
+        const supplierNames = allSuppliers.map((s) => s.name);
+        const prefixes = /* @__PURE__ */ new Set();
+        for (const p of allProducts) {
+          if (p.stockCode) {
+            const parts = p.stockCode.split(".");
+            if (parts.length >= 2) prefixes.add(parts.slice(0, 2).join("."));
+          }
+        }
+        const prefixList = [...prefixes].slice(0, 15);
+        if (prefixList.length === 0) {
+          return res.json([]);
+        }
+        heatmapData = supplierNames.map((supName) => {
+          const sup = allSuppliers.find((s) => s.name === supName);
+          const supProducts = allProducts.filter((p) => p.supplierId === sup.supplierId);
+          return {
+            id: supName,
+            data: prefixList.map((prefix) => {
+              const count = supProducts.filter((p) => p.stockCode?.startsWith(prefix)).length;
+              return { x: prefix, y: count };
+            })
+          };
+        });
+      } else if (mode === "supplier-complexity") {
+        const supplierNames = allSuppliers.map((s) => s.name);
+        const complexityBuckets = ["Simple (1-2)", "Medium (3-4)", "Complex (5+)"];
+        heatmapData = supplierNames.map((supName) => {
+          const sup = allSuppliers.find((s) => s.name === supName);
+          const supProductIds = allProducts.filter((p) => p.supplierId === sup.supplierId).map((p) => p.productId);
+          return {
+            id: supName,
+            data: complexityBuckets.map((bucket) => {
+              let count = 0;
+              for (const sys of allSystems) {
+                const sysLayers = allLayers.filter((l) => l.systemId === sys.systemId);
+                const layerCount = sysLayers.length;
+                const inBucket = bucket.includes("Simple") && layerCount <= 2 || bucket.includes("Medium") && layerCount >= 3 && layerCount <= 4 || bucket.includes("Complex") && layerCount >= 5;
+                if (!inBucket) continue;
+                const layerIds = sysLayers.map((l) => l.layerId);
+                count += allOptions.filter((o) => layerIds.includes(o.layerId) && supProductIds.includes(o.productId)).length;
+              }
+              return { x: bucket, y: count };
+            })
+          };
+        });
+      }
+      heatmapData = heatmapData.filter((row) => row.data.some((d) => d.y > 0));
+      res.json(heatmapData);
+    } catch (error) {
+      console.error("Supplier heatmap error:", error);
+      res.status(500).json({ error: "Failed to fetch supplier heatmap" });
+    }
+  });
+  app2.get("/api/analytics/taxonomy-supplier", async (req, res) => {
+    try {
+      let allProducts = await db.select().from(products);
+      const allSuppliers = await db.select().from(suppliers);
+      const allNodes = await db.select().from(treeNodes);
+      let allSystems = await db.select().from(systems);
+      ({ allProducts, allSystems } = applyFilters(req.query, { allProducts, allSystems, allNodes }));
+      const level = req.query.level || "sector";
+      const getNodesAtLevel = (lvl) => {
+        const roots = allNodes.filter((n) => !n.parentId);
+        if (lvl === "sector") return roots;
+        const level2 = [];
+        roots.forEach((r) => {
+          const children = allNodes.filter((n) => n.parentId === r.nodeId);
+          level2.push(...children);
+        });
+        if (lvl === "category") return level2.length > 0 ? level2 : roots;
+        const level3 = [];
+        level2.forEach((n) => {
+          const children = allNodes.filter((c) => c.parentId === n.nodeId);
+          level3.push(...children);
+        });
+        return level3.length > 0 ? level3 : level2.length > 0 ? level2 : roots;
+      };
+      const branchDistribution = {};
+      const levelNodes = getNodesAtLevel(level);
+      for (const node of levelNodes) {
+        const descendantIds = getDescendantNodeIds(node.nodeId, allNodes);
+        branchDistribution[node.name] = {};
+        for (const p of allProducts.filter((pr) => descendantIds.includes(pr.nodeId))) {
+          const supName = p.supplier || "Unknown";
+          branchDistribution[node.name][supName] = (branchDistribution[node.name][supName] || 0) + 1;
+        }
+      }
+      const allSupNames = /* @__PURE__ */ new Set();
+      for (const v of Object.values(branchDistribution)) {
+        for (const k of Object.keys(v)) allSupNames.add(k);
+      }
+      const branchChart = Object.entries(branchDistribution).map(([branch, suppliers2]) => {
+        const entry = { branch: branch.substring(0, 20) };
+        for (const sn of allSupNames) {
+          entry[sn] = suppliers2[sn] || 0;
+        }
+        return entry;
+      });
+      const findNodeForProduct = (product) => {
+        if (!product.nodeId) return null;
+        const productNode = allNodes.find((n) => n.nodeId === product.nodeId);
+        if (!productNode) return null;
+        for (const lvlNode of levelNodes) {
+          const descIds = getDescendantNodeIds(lvlNode.nodeId, allNodes);
+          if (descIds.includes(product.nodeId)) return lvlNode.name;
+        }
+        return null;
+      };
+      const treemapData = {
+        name: "Suppliers",
+        children: allSuppliers.map((sup) => {
+          const supProducts = allProducts.filter((p) => p.supplierId === sup.supplierId);
+          const groupedByLevel = {};
+          const nameCounters = {};
+          for (const p of supProducts) {
+            const groupName = findNodeForProduct(p) || "Unassigned";
+            if (!groupedByLevel[groupName]) groupedByLevel[groupName] = [];
+            const baseName = p.name.substring(0, 20);
+            const key = `${groupName}:${baseName}`;
+            nameCounters[key] = (nameCounters[key] || 0) + 1;
+            const uniqueName = nameCounters[key] > 1 ? `${baseName} (${nameCounters[key]})` : baseName;
+            groupedByLevel[groupName].push({ name: uniqueName, value: 1 });
+          }
+          return {
+            name: sup.name,
+            children: Object.entries(groupedByLevel).map(([grp, prods]) => ({
+              name: grp,
+              children: prods.slice(0, 10)
+            }))
+          };
+        }).filter((s) => s.children.length > 0)
+      };
+      const stockCodeHeatmap = [];
+      const prefixes = /* @__PURE__ */ new Set();
+      for (const p of allProducts) {
+        if (p.stockCode) {
+          const parts = p.stockCode.split(".");
+          if (parts.length >= 2) prefixes.add(parts.slice(0, 2).join("."));
+        }
+      }
+      const prefixList = [...prefixes].slice(0, 15);
+      for (const sup of allSuppliers) {
+        const supProducts = allProducts.filter((p) => p.supplierId === sup.supplierId);
+        if (supProducts.length === 0) continue;
+        stockCodeHeatmap.push({
+          id: sup.name,
+          data: prefixList.map((prefix) => ({
+            x: prefix,
+            y: supProducts.filter((p) => p.stockCode?.startsWith(prefix)).length
+          }))
+        });
+      }
+      res.json({
+        branchDistribution: branchChart,
+        branchKeys: [...allSupNames].slice(0, 10),
+        treemapData,
+        stockCodeHeatmap
+      });
+    } catch (error) {
+      console.error("Taxonomy supplier error:", error);
+      res.status(500).json({ error: "Failed to fetch taxonomy supplier data" });
+    }
+  });
+  app2.get("/api/analytics/coverage-radar", async (req, res) => {
+    try {
+      let allProducts = await db.select().from(products);
+      const allSuppliers = await db.select().from(suppliers);
+      let allSystems = await db.select().from(systems);
+      const allLayers = await db.select().from(systemLayers);
+      const allOptions = await db.select().from(systemProductOptions);
+      const allNodes = await db.select().from(treeNodes);
+      ({ allProducts, allSystems } = applyFilters(req.query, { allProducts, allSystems, allNodes }));
+      const radarData = [];
+      const dimensions = [
+        "Sector Coverage",
+        "Layer Coverage",
+        "System Complexity",
+        "Taxonomy Depth",
+        "Product Variety",
+        "System Reusability"
+      ];
+      const allSectorNames = /* @__PURE__ */ new Set();
+      for (const sys of allSystems) {
+        const mapping = sys.sectorMapping;
+        if (Array.isArray(mapping)) mapping.forEach((s) => allSectorNames.add(s));
+      }
+      const totalSectors = Math.max(allSectorNames.size, 1);
+      const layerTypes = new Set(allLayers.map((l) => classifyLayerType(l.layerName)));
+      const totalLayerTypes = Math.max(layerTypes.size, 1);
+      const maxComplexity = Math.max(...allSystems.map((sys) => allLayers.filter((l) => l.systemId === sys.systemId).length), 1);
+      const maxTaxDepth = Math.max(...allNodes.map((n) => getNodeDepth(n.nodeId, allNodes)), 1);
+      for (const dim of dimensions) {
+        const entry = { dimension: dim };
+        for (const sup of allSuppliers.slice(0, 5)) {
+          const supProducts = allProducts.filter((p) => p.supplierId === sup.supplierId);
+          const supProductIds = supProducts.map((p) => p.productId);
+          let score = 0;
+          if (dim === "Sector Coverage") {
+            const coveredSectors = /* @__PURE__ */ new Set();
+            for (const sys of allSystems) {
+              const sysLayerIds = allLayers.filter((l) => l.systemId === sys.systemId).map((l) => l.layerId);
+              const hasSupProduct = allOptions.some((o) => sysLayerIds.includes(o.layerId) && supProductIds.includes(o.productId));
+              if (hasSupProduct) {
+                const mapping = sys.sectorMapping;
+                if (Array.isArray(mapping)) mapping.forEach((s) => coveredSectors.add(s));
+              }
+            }
+            score = Math.round(coveredSectors.size / totalSectors * 100);
+          } else if (dim === "Layer Coverage") {
+            const coveredTypes = /* @__PURE__ */ new Set();
+            for (const opt of allOptions.filter((o) => supProductIds.includes(o.productId))) {
+              const layer = allLayers.find((l) => l.layerId === opt.layerId);
+              if (layer) coveredTypes.add(classifyLayerType(layer.layerName));
+            }
+            score = Math.round(coveredTypes.size / totalLayerTypes * 100);
+          } else if (dim === "System Complexity") {
+            const complexSystems = allSystems.filter((sys) => {
+              const sysLayerIds = allLayers.filter((l) => l.systemId === sys.systemId).map((l) => l.layerId);
+              return allOptions.some((o) => sysLayerIds.includes(o.layerId) && supProductIds.includes(o.productId)) && sysLayerIds.length >= 3;
+            });
+            score = allSystems.length > 0 ? Math.round(complexSystems.length / allSystems.length * 100) : 0;
+          } else if (dim === "Taxonomy Depth") {
+            const maxDepth = Math.max(...supProducts.map((p) => getNodeDepth(p.nodeId, allNodes)), 0);
+            score = Math.round(maxDepth / maxTaxDepth * 100);
+          } else if (dim === "Product Variety") {
+            score = Math.round(supProducts.length / Math.max(allProducts.length, 1) * 100);
+          } else if (dim === "System Reusability") {
+            const systemCount = allSystems.filter((sys) => {
+              const sysLayerIds = allLayers.filter((l) => l.systemId === sys.systemId).map((l) => l.layerId);
+              return allOptions.some((o) => sysLayerIds.includes(o.layerId) && supProductIds.includes(o.productId));
+            }).length;
+            score = allSystems.length > 0 ? Math.round(systemCount / allSystems.length * 100) : 0;
+          }
+          entry[sup.name] = Math.min(score, 100);
+        }
+        radarData.push(entry);
+      }
+      res.json({
+        radarData,
+        supplierKeys: allSuppliers.slice(0, 5).map((s) => s.name)
+      });
+    } catch (error) {
+      console.error("Coverage radar error:", error);
+      res.status(500).json({ error: "Failed to fetch coverage radar" });
+    }
+  });
+  app2.get("/api/analytics/competitive-benchmark", async (req, res) => {
+    try {
+      const systemId = req.query.systemId;
+      let allProducts = await db.select().from(products);
+      const allSuppliers = await db.select().from(suppliers);
+      let allSystems = await db.select().from(systems);
+      const allLayers = await db.select().from(systemLayers);
+      const allOptions = await db.select().from(systemProductOptions);
+      const allNodes = await db.select().from(treeNodes);
+      ({ allProducts, allSystems } = applyFilters(req.query, { allProducts, allSystems, allNodes }));
+      if (!systemId) {
+        const benchmarks = allSystems.slice(0, 10).map((sys) => {
+          const sysLayers2 = allLayers.filter((l) => l.systemId === sys.systemId);
+          const layerIds2 = sysLayers2.map((l) => l.layerId);
+          const sysOptions2 = allOptions.filter((o) => layerIds2.includes(o.layerId));
+          const supplierSet = /* @__PURE__ */ new Set();
+          for (const opt of sysOptions2) {
+            const prod = allProducts.find((p) => p.productId === opt.productId);
+            if (prod?.supplier) supplierSet.add(prod.supplier);
+          }
+          return {
+            systemId: sys.systemId,
+            name: sys.name,
+            layerCount: sysLayers2.length,
+            productCount: sysOptions2.length,
+            supplierCount: supplierSet.size,
+            defaultProducts: sysOptions2.filter((o) => o.isDefault).length
+          };
+        });
+        return res.json({ systems: benchmarks });
+      }
+      const system = allSystems.find((s) => s.systemId === systemId);
+      if (!system) return res.status(404).json({ error: "System not found" });
+      const sysLayers = allLayers.filter((l) => l.systemId === systemId);
+      const layerIds = sysLayers.map((l) => l.layerId);
+      const sysOptions = allOptions.filter((o) => layerIds.includes(o.layerId));
+      const supplierBreakdown = {};
+      for (const opt of sysOptions) {
+        const prod = allProducts.find((p) => p.productId === opt.productId);
+        if (!prod?.supplier) continue;
+        if (!supplierBreakdown[prod.supplier]) {
+          supplierBreakdown[prod.supplier] = {
+            layerStructure: 0,
+            productTypes: 0,
+            defaultProducts: 0,
+            systemComplexity: sysLayers.length,
+            taxonomyCoverage: 0
+          };
+        }
+        supplierBreakdown[prod.supplier].productTypes++;
+        if (opt.isDefault) supplierBreakdown[prod.supplier].defaultProducts++;
+        const layerIdx = sysLayers.findIndex((l) => l.layerId === opt.layerId);
+        if (layerIdx >= 0) supplierBreakdown[prod.supplier].layerStructure = Math.max(
+          supplierBreakdown[prod.supplier].layerStructure,
+          layerIdx + 1
+        );
+      }
+      const radarData = [
+        { dimension: "Layer Structure" },
+        { dimension: "Product Types" },
+        { dimension: "Default Products" },
+        { dimension: "System Complexity" },
+        { dimension: "Taxonomy Coverage" }
+      ].map((dim) => {
+        const entry = { ...dim };
+        for (const [supName, metrics] of Object.entries(supplierBreakdown)) {
+          const maxVal = Math.max(
+            ...Object.values(supplierBreakdown).map((m) => m[dim.dimension.toLowerCase().replace(/ /g, "")] || 0),
+            1
+          );
+          entry[supName] = Math.round(metrics[dim.dimension === "Layer Structure" ? "layerStructure" : dim.dimension === "Product Types" ? "productTypes" : dim.dimension === "Default Products" ? "defaultProducts" : dim.dimension === "System Complexity" ? "systemComplexity" : "taxonomyCoverage"] / Math.max(maxVal, 1) * 100);
+        }
+        return entry;
+      });
+      res.json({
+        system: system.name,
+        radarData,
+        supplierKeys: Object.keys(supplierBreakdown),
+        supplierBreakdown
+      });
+    } catch (error) {
+      console.error("Competitive benchmark error:", error);
+      res.status(500).json({ error: "Failed to fetch competitive benchmark" });
+    }
+  });
+  app2.get("/api/analytics/filters", async (req, res) => {
+    try {
+      const allSuppliers = await db.select().from(suppliers);
+      const allSystems = await db.select().from(systems);
+      const allNodes = await db.select().from(treeNodes);
+      const sectorSet = /* @__PURE__ */ new Set();
+      for (const sys of allSystems) {
+        const mapping = sys.sectorMapping;
+        if (Array.isArray(mapping)) mapping.forEach((s) => sectorSet.add(s));
+      }
+      const rootBranches = allNodes.filter((n) => !n.parentId).map((n) => ({ id: n.nodeId, name: n.name }));
+      res.json({
+        suppliers: allSuppliers.map((s) => ({ id: s.supplierId, name: s.name })),
+        systems: allSystems.map((s) => ({ id: s.systemId, name: s.name })),
+        sectors: [...sectorSet].map((s) => ({ id: s, name: s })),
+        taxonomyNodes: rootBranches
+      });
+    } catch (error) {
+      console.error("Filters error:", error);
+      res.status(500).json({ error: "Failed to fetch filters" });
+    }
+  });
+}
+function classifyLayerType(layerName) {
+  const name = layerName.toLowerCase();
+  if (name.includes("prime") || name.includes("primer")) return "Primer";
+  if (name.includes("base")) return "Base Coat";
+  if (name.includes("top") || name.includes("finish")) return "Top Coat";
+  if (name.includes("intermediate") || name.includes("mid")) return "Intermediate";
+  return "Other";
+}
+function getDescendantNodeIds(nodeId, allNodes) {
+  const result = [nodeId];
+  const children = allNodes.filter((n) => n.parentId === nodeId);
+  for (const child of children) {
+    result.push(...getDescendantNodeIds(child.nodeId, allNodes));
+  }
+  return result;
+}
+function getNodeDepth(nodeId, allNodes) {
+  let depth = 0;
+  let current = allNodes.find((n) => n.nodeId === nodeId);
+  while (current?.parentId) {
+    depth++;
+    current = allNodes.find((n) => n.nodeId === current.parentId);
+  }
+  return depth;
+}
+
+// server/documentRoutes.ts
+function registerDocumentRoutes(app2) {
+  app2.use("/api/documents", authMiddleware, requirePasswordChange);
+  app2.get("/api/documents", async (req, res) => {
+    try {
+      const docs = await storage.getDocuments();
+      res.json(docs);
+    } catch (error) {
+      console.error("Error fetching documents:", error);
+      res.status(500).json({ error: "Failed to fetch documents" });
+    }
+  });
+  app2.get("/api/documents/by-relation/:type/:id", async (req, res) => {
+    try {
+      const docs = await storage.getDocumentsByRelation(req.params.type, req.params.id);
+      res.json(docs);
+    } catch (error) {
+      console.error("Error fetching documents by relation:", error);
+      res.status(500).json({ error: "Failed to fetch documents" });
+    }
+  });
+  app2.get("/api/documents/:documentId", async (req, res) => {
+    try {
+      const doc = await storage.getDocument(req.params.documentId);
+      if (!doc) {
+        return res.status(404).json({ error: "Document not found" });
+      }
+      res.json(doc);
+    } catch (error) {
+      console.error("Error fetching document:", error);
+      res.status(500).json({ error: "Failed to fetch document" });
+    }
+  });
+  app2.post("/api/documents", async (req, res) => {
+    try {
+      const documentId = await storage.getNextDocumentId();
+      const doc = await storage.createDocument({ ...req.body, documentId });
+      res.status(201).json(doc);
+    } catch (error) {
+      console.error("Error creating document:", error);
+      res.status(500).json({ error: "Failed to create document" });
+    }
+  });
+  app2.patch("/api/documents/:documentId", async (req, res) => {
+    try {
+      const doc = await storage.updateDocument(req.params.documentId, req.body);
+      if (!doc) {
+        return res.status(404).json({ error: "Document not found" });
+      }
+      res.json(doc);
+    } catch (error) {
+      console.error("Error updating document:", error);
+      res.status(500).json({ error: "Failed to update document" });
+    }
+  });
+  app2.delete("/api/documents/:documentId", async (req, res) => {
+    try {
+      const deleted = await storage.deleteDocument(req.params.documentId);
+      if (!deleted) {
+        return res.status(404).json({ error: "Document not found" });
+      }
+      res.status(204).send();
+    } catch (error) {
+      console.error("Error deleting document:", error);
+      res.status(500).json({ error: "Failed to delete document" });
+    }
+  });
+}
+
 // server/index.ts
 var rootDir = process.cwd();
 console.log("Starting server...");
@@ -75405,6 +77445,9 @@ app.get("/", (req, res, next) => {
 registerAuthRoutes(app);
 registerObjectStorageRoutes(app);
 registerRoutes(app);
+registerSystemRoutes(app);
+registerAnalyticsRoutes(app);
+registerDocumentRoutes(app);
 function findDistPath() {
   const candidates = [
     import_path.default.join(rootDir, "dist"),

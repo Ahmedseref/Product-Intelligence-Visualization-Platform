@@ -55,12 +55,16 @@ export function registerRoutes(app: Express): void {
 
   app.patch("/api/tree-nodes/:nodeId", async (req, res) => {
     try {
+      // Fetch old node state so we can detect true value changes for stock code regen
+      const oldNode = await storage.getTreeNode(req.params.nodeId);
       const node = await storage.updateTreeNode(req.params.nodeId, req.body);
       if (!node) {
         return res.status(404).json({ error: "Node not found" });
       }
-      // Auto-regen stock codes when branch code or parent changes (affects code segments)
-      if (req.body.branchCode !== undefined || req.body.parentId !== undefined) {
+      // Only regen if branchCode or parentId actually changed (not just present in payload)
+      const branchCodeChanged = req.body.branchCode !== undefined && req.body.branchCode !== oldNode?.branchCode;
+      const parentChanged = req.body.parentId !== undefined && req.body.parentId !== oldNode?.parentId;
+      if (branchCodeChanged || parentChanged) {
         stockCodeService.regenerateStockCodesForNode(req.params.nodeId, 'System').catch(e =>
           console.error("Stock code regen after node update failed:", e)
         );
@@ -1046,10 +1050,12 @@ export function registerRoutes(app: Express): void {
     try {
       const id = parseInt(req.params.id);
       if (isNaN(id)) return res.status(400).json({ error: "Invalid ID" });
+      // Fetch old color state to compare values before regenerating stock codes
+      const oldColor = await storage.getColor(id);
       const color = await storage.updateColor(id, req.body);
       if (!color) return res.status(404).json({ error: "Color not found" });
-      // When the color numeric code changes, regen stock codes for all products using this color
-      if (req.body.code !== undefined) {
+      // Only regen if the numeric code segment actually changed (affects stock code format)
+      if (req.body.code !== undefined && req.body.code !== oldColor?.code) {
         const affected = await db.select().from(productsTable).where(eq(productsTable.colorId, id));
         for (const p of affected) {
           stockCodeService.updateProductStockCode(p.productId, 'Color code changed', 'System').catch(e =>
