@@ -1,7 +1,8 @@
 import React, { useState, useEffect } from 'react';
-import { Plus, Trash2, Search, X, ChevronDown } from 'lucide-react';
+import { Plus, Trash2, Search, X } from 'lucide-react';
 import { api } from '../../client/api';
-import { Product, ProformaSettingsData } from '../../types';
+import { Product, ProformaSettingsData, CustomerData } from '../../types';
+import CustomerSelector from './CustomerSelector';
 
 interface ProformaCreateProps {
   products: Product[];
@@ -17,9 +18,7 @@ interface DraftItem {
 const CURRENCIES = ['USD', 'EUR', 'GBP', 'TRY', 'AED', 'SAR', 'CNY', 'JPY'];
 
 const ProformaCreate: React.FC<ProformaCreateProps> = ({ products, onCreated, onCancel }) => {
-  const [customerName, setCustomerName] = useState('');
-  const [customerCountry, setCustomerCountry] = useState('');
-  const [customerContact, setCustomerContact] = useState('');
+  const [selectedCustomer, setSelectedCustomer] = useState<CustomerData | null>(null);
   const [currency, setCurrency] = useState('USD');
   const [notes, setNotes] = useState('');
   const [draftItems, setDraftItems] = useState<DraftItem[]>([]);
@@ -53,9 +52,7 @@ const ProformaCreate: React.FC<ProformaCreateProps> = ({ products, onCreated, on
     setShowProductDropdown(false);
   };
 
-  const removeItem = (productId: string) => {
-    setDraftItems(prev => prev.filter(i => i.product.id !== productId));
-  };
+  const removeItem = (productId: string) => setDraftItems(prev => prev.filter(i => i.product.id !== productId));
 
   const updateQty = (productId: string, qty: number) => {
     setDraftItems(prev => prev.map(i =>
@@ -64,15 +61,16 @@ const ProformaCreate: React.FC<ProformaCreateProps> = ({ products, onCreated, on
   };
 
   const handleSubmit = async () => {
-    if (!customerName.trim()) { setError('Customer name is required.'); return; }
+    if (!selectedCustomer) { setError('Please select or create a customer.'); return; }
     if (draftItems.length === 0) { setError('Add at least one product.'); return; }
     setSubmitting(true);
     setError(null);
     try {
       const proforma = await api.createProforma({
-        customerName: customerName.trim(),
-        customerCountry: customerCountry.trim() || null,
-        customerContact: customerContact.trim() || null,
+        customerId: selectedCustomer.id,
+        customerName: selectedCustomer.name,
+        customerCountry: selectedCustomer.fields?.find(f => f.fieldName.toLowerCase() === 'country')?.fieldValue || null,
+        customerContact: selectedCustomer.fields?.find(f => f.fieldName.toLowerCase() === 'contact' || f.fieldName.toLowerCase() === 'email')?.fieldValue || null,
         currency,
         notes: notes.trim() || null,
         status: 'draft',
@@ -104,48 +102,23 @@ const ProformaCreate: React.FC<ProformaCreateProps> = ({ products, onCreated, on
       <div className="flex items-center justify-between">
         <div>
           <h2 className="text-xl font-bold text-slate-800">New Proforma Invoice</h2>
-          <p className="text-sm text-slate-500 mt-0.5">Fill in customer info and select products from the database.</p>
+          <p className="text-sm text-slate-500 mt-0.5">Select a customer and add products from the database.</p>
         </div>
         <button onClick={onCancel} className="text-sm text-slate-500 hover:text-slate-700 flex items-center gap-1.5">
           <X className="w-4 h-4" /> Cancel
         </button>
       </div>
 
-      {/* Customer Info */}
+      {/* Customer Selection */}
       <div className="bg-white rounded-xl border border-slate-200 overflow-hidden">
         <div className="px-6 py-4 border-b border-slate-100 bg-slate-50">
-          <h3 className="text-sm font-semibold text-slate-700">Customer Information</h3>
+          <h3 className="text-sm font-semibold text-slate-700">Customer</h3>
+          <p className="text-xs text-slate-400 mt-0.5">Select an existing customer or create a new one with custom fields</p>
         </div>
         <div className="p-6 grid grid-cols-2 gap-4">
-          <div>
-            <label className="block text-xs font-medium text-slate-500 mb-1.5">Customer Name <span className="text-red-500">*</span></label>
-            <input
-              type="text"
-              value={customerName}
-              onChange={e => setCustomerName(e.target.value)}
-              placeholder="Company or person name"
-              className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-400"
-            />
-          </div>
-          <div>
-            <label className="block text-xs font-medium text-slate-500 mb-1.5">Country</label>
-            <input
-              type="text"
-              value={customerCountry}
-              onChange={e => setCustomerCountry(e.target.value)}
-              placeholder="Germany, UK, USA…"
-              className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-400"
-            />
-          </div>
           <div className="col-span-2">
-            <label className="block text-xs font-medium text-slate-500 mb-1.5">Contact Info</label>
-            <input
-              type="text"
-              value={customerContact}
-              onChange={e => setCustomerContact(e.target.value)}
-              placeholder="Email, phone, or name of contact person"
-              className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-400"
-            />
+            <label className="block text-xs font-medium text-slate-500 mb-1.5">Customer <span className="text-red-500">*</span></label>
+            <CustomerSelector selectedCustomer={selectedCustomer} onSelect={setSelectedCustomer} />
           </div>
           <div>
             <label className="block text-xs font-medium text-slate-500 mb-1.5">Currency</label>
@@ -177,7 +150,6 @@ const ProformaCreate: React.FC<ProformaCreateProps> = ({ products, onCreated, on
           <span className="text-xs text-slate-400">{draftItems.length} selected</span>
         </div>
         <div className="p-6 space-y-4">
-          {/* Product search */}
           <div className="relative">
             <div className="flex items-center gap-2 px-3 py-2 border border-slate-200 rounded-lg focus-within:ring-2 focus-within:ring-blue-500/20 focus-within:border-blue-400">
               <Search className="w-4 h-4 text-slate-400 flex-shrink-0" />
@@ -233,7 +205,6 @@ const ProformaCreate: React.FC<ProformaCreateProps> = ({ products, onCreated, on
             )}
           </div>
 
-          {/* Selected products table */}
           {draftItems.length > 0 && (
             <div className="border border-slate-200 rounded-xl overflow-hidden">
               <table className="w-full text-sm">
@@ -279,7 +250,7 @@ const ProformaCreate: React.FC<ProformaCreateProps> = ({ products, onCreated, on
                 </tbody>
                 <tfoot className="bg-slate-50 border-t border-slate-200">
                   <tr>
-                    <td colSpan={3} className="px-4 py-3 text-right text-sm font-semibold text-slate-600">Grand Total</td>
+                    <td colSpan={3} className="px-4 py-3 text-right text-sm font-semibold text-slate-600">Subtotal</td>
                     <td className="px-4 py-3 text-right text-base font-bold text-slate-800">
                       {currency} {grandTotal.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                     </td>
@@ -299,12 +270,10 @@ const ProformaCreate: React.FC<ProformaCreateProps> = ({ products, onCreated, on
         </div>
       </div>
 
-      {/* Error */}
       {error && (
         <div className="px-4 py-3 bg-red-50 border border-red-200 rounded-lg text-sm text-red-700">{error}</div>
       )}
 
-      {/* Actions */}
       <div className="flex justify-end gap-3 pb-6">
         <button onClick={onCancel} className="px-4 py-2.5 text-sm font-medium text-slate-600 border border-slate-200 rounded-lg hover:bg-slate-50 transition-colors">
           Cancel

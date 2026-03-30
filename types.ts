@@ -276,9 +276,35 @@ export interface ProformaItemData {
   productSupplier?: string;
 }
 
+export interface ProformaFinancialData {
+  id: number;
+  proformaId: string;
+  name: string;
+  type: 'add' | 'subtract';
+  valueType: 'percentage' | 'fixed';
+  value: number;
+  orderIndex: number;
+}
+
+export interface CustomerFieldData {
+  id: number;
+  customerId: number;
+  fieldName: string;
+  fieldValue?: string | null;
+  sortOrder: number;
+}
+
+export interface CustomerData {
+  id: number;
+  name: string;
+  createdAt?: string | null;
+  fields?: CustomerFieldData[];
+}
+
 export interface ProformaData {
   id: number;
   proformaId: string;
+  customerId?: number | null;
   customerName: string;
   customerCountry?: string | null;
   customerContact?: string | null;
@@ -289,6 +315,8 @@ export interface ProformaData {
   createdAt?: string | null;
   updatedAt?: string | null;
   items?: ProformaItemData[];
+  financials?: ProformaFinancialData[];
+  customerFields?: CustomerFieldData[];
 }
 
 export type UserRole = 'Admin' | 'Editor' | 'Viewer';

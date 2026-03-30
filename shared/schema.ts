@@ -263,9 +263,26 @@ export const proformaSettings = pgTable("proforma_settings", {
   updatedAt: timestamp("updated_at").defaultNow(),
 });
 
+export const customers = pgTable("customers", {
+  id: serial("id").primaryKey(),
+  name: varchar("name", { length: 255 }).notNull(),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
+export const customerFields = pgTable("customer_fields", {
+  id: serial("id").primaryKey(),
+  customerId: integer("customer_id").notNull(),
+  fieldName: varchar("field_name", { length: 255 }).notNull(),
+  fieldValue: text("field_value"),
+  sortOrder: integer("sort_order").default(0),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
 export const proformas = pgTable("proformas", {
   id: serial("id").primaryKey(),
   proformaId: varchar("proforma_id", { length: 50 }).notNull().unique(),
+  customerId: integer("customer_id"),
   customerName: varchar("customer_name", { length: 255 }).notNull(),
   customerCountry: varchar("customer_country", { length: 100 }),
   customerContact: text("customer_contact"),
@@ -286,6 +303,18 @@ export const proformaItems = pgTable("proforma_items", {
   customPrice: real("custom_price"),
   quantity: real("quantity").notNull().default(1),
   sortOrder: integer("sort_order").default(0),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
+export const proformaFinancials = pgTable("proforma_financials", {
+  id: serial("id").primaryKey(),
+  proformaId: varchar("proforma_id", { length: 50 }).notNull(),
+  name: varchar("name", { length: 255 }).notNull(),
+  type: varchar("type", { length: 20 }).notNull().default("add"),
+  valueType: varchar("value_type", { length: 20 }).notNull().default("fixed"),
+  value: real("value").notNull().default(0),
+  orderIndex: integer("order_index").default(0),
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow(),
 });
@@ -406,3 +435,9 @@ export type Proforma = typeof proformas.$inferSelect;
 export type InsertProforma = typeof proformas.$inferInsert;
 export type ProformaItem = typeof proformaItems.$inferSelect;
 export type InsertProformaItem = typeof proformaItems.$inferInsert;
+export type ProformaFinancial = typeof proformaFinancials.$inferSelect;
+export type InsertProformaFinancial = typeof proformaFinancials.$inferInsert;
+export type Customer = typeof customers.$inferSelect;
+export type InsertCustomer = typeof customers.$inferInsert;
+export type CustomerField = typeof customerFields.$inferSelect;
+export type InsertCustomerField = typeof customerFields.$inferInsert;

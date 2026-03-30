@@ -85,7 +85,7 @@ I prefer detailed explanations and thorough code comments. I value iterative dev
         - Backend: server/systemRoutes.ts with full REST API
         - Frontend: components/systemBuilder/ (SystemBuilder, SystemDashboard, SystemImport)
 
-    - **Proforma Invoice**: Full proforma invoice system with:
+    - **Proforma Invoice**: Full proforma invoice system with advanced financial engine:
         - Proforma list view with search, status filter, create/view/delete actions
         - Creation wizard: customer info, product selection from central database (search by name/stock code/supplier/ID), quantity setting, currency selection
         - Preview page with inline editing: click any cell (name, description, price, quantity) to edit inline
@@ -93,11 +93,13 @@ I prefer detailed explanations and thorough code comments. I value iterative dev
         - Amber highlight on overridden fields; reset-to-original button per row
         - Status management: draft / sent / accepted / rejected
         - Company settings (Settings → Proforma Invoice): company name, logo URL, address, phone, email, default currency, payment terms, delivery terms (Incoterms), bank details, footer notes
-        - Print support via browser print dialog
+        - Print/PDF support via browser print dialog; Excel export via xlsx package (3-sheet workbook: Invoice, Products, Financials)
         - Auto-generated sequential IDs: PI-0001, PI-0002, etc.
-        - Database: proforma_settings, proformas, proforma_items tables
-        - Backend: server/proformaRoutes.ts with REST API
-        - Frontend: components/ProformaInvoice.tsx, components/proforma/ (ProformaCreate, ProformaPreview, ProformaSettings)
+        - **Dynamic Customer Database**: customers table with unlimited key-value custom fields (customers, customer_fields tables); CustomerManager tab for CRUD; CustomerSelector in creation form
+        - **Advanced Financial Engine**: proforma_financials table with per-proforma custom calculations; add/subtract; percentage/fixed; ordered list; live calculation preview showing subtotal → each step → final total; printed on invoice
+        - Database: proforma_settings, proformas (with customerId FK), proforma_items, proforma_financials, customers, customer_fields tables
+        - Backend: server/proformaRoutes.ts (financials routes + Excel export), server/customerRoutes.ts (full CRUD)
+        - Frontend: components/ProformaInvoice.tsx (Invoices + Customers tabs), components/proforma/ (ProformaCreate, ProformaPreview, ProformaSettings, CustomerSelector, CustomerManager, FinancialsEditor)
         - Navigation: sidebar "Proforma Invoice" item, hash route #proforma
 
     - **Document Memory / File Manager**: Central document management system for external links with:

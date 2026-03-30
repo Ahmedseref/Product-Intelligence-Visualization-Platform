@@ -1,0 +1,183 @@
+1) 👤 DYNAMIC CUSTOMER DATA SYSTEM (FLEXIBLE FIELDS)
+🎯 الهدف:
+
+Allow users to add unlimited custom fields for each customer (not فقط phone, address).
+
+🧠 IMPLEMENTATION
+
+Create table:
+
+customers
+id
+name
+created_at
+
+Create dynamic fields table:
+
+customer_fields
+id
+customer_id (relation)
+field_name
+field_value
+⚙️ BEHAVIOR
+User can:
+Add new field (e.g., "VAT Number", "Delivery Address", "Contact Person")
+Edit or delete any field
+Use key-value structure
+No fixed schema limitation
+🖥️ UI
+Button: “+ Add Field”
+Input:
+Field Name
+Field Value
+Render dynamically in UI
+🔗 PROFORMA INTEGRATION
+
+When creating Proforma:
+
+Select customer
+Load all dynamic fields automatically into preview
+2) ✏️ FULL PROFORMA EDITING (GLOBAL EDIT MODE)
+🎯 الهدف:
+
+User can edit entire proforma after creation
+
+IMPLEMENT:
+
+Editable sections:
+
+Customer info (including dynamic fields)
+Products
+Financial calculations
+Notes & terms
+RULE:
+Never overwrite original data
+Save edits as overrides inside proforma tables
+3) 💰 ADVANCED FINANCIAL ENGINE (VERY IMPORTANT)
+🎯 الهدف:
+
+User can create custom financial calculations, not only total
+
+🧠 STRUCTURE
+
+Create table:
+
+proforma_financials
+id
+proforma_id
+name (e.g., Discount, VAT, Shipping)
+type (add / subtract)
+value_type (percentage / fixed)
+value
+order_index
+⚙️ CALCULATION ENGINE
+
+Process in order:
+
+subtotal = sum(products)
+
+for item in financials:
+    if type == "add":
+        subtotal += value
+    elif type == "subtract":
+        subtotal -= value
+
+If percentage:
+
+value = subtotal * (percentage / 100)
+✅ EXAMPLES USER CAN ADD:
+Discount (-10%)
+VAT (+20%)
+Shipping Cost (+$500)
+Prepayment (-$1000)
+Customs Fees (+)
+🖥️ UI
+Button: “+ Add Calculation”
+Fields:
+Name
+Add / Subtract (toggle)
+Percentage / Fixed
+Value
+Drag to reorder priority
+4) 👁️ LIVE CALCULATION PREVIEW
+Show:
+Subtotal
+Each financial step
+Final Total
+
+Example:
+
+Subtotal: 10,000
+- Discount (10%): -1,000
++ VAT (20%): +1,800
++ Shipping: +500
+Final Total: 11,300
+5) 📊 EXPORT FEATURE (PDF + EXCEL)
+📄 PDF EXPORT
+Requirements:
+Clean invoice layout
+Include:
+Company info
+Customer info (dynamic fields included)
+Product table
+Financial breakdown
+Final total
+Tools:
+Python: reportlab OR pdfkit
+📊 EXCEL EXPORT
+Requirements:
+
+Sheet structure:
+
+Sheet 1: Invoice
+
+Customer Info
+Summary
+
+Sheet 2: Products
+
+Product list
+
+Sheet 3: Financials
+
+Calculations breakdown
+Tools:
+openpyxl (REQUIRED)
+EXPORT BUTTONS
+“Export as PDF”
+“Export as Excel”
+6) 🔒 DATA INTEGRITY RULES
+Customer dynamic fields must not break schema
+Financial calculations must always:
+Apply in order
+Never corrupt subtotal
+All overrides stored separately
+7) 🧩 ARCHITECTURE UPDATE
+
+Create new modules:
+
+customer_service.py
+proforma_service.py
+financial_service.py
+export_service.py
+8) 🚀 OPTIONAL (HIGH VALUE)
+Save financial templates:
+“Standard Export Invoice”
+“Domestic Invoice”
+Duplicate financial structures
+⚠️ CRITICAL RULES
+NEVER hardcode fields
+EVERYTHING must be dynamic:
+Customer data
+Financial logic
+Keep single source of truth
+Avoid duplication
+✅ FINAL RESULT
+
+System becomes:
+
+✔ Flexible (no fixed fields)
+✔ Financially powerful (real business use)
+✔ Editable (full control)
+✔ Export-ready (professional output)
+✔ Scalable (no structural conflicts)

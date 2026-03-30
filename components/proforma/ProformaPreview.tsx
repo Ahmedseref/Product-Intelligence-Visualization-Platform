@@ -1,7 +1,8 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { ArrowLeft, Edit2, RotateCcw, Plus, Trash2, CheckCircle, X, Printer } from 'lucide-react';
+import { ArrowLeft, Edit2, RotateCcw, Plus, Trash2, CheckCircle, X, Printer, FileSpreadsheet, Search, ChevronDown, ChevronUp } from 'lucide-react';
 import { api } from '../../client/api';
-import { ProformaData, ProformaItemData, ProformaSettingsData } from '../../types';
+import { ProformaData, ProformaItemData, ProformaSettingsData, ProformaFinancialData, CustomerFieldData } from '../../types';
+import FinancialsEditor, { computeFinancials } from './FinancialsEditor';
 
 interface ProformaPreviewProps {
   proformaId: string;
@@ -23,10 +24,13 @@ interface EditingCell {
 const ProformaPreview: React.FC<ProformaPreviewProps> = ({ proformaId, onBack }) => {
   const [proforma, setProforma] = useState<ProformaData | null>(null);
   const [settings, setSettings] = useState<ProformaSettingsData>({});
+  const [financials, setFinancials] = useState<ProformaFinancialData[]>([]);
   const [loading, setLoading] = useState(true);
   const [editingCell, setEditingCell] = useState<EditingCell | null>(null);
   const [editValue, setEditValue] = useState('');
   const [saving, setSaving] = useState<number | null>(null);
+  const [showFinancials, setShowFinancials] = useState(false);
+  const [exportingExcel, setExportingExcel] = useState(false);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -37,6 +41,7 @@ const ProformaPreview: React.FC<ProformaPreviewProps> = ({ proformaId, onBack })
       ]);
       setProforma(pf);
       setSettings(s || {});
+      setFinancials(pf.financials || []);
     } catch (e) {
       console.error(e);
     } finally {
@@ -46,6 +51,14 @@ const ProformaPreview: React.FC<ProformaPreviewProps> = ({ proformaId, onBack })
 
   useEffect(() => { load(); }, [load]);
 
+  const updateStatus = async (status: string) => {
+    if (!proforma) return;
+    try {
+      const updated = await api.updateProforma(proformaId, { status });
+      setProforma(prev => prev ? { ...prev, status } : null);
+    } catch (e) { console.error(e); }
+  };
+
   const getDisplayValue = (item: ProformaItemData, field: 'name' | 'description' | 'price') => {
     if (field === 'name') return item.customName ?? item.productName ?? '';
     if (field === 'description') return item.customDescription ?? item.productDescription ?? '';
@@ -54,82 +67,83 @@ const ProformaPreview: React.FC<ProformaPreviewProps> = ({ proformaId, onBack })
   };
 
   const isOverridden = (item: ProformaItemData, field: string) => {
-    if (field === 'name') return item.customName != null && item.customName !== '';
-    if (field === 'description') return item.customDescription != null && item.customDescription !== '';
+    if (field === 'name') return item.customName != null;
+    if (field === 'description') return item.customDescription != null;
     if (field === 'price') return item.customPrice != null;
-    if (field === 'quantity') return false;
     return false;
   };
 
-  const startEdit = (itemId: number, field: EditingCell['field'], currentVal: any) => {
+  const startEdit = (itemId: number, field: EditingCell['field'], value: string | number) => {
     setEditingCell({ itemId, field });
-    setEditValue(String(currentVal));
+    setEditValue(String(value));
   };
 
-  const commitEdit = async (item: ProformaItemData) => {
-    if (!editingCell) return;
-    setSaving(item.id);
+  const commitEdit = async () => {
+    if (!editingCell || !proforma) return;
+    const { itemId, field } = editingCell;
+    const item = (proforma.items || []).find(i => i.id === itemId);
+    if (!item) return;
+    setSaving(itemId);
     try {
-      let patch: any = {};
-      if (editingCell.field === 'name') patch.customName = editValue;
-      if (editingCell.field === 'description') patch.customDescription = editValue;
-      if (editingCell.field === 'price') patch.customPrice = parseFloat(editValue) || null;
-      if (editingCell.field === 'quantity') patch.quantity = parseFloat(editValue) || 1;
-
-      await api.updateProformaItem(item.id, patch);
-      await load();
-    } catch (e) {
-      console.error(e);
-    } finally {
-      setSaving(null);
-      setEditingCell(null);
-    }
+      let patch: Record<string, any> = {};
+      if (field === 'name') patch = { customName: editValue };
+      if (field === 'description') patch = { customDescription: editValue };
+      if (field === 'price') patch = { customPrice: parseFloat(editValue) || 0 };
+      if (field === 'quantity') patch = { quantity: parseFloat(editValue) || 1 };
+      await api.updateProformaItem(itemId, patch);
+      setProforma(prev => {
+        if (!prev) return null;
+        return { ...prev, items: (prev.items || []).map(i => i.id === itemId ? { ...i, ...patch } : i) };
+      });
+    } catch (e) { console.error(e); }
+    setSaving(null);
+    setEditingCell(null);
   };
 
   const resetItem = async (item: ProformaItemData) => {
     setSaving(item.id);
     try {
-      await api.updateProformaItem(item.id, {
-        customName: null,
-        customDescription: null,
-        customPrice: null,
+      await api.updateProformaItem(item.id, { customName: null, customDescription: null, customPrice: null });
+      setProforma(prev => {
+        if (!prev) return null;
+        return { ...prev, items: (prev.items || []).map(i => i.id === item.id ? { ...i, customName: null, customDescription: null, customPrice: null } : i) };
       });
-      await load();
-    } catch (e) {
-      console.error(e);
-    } finally {
-      setSaving(null);
-    }
+    } catch (e) { console.error(e); }
+    setSaving(null);
   };
 
   const removeItem = async (itemId: number) => {
+    setSaving(itemId);
     try {
       await api.deleteProformaItem(itemId);
-      await load();
-    } catch (e) {
-      console.error(e);
-    }
+      setProforma(prev => {
+        if (!prev) return null;
+        return { ...prev, items: (prev.items || []).filter(i => i.id !== itemId) };
+      });
+    } catch (e) { console.error(e); }
+    setSaving(null);
   };
 
-  const updateStatus = async (status: string) => {
-    if (!proforma) return;
-    try {
-      await api.updateProforma(proformaId, { status });
-      setProforma(prev => prev ? { ...prev, status } : prev);
-    } catch (e) {
-      console.error(e);
-    }
+  const handleExcelExport = () => {
+    setExportingExcel(true);
+    api.exportProformaExcel(proformaId);
+    setTimeout(() => setExportingExcel(false), 2000);
   };
 
-  const EditableCell: React.FC<{
+  const EditableCell = ({
+    item,
+    field,
+    displayValue,
+    isNum = false,
+  }: {
     item: ProformaItemData;
     field: EditingCell['field'];
-    displayValue: any;
+    displayValue: string | number;
     isNum?: boolean;
-  }> = ({ item, field, displayValue, isNum }) => {
+  }) => {
     const isEditing = editingCell?.itemId === item.id && editingCell?.field === field;
-    const overridden = isOverridden(item, field);
     const isSaving = saving === item.id;
+    const overridden = field !== 'quantity' && isOverridden(item, field);
 
     if (isEditing) {
       return (
@@ -137,16 +151,12 @@ const ProformaPreview: React.FC<ProformaPreviewProps> = ({ proformaId, onBack })
           <input
             autoFocus
             type={isNum ? 'number' : 'text'}
-            step={isNum ? 'any' : undefined}
             value={editValue}
             onChange={e => setEditValue(e.target.value)}
-            onKeyDown={e => {
-              if (e.key === 'Enter') commitEdit(item);
-              if (e.key === 'Escape') setEditingCell(null);
-            }}
-            className="w-full px-2 py-1 border border-blue-400 rounded text-sm focus:outline-none focus:ring-2 focus:ring-blue-300"
+            onKeyDown={e => { if (e.key === 'Enter') commitEdit(); if (e.key === 'Escape') setEditingCell(null); }}
+            className="flex-1 px-2 py-1 text-sm border border-blue-400 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500/20 min-w-0"
           />
-          <button onClick={() => commitEdit(item)} className="p-1 text-green-600 hover:text-green-700">
+          <button onClick={commitEdit} className="p-1 text-green-500 hover:text-green-700">
             <CheckCircle className="w-4 h-4" />
           </button>
           <button onClick={() => setEditingCell(null)} className="p-1 text-slate-400 hover:text-slate-600">
@@ -158,9 +168,7 @@ const ProformaPreview: React.FC<ProformaPreviewProps> = ({ proformaId, onBack })
 
     return (
       <div
-        className={`group flex items-start gap-1 cursor-pointer rounded px-1 py-0.5 hover:bg-blue-50 transition-colors ${
-          overridden ? 'ring-1 ring-amber-300 bg-amber-50/40 rounded' : ''
-        }`}
+        className={`group flex items-start gap-1 cursor-pointer rounded px-1 py-0.5 hover:bg-blue-50 transition-colors ${overridden ? 'ring-1 ring-amber-300 bg-amber-50/40 rounded' : ''}`}
         onClick={() => !isSaving && startEdit(item.id, field, displayValue)}
         title="Click to edit"
       >
@@ -190,11 +198,14 @@ const ProformaPreview: React.FC<ProformaPreviewProps> = ({ proformaId, onBack })
   }
 
   const items: ProformaItemData[] = proforma.items || [];
+  const customerFields: CustomerFieldData[] = proforma.customerFields || [];
   const currency = proforma.currency || settings.defaultCurrency || 'USD';
-  const grandTotal = items.reduce((sum, item) => {
+  const subtotal = items.reduce((sum, item) => {
     const price = item.customPrice ?? item.productPrice ?? 0;
     return sum + price * item.quantity;
   }, 0);
+  const { steps: calcSteps, finalTotal } = computeFinancials(subtotal, financials);
+  const fmt = (n: number) => n.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
   return (
     <div className="max-w-4xl mx-auto space-y-4">
@@ -215,10 +226,17 @@ const ProformaPreview: React.FC<ProformaPreviewProps> = ({ proformaId, onBack })
             <option value="rejected">Rejected</option>
           </select>
           <button
+            onClick={handleExcelExport}
+            disabled={exportingExcel}
+            className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-green-700 border border-green-200 bg-green-50 rounded-lg hover:bg-green-100 transition-colors disabled:opacity-60"
+          >
+            <FileSpreadsheet className="w-3.5 h-3.5" /> {exportingExcel ? 'Exporting…' : 'Export Excel'}
+          </button>
+          <button
             onClick={() => window.print()}
             className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-slate-600 border border-slate-200 rounded-lg hover:bg-slate-50 transition-colors"
           >
-            <Printer className="w-3.5 h-3.5" /> Print
+            <Printer className="w-3.5 h-3.5" /> Print / PDF
           </button>
         </div>
       </div>
@@ -228,7 +246,6 @@ const ProformaPreview: React.FC<ProformaPreviewProps> = ({ proformaId, onBack })
         {/* Document Header */}
         <div className="p-8 border-b border-slate-100">
           <div className="flex items-start justify-between">
-            {/* Company Info */}
             <div className="flex items-start gap-4">
               {settings.companyLogo && (
                 <img src={settings.companyLogo} alt="Logo" className="h-14 w-auto object-contain" onError={e => { (e.target as HTMLImageElement).style.display = 'none'; }} />
@@ -240,7 +257,6 @@ const ProformaPreview: React.FC<ProformaPreviewProps> = ({ proformaId, onBack })
                 {settings.email && <p className="text-xs text-slate-500">{settings.email}</p>}
               </div>
             </div>
-            {/* Invoice Meta */}
             <div className="text-right">
               <div className="text-2xl font-bold text-blue-600">PROFORMA INVOICE</div>
               <div className="text-sm font-mono font-semibold text-slate-700 mt-1">{proforma.proformaId}</div>
@@ -259,6 +275,15 @@ const ProformaPreview: React.FC<ProformaPreviewProps> = ({ proformaId, onBack })
               <p className="font-semibold text-slate-800">{proforma.customerName}</p>
               {proforma.customerCountry && <p className="text-sm text-slate-500">{proforma.customerCountry}</p>}
               {proforma.customerContact && <p className="text-sm text-slate-500">{proforma.customerContact}</p>}
+              {/* Dynamic customer fields */}
+              {customerFields.filter(f =>
+                f.fieldName.toLowerCase() !== 'country' && f.fieldName.toLowerCase() !== 'contact' && f.fieldName.toLowerCase() !== 'email'
+              ).map((f, idx) => (
+                <div key={idx} className="flex items-start gap-2 mt-1">
+                  <span className="text-xs text-slate-400 min-w-[90px]">{f.fieldName}:</span>
+                  <span className="text-xs text-slate-600">{f.fieldValue || '—'}</span>
+                </div>
+              ))}
             </div>
             <div className="text-right">
               <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1.5">Invoice Currency</p>
@@ -280,7 +305,7 @@ const ProformaPreview: React.FC<ProformaPreviewProps> = ({ proformaId, onBack })
         </div>
 
         {/* Legend */}
-        <div className="px-8 pt-3 pb-0 flex items-center gap-4 text-xs text-slate-400">
+        <div className="px-8 pt-3 pb-0 flex items-center gap-4 text-xs text-slate-400 print:hidden">
           <span className="flex items-center gap-1.5">
             <span className="inline-block w-3 h-3 rounded bg-amber-100 ring-1 ring-amber-300" />
             Overridden (differs from product database)
@@ -338,7 +363,7 @@ const ProformaPreview: React.FC<ProformaPreviewProps> = ({ proformaId, onBack })
                       <EditableCell item={item} field="price" displayValue={displayPrice} isNum />
                     </td>
                     <td className="py-3 text-right font-semibold text-slate-800">
-                      {currency} {lineTotal.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                      {currency} {fmt(lineTotal)}
                     </td>
                     <td className="py-3 pl-2 print:hidden">
                       <div className="flex items-center gap-1 justify-end">
@@ -364,10 +389,34 @@ const ProformaPreview: React.FC<ProformaPreviewProps> = ({ proformaId, onBack })
               })}
             </tbody>
             <tfoot>
+              {/* Subtotal row */}
               <tr className="border-t-2 border-slate-200">
-                <td colSpan={5} className="py-4 text-right font-semibold text-slate-600 pr-4">Grand Total</td>
+                <td colSpan={5} className="py-3 text-right text-sm text-slate-500 pr-4">Subtotal</td>
+                <td className="py-3 text-right font-semibold text-slate-700">{currency} {fmt(subtotal)}</td>
+                <td className="print:hidden" />
+              </tr>
+              {/* Financial calculation steps */}
+              {calcSteps.map((step) => (
+                <tr key={step.id} className="border-t border-dashed border-slate-100">
+                  <td colSpan={5} className="py-1.5 text-right text-xs text-slate-500 pr-4">
+                    <span className={`inline-flex items-center gap-1 ${step.computedAmount < 0 ? 'text-red-600' : 'text-green-700'}`}>
+                      {step.computedAmount < 0 ? '−' : '+'} {step.name}
+                      {step.valueType === 'percentage' && <span className="text-slate-400">({step.value}%)</span>}
+                    </span>
+                  </td>
+                  <td className={`py-1.5 text-right text-sm font-medium ${step.computedAmount < 0 ? 'text-red-600' : 'text-green-700'}`}>
+                    {step.computedAmount < 0 ? '− ' : '+ '}{currency} {fmt(Math.abs(step.computedAmount))}
+                  </td>
+                  <td className="print:hidden" />
+                </tr>
+              ))}
+              {/* Final total row */}
+              <tr className={financials.length > 0 ? 'border-t-2 border-slate-700' : ''}>
+                <td colSpan={5} className="py-4 text-right font-bold text-slate-700 pr-4">
+                  {financials.length > 0 ? 'Final Total' : 'Grand Total'}
+                </td>
                 <td className="py-4 text-right text-xl font-bold text-slate-800">
-                  {currency} {grandTotal.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                  {currency} {fmt(finalTotal)}
                 </td>
                 <td className="print:hidden" />
               </tr>
@@ -375,7 +424,53 @@ const ProformaPreview: React.FC<ProformaPreviewProps> = ({ proformaId, onBack })
           </table>
         </div>
 
-        {/* Footer sections */}
+        {/* Financial Calculations Panel — collapsible, print:hidden */}
+        <div className="px-8 pb-4 print:hidden">
+          <button
+            onClick={() => setShowFinancials(prev => !prev)}
+            className="flex items-center gap-2 text-sm font-medium text-slate-600 hover:text-slate-800 transition-colors py-2 border-t border-slate-100 w-full text-left"
+          >
+            {showFinancials ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
+            Financial Calculations
+            <span className="text-xs font-normal text-slate-400 ml-1">
+              {financials.length > 0 ? `${financials.length} calculation${financials.length !== 1 ? 's' : ''}` : 'Discount, VAT, Shipping…'}
+            </span>
+          </button>
+          {showFinancials && (
+            <div className="mt-3">
+              <FinancialsEditor
+                proformaId={proformaId}
+                financials={financials}
+                subtotal={subtotal}
+                currency={currency}
+                onChange={setFinancials}
+              />
+            </div>
+          )}
+        </div>
+
+        {/* Print-only financials breakdown */}
+        {financials.length > 0 && (
+          <div className="hidden print:block px-8 pb-4">
+            <div className="border-t border-slate-100 pt-4">
+              <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-2">Financial Breakdown</p>
+              <div className="space-y-1">
+                <div className="flex justify-between text-xs">
+                  <span className="text-slate-500">Subtotal</span>
+                  <span className="font-medium text-slate-700">{currency} {fmt(subtotal)}</span>
+                </div>
+                {calcSteps.map(step => (
+                  <div key={step.id} className="flex justify-between text-xs">
+                    <span className="text-slate-500">{step.type === 'subtract' ? '−' : '+'} {step.name}{step.valueType === 'percentage' ? ` (${step.value}%)` : ''}</span>
+                    <span className={step.computedAmount < 0 ? 'text-red-600' : 'text-green-700'}>{step.computedAmount < 0 ? '− ' : '+ '}{currency} {fmt(Math.abs(step.computedAmount))}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Footer */}
         <div className="px-8 pb-8 grid grid-cols-2 gap-8 border-t border-slate-100 pt-6">
           {settings.bankDetails && (
             <div>

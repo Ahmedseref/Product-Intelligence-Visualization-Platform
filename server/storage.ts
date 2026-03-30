@@ -1,7 +1,8 @@
 import { 
   treeNodes, products, customFieldDefinitions,
   suppliers, supplierProducts, attachments, appSettings,
-  colors, documents, proformaSettings, proformas, proformaItems,
+  colors, documents, proformaSettings, proformas, proformaItems, proformaFinancials,
+  customers, customerFields,
   type TreeNode, type InsertTreeNode,
   type Product, type InsertProduct,
   type CustomFieldDefinition, type InsertCustomFieldDefinition,
@@ -12,7 +13,10 @@ import {
   type Document, type InsertDocument,
   type ProformaSettings, type InsertProformaSettings,
   type Proforma, type InsertProforma,
-  type ProformaItem, type InsertProformaItem
+  type ProformaItem, type InsertProformaItem,
+  type ProformaFinancial, type InsertProformaFinancial,
+  type Customer, type InsertCustomer,
+  type CustomerField, type InsertCustomerField
 } from "@shared/schema";
 import { db } from "./db";
 import { eq, and, isNull, desc, sql } from "drizzle-orm";
@@ -394,12 +398,6 @@ export class DatabaseStorage implements IStorage {
     return updated || undefined;
   }
 
-  async deleteProforma(proformaId: string): Promise<boolean> {
-    await db.delete(proformaItems).where(eq(proformaItems.proformaId, proformaId));
-    const result = await db.delete(proformas).where(eq(proformas.proformaId, proformaId)).returning();
-    return result.length > 0;
-  }
-
   async getProformaItems(proformaId: string): Promise<ProformaItem[]> {
     return await db
       .select()
@@ -425,6 +423,98 @@ export class DatabaseStorage implements IStorage {
   async deleteProformaItem(id: number): Promise<boolean> {
     const result = await db.delete(proformaItems).where(eq(proformaItems.id, id)).returning();
     return result.length > 0;
+  }
+
+  async deleteProforma(proformaId: string): Promise<boolean> {
+    await db.delete(proformaItems).where(eq(proformaItems.proformaId, proformaId));
+    await db.delete(proformaFinancials).where(eq(proformaFinancials.proformaId, proformaId));
+    const result = await db.delete(proformas).where(eq(proformas.proformaId, proformaId)).returning();
+    return result.length > 0;
+  }
+
+  async getProformaFinancials(proformaId: string): Promise<ProformaFinancial[]> {
+    return await db.select().from(proformaFinancials)
+      .where(eq(proformaFinancials.proformaId, proformaId))
+      .orderBy(proformaFinancials.orderIndex);
+  }
+
+  async createProformaFinancial(data: InsertProformaFinancial): Promise<ProformaFinancial> {
+    const [created] = await db.insert(proformaFinancials).values(data).returning();
+    return created;
+  }
+
+  async updateProformaFinancial(id: number, updates: Partial<InsertProformaFinancial>): Promise<ProformaFinancial | undefined> {
+    const [updated] = await db.update(proformaFinancials)
+      .set({ ...updates, updatedAt: new Date() })
+      .where(eq(proformaFinancials.id, id))
+      .returning();
+    return updated;
+  }
+
+  async deleteProformaFinancial(id: number): Promise<boolean> {
+    const result = await db.delete(proformaFinancials).where(eq(proformaFinancials.id, id)).returning();
+    return result.length > 0;
+  }
+
+  async getCustomers(): Promise<Customer[]> {
+    return await db.select().from(customers).orderBy(customers.name);
+  }
+
+  async getCustomer(id: number): Promise<Customer | undefined> {
+    const [row] = await db.select().from(customers).where(eq(customers.id, id));
+    return row;
+  }
+
+  async createCustomer(data: InsertCustomer): Promise<Customer> {
+    const [created] = await db.insert(customers).values(data).returning();
+    return created;
+  }
+
+  async updateCustomer(id: number, updates: Partial<InsertCustomer>): Promise<Customer | undefined> {
+    const [updated] = await db.update(customers)
+      .set({ ...updates, updatedAt: new Date() })
+      .where(eq(customers.id, id))
+      .returning();
+    return updated;
+  }
+
+  async deleteCustomer(id: number): Promise<boolean> {
+    await db.delete(customerFields).where(eq(customerFields.customerId, id));
+    const result = await db.delete(customers).where(eq(customers.id, id)).returning();
+    return result.length > 0;
+  }
+
+  async getCustomerFields(customerId: number): Promise<CustomerField[]> {
+    return await db.select().from(customerFields)
+      .where(eq(customerFields.customerId, customerId))
+      .orderBy(customerFields.sortOrder);
+  }
+
+  async createCustomerField(data: InsertCustomerField): Promise<CustomerField> {
+    const [created] = await db.insert(customerFields).values(data).returning();
+    return created;
+  }
+
+  async updateCustomerField(id: number, updates: Partial<InsertCustomerField>): Promise<CustomerField | undefined> {
+    const [updated] = await db.update(customerFields)
+      .set(updates)
+      .where(eq(customerFields.id, id))
+      .returning();
+    return updated;
+  }
+
+  async deleteCustomerField(id: number): Promise<boolean> {
+    const result = await db.delete(customerFields).where(eq(customerFields.id, id)).returning();
+    return result.length > 0;
+  }
+
+  async replaceCustomerFields(customerId: number, fields: Array<{ fieldName: string; fieldValue: string; sortOrder: number }>): Promise<CustomerField[]> {
+    await db.delete(customerFields).where(eq(customerFields.customerId, customerId));
+    if (fields.length === 0) return [];
+    const inserted = await db.insert(customerFields).values(
+      fields.map(f => ({ customerId, fieldName: f.fieldName, fieldValue: f.fieldValue, sortOrder: f.sortOrder }))
+    ).returning();
+    return inserted;
   }
 
   async getNextProformaId(): Promise<string> {

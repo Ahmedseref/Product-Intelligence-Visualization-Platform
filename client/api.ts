@@ -652,6 +652,96 @@ export const api = {
     });
     if (!res.ok) throw new Error('Failed to delete proforma item');
   },
+
+  async getProformaFinancials(proformaId: string): Promise<any[]> {
+    const res = await authFetch(`${API_BASE}/proforma/${proformaId}/financials`);
+    if (!res.ok) throw new Error('Failed to fetch financials');
+    return res.json();
+  },
+
+  async createProformaFinancial(proformaId: string, data: any): Promise<any> {
+    const res = await authFetch(`${API_BASE}/proforma/${proformaId}/financials`, {
+      method: 'POST',
+      body: JSON.stringify(data),
+    });
+    if (!res.ok) throw new Error('Failed to create financial');
+    return res.json();
+  },
+
+  async updateProformaFinancial(id: number, data: any): Promise<any> {
+    const res = await authFetch(`${API_BASE}/proforma-financials/${id}`, {
+      method: 'PATCH',
+      body: JSON.stringify(data),
+    });
+    if (!res.ok) throw new Error('Failed to update financial');
+    return res.json();
+  },
+
+  async deleteProformaFinancial(id: number): Promise<void> {
+    const res = await authFetch(`${API_BASE}/proforma-financials/${id}`, {
+      method: 'DELETE',
+    });
+    if (!res.ok) throw new Error('Failed to delete financial');
+  },
+
+  exportProformaExcel(proformaId: string): void {
+    const headers = getAuthHeaders();
+    const token = headers['X-Session-Token'] || '';
+    const a = document.createElement('a');
+    a.href = `${API_BASE}/proforma/${proformaId}/export/excel`;
+    a.download = `${proformaId}.xlsx`;
+    const form = document.createElement('form');
+    form.method = 'GET';
+    form.action = `${API_BASE}/proforma/${proformaId}/export/excel`;
+    document.body.appendChild(form);
+    authFetch(`${API_BASE}/proforma/${proformaId}/export/excel`)
+      .then(res => res.blob())
+      .then(blob => {
+        const url = URL.createObjectURL(blob);
+        a.href = url;
+        a.click();
+        URL.revokeObjectURL(url);
+      })
+      .catch(console.error);
+    document.body.appendChild(a);
+  },
+
+  async getCustomers(): Promise<any[]> {
+    const res = await authFetch(`${API_BASE}/customers`);
+    if (!res.ok) throw new Error('Failed to fetch customers');
+    return res.json();
+  },
+
+  async createCustomer(data: any): Promise<any> {
+    const res = await authFetch(`${API_BASE}/customers`, {
+      method: 'POST',
+      body: JSON.stringify(data),
+    });
+    if (!res.ok) throw new Error('Failed to create customer');
+    return res.json();
+  },
+
+  async getCustomer(id: number): Promise<any> {
+    const res = await authFetch(`${API_BASE}/customers/${id}`);
+    if (!res.ok) throw new Error('Failed to fetch customer');
+    return res.json();
+  },
+
+  async updateCustomer(id: number, data: any): Promise<any> {
+    const res = await authFetch(`${API_BASE}/customers/${id}`, {
+      method: 'PATCH',
+      body: JSON.stringify(data),
+    });
+    if (!res.ok) throw new Error('Failed to update customer');
+    return res.json();
+  },
+
+  async deleteCustomer(id: number): Promise<void> {
+    const res = await authFetch(`${API_BASE}/customers/${id}`, {
+      method: 'DELETE',
+    });
+    if (!res.ok) throw new Error('Failed to delete customer');
+  },
 };
 
 export interface BackupSummary {
