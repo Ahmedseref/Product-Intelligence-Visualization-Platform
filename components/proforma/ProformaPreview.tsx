@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
-import { ArrowLeft, Edit2, RotateCcw, Plus, Trash2, CheckCircle, X, Printer, FileSpreadsheet, FileText, Search, ChevronDown, ChevronUp } from 'lucide-react';
+import { ArrowLeft, Edit2, RotateCcw, Plus, Trash2, CheckCircle, X, Printer, FileSpreadsheet, FileText, Search, ChevronDown, ChevronUp, Save, Pencil } from 'lucide-react';
 import { api } from '../../client/api';
 import { ProformaData, ProformaItemData, ProformaSettingsData, ProformaFinancialData, CustomerFieldData } from '../../types';
 import FinancialsEditor, { computeFinancials } from './FinancialsEditor';
@@ -33,6 +33,9 @@ const ProformaPreview: React.FC<ProformaPreviewProps> = ({ proformaId, onBack })
   const [exportingExcel, setExportingExcel] = useState(false);
   const [exportingPdf, setExportingPdf] = useState(false);
   const [pdfCapturing, setPdfCapturing] = useState(false);
+  const [editingMeta, setEditingMeta] = useState(false);
+  const [metaDraft, setMetaDraft] = useState<Record<string, string>>({});
+  const [savingMeta, setSavingMeta] = useState(false);
   const invoiceRef = useRef<HTMLDivElement>(null);
 
   const load = useCallback(async () => {
@@ -62,6 +65,40 @@ const ProformaPreview: React.FC<ProformaPreviewProps> = ({ proformaId, onBack })
     } catch (e) { console.error(e); }
   };
 
+  const startEditMeta = () => {
+    if (!proforma) return;
+    setMetaDraft({
+      notes: proforma.notes || '',
+      shipTo: proforma.shipTo || '',
+      portOfLoading: proforma.portOfLoading || '',
+      placeOfDestination: proforma.placeOfDestination || '',
+      finalPlaceOfDelivery: proforma.finalPlaceOfDelivery || '',
+      countryOfOrigin: proforma.countryOfOrigin || '',
+      transportationMode: proforma.transportationMode || '',
+      currency: proforma.currency || settings.defaultCurrency || 'USD',
+    });
+    setEditingMeta(true);
+  };
+
+  const saveMetaEdits = async () => {
+    if (!proforma) return;
+    setSavingMeta(true);
+    try {
+      const patch: Record<string, any> = {};
+      for (const key of ['notes', 'shipTo', 'portOfLoading', 'placeOfDestination', 'finalPlaceOfDelivery', 'countryOfOrigin', 'transportationMode', 'currency']) {
+        patch[key] = metaDraft[key]?.trim() || null;
+      }
+      await api.updateProforma(proformaId, patch);
+      setProforma(prev => prev ? { ...prev, ...patch } : null);
+      setEditingMeta(false);
+    } catch (e) {
+      console.error(e);
+      alert('Failed to save changes.');
+    } finally {
+      setSavingMeta(false);
+    }
+  };
+
   const getDisplayValue = (item: ProformaItemData, field: 'name' | 'description' | 'price') => {
     if (field === 'name') return item.customName ?? item.productName ?? '';
     if (field === 'description') return item.customDescription ?? item.productDescription ?? '';
@@ -84,8 +121,6 @@ const ProformaPreview: React.FC<ProformaPreviewProps> = ({ proformaId, onBack })
   const commitEdit = async () => {
     if (!editingCell || !proforma) return;
     const { itemId, field } = editingCell;
-    const item = (proforma.items || []).find(i => i.id === itemId);
-    if (!item) return;
     setSaving(itemId);
     try {
       let patch: Record<string, any> = {};
@@ -254,7 +289,7 @@ const ProformaPreview: React.FC<ProformaPreviewProps> = ({ proformaId, onBack })
     ? new Date(proforma.date).toLocaleDateString('en-GB', { day: '2-digit', month: '2-digit', year: 'numeric' })
     : new Date().toLocaleDateString('en-GB', { day: '2-digit', month: '2-digit', year: 'numeric' });
 
-  const shipToDisplay = proforma.shipTo?.trim() || 'SAME AS CONSIGNEE';
+  const invoicedToDisplay = proforma.shipTo?.trim() || 'SAME AS CONSIGNEE';
 
   const metaRows: [string, string][] = [
     ['DATE', invoiceDate],
@@ -268,6 +303,8 @@ const ProformaPreview: React.FC<ProformaPreviewProps> = ({ proformaId, onBack })
     ['COUNTRY OF ORIGIN', proforma.countryOfOrigin || '—'],
     ['TRANSPORTATION MODE', proforma.transportationMode || '—'],
   ];
+
+  const CURRENCIES = ['USD', 'EUR', 'GBP', 'TRY', 'AED', 'SAR', 'CNY', 'JPY'];
 
   return (
     <div className="max-w-[900px] mx-auto space-y-4">
@@ -287,6 +324,14 @@ const ProformaPreview: React.FC<ProformaPreviewProps> = ({ proformaId, onBack })
             <option value="accepted">Accepted</option>
             <option value="rejected">Rejected</option>
           </select>
+          {!editingMeta && (
+            <button
+              onClick={startEditMeta}
+              className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-blue-700 border border-blue-200 bg-blue-50 rounded-lg hover:bg-blue-100 transition-colors"
+            >
+              <Pencil className="w-3.5 h-3.5" /> Edit Details
+            </button>
+          )}
           <button
             onClick={handlePdfExport}
             disabled={exportingPdf}
@@ -309,6 +354,70 @@ const ProformaPreview: React.FC<ProformaPreviewProps> = ({ proformaId, onBack })
           </button>
         </div>
       </div>
+
+      {/* Edit Details Panel */}
+      {editingMeta && (
+        <div className="bg-white rounded-xl border border-blue-200 shadow-sm overflow-hidden print:hidden">
+          <div className="px-6 py-3 border-b border-blue-100 bg-blue-50 flex items-center justify-between">
+            <h3 className="text-sm font-semibold text-blue-800">Edit Invoice Details</h3>
+            <div className="flex items-center gap-2">
+              <button
+                onClick={() => setEditingMeta(false)}
+                className="px-3 py-1 text-xs font-medium text-slate-600 border border-slate-200 rounded-lg hover:bg-slate-50"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={saveMetaEdits}
+                disabled={savingMeta}
+                className="flex items-center gap-1.5 px-3 py-1 text-xs font-medium bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-60"
+              >
+                <Save className="w-3.5 h-3.5" /> {savingMeta ? 'Saving…' : 'Save'}
+              </button>
+            </div>
+          </div>
+          <div className="p-6 grid grid-cols-3 gap-4">
+            <div>
+              <label className="block text-xs font-medium text-slate-500 mb-1">Currency</label>
+              <select
+                value={metaDraft.currency || 'USD'}
+                onChange={e => setMetaDraft(p => ({ ...p, currency: e.target.value }))}
+                className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/20 bg-white"
+              >
+                {CURRENCIES.map(c => <option key={c} value={c}>{c}</option>)}
+              </select>
+            </div>
+            <div>
+              <label className="block text-xs font-medium text-slate-500 mb-1">Port of Loading</label>
+              <input type="text" value={metaDraft.portOfLoading || ''} onChange={e => setMetaDraft(p => ({ ...p, portOfLoading: e.target.value }))} className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/20" />
+            </div>
+            <div>
+              <label className="block text-xs font-medium text-slate-500 mb-1">Place of Destination</label>
+              <input type="text" value={metaDraft.placeOfDestination || ''} onChange={e => setMetaDraft(p => ({ ...p, placeOfDestination: e.target.value }))} className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/20" />
+            </div>
+            <div>
+              <label className="block text-xs font-medium text-slate-500 mb-1">Final Place of Delivery</label>
+              <input type="text" value={metaDraft.finalPlaceOfDelivery || ''} onChange={e => setMetaDraft(p => ({ ...p, finalPlaceOfDelivery: e.target.value }))} className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/20" />
+            </div>
+            <div>
+              <label className="block text-xs font-medium text-slate-500 mb-1">Country of Origin</label>
+              <input type="text" value={metaDraft.countryOfOrigin || ''} onChange={e => setMetaDraft(p => ({ ...p, countryOfOrigin: e.target.value }))} className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/20" />
+            </div>
+            <div>
+              <label className="block text-xs font-medium text-slate-500 mb-1">Transportation Mode</label>
+              <input type="text" value={metaDraft.transportationMode || ''} onChange={e => setMetaDraft(p => ({ ...p, transportationMode: e.target.value }))} className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/20" />
+            </div>
+            <div className="col-span-3">
+              <label className="block text-xs font-medium text-slate-500 mb-1">Invoiced To (leave empty for "SAME AS CONSIGNEE")</label>
+              <textarea value={metaDraft.shipTo || ''} onChange={e => setMetaDraft(p => ({ ...p, shipTo: e.target.value }))} rows={2} className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/20 resize-none" />
+            </div>
+            <div className="col-span-3">
+              <label className="block text-xs font-medium text-slate-500 mb-1">Notes</label>
+              <textarea value={metaDraft.notes || ''} onChange={e => setMetaDraft(p => ({ ...p, notes: e.target.value }))} rows={2} className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/20 resize-none" />
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Legend */}
       <div className="flex items-center gap-4 text-xs text-slate-400 print:hidden">
@@ -358,16 +467,10 @@ const ProformaPreview: React.FC<ProformaPreviewProps> = ({ proformaId, onBack })
               ))}
             </div>
 
-            {/* Ship To */}
-            <div className="p-4 border-b border-slate-800">
-              <p className="text-[10px] font-semibold text-slate-500 mb-1">Ship To:</p>
-              <p className="text-xs text-slate-700 whitespace-pre-line">{shipToDisplay}</p>
-            </div>
-
             {/* Invoiced To */}
             <div className="p-4 flex-1">
               <p className="text-[10px] font-semibold text-slate-500 mb-1">Invoiced To:</p>
-              <p className="text-sm font-semibold text-slate-900">{proforma.customerName}</p>
+              <p className="text-xs text-slate-700 whitespace-pre-line">{invoicedToDisplay}</p>
             </div>
           </div>
 
@@ -405,7 +508,7 @@ const ProformaPreview: React.FC<ProformaPreviewProps> = ({ proformaId, onBack })
                   <td colSpan={6} className="py-6 text-center text-slate-400 text-sm">No products in this proforma</td>
                 </tr>
               )}
-              {items.map((item, idx) => {
+              {items.map((item) => {
                 const displayName = String(getDisplayValue(item, 'name'));
                 const displayDesc = String(getDisplayValue(item, 'description'));
                 const displayPrice = Number(getDisplayValue(item, 'price'));
@@ -432,8 +535,8 @@ const ProformaPreview: React.FC<ProformaPreviewProps> = ({ proformaId, onBack })
                     <td className="px-2 py-2 text-center text-slate-600 border-r border-slate-300">
                       {item.productUnit || 'pc'}
                     </td>
-                    <td className="px-3 py-2 text-right border-r border-slate-300">
-                      <EditableCell item={item} field="price" displayValue={displayPrice} isNum />
+                    <td className="px-3 py-2 text-right border-r border-slate-300 text-slate-800">
+                      {currency} <EditableCell item={item} field="price" displayValue={displayPrice} isNum />
                     </td>
                     <td className="px-3 py-2 text-right font-semibold text-slate-800">
                       {currency} {fmt(lineTotal)}
@@ -467,20 +570,18 @@ const ProformaPreview: React.FC<ProformaPreviewProps> = ({ proformaId, onBack })
             <tfoot>
               {calcSteps.map((step) => (
                 <tr key={step.id} className="border-t border-dashed border-slate-200">
-                  <td colSpan={4} className="px-3 py-1.5 text-right text-xs text-slate-600">
-                    <span className={step.computedAmount < 0 ? 'text-red-600' : 'text-green-700'}>
-                      {step.computedAmount < 0 ? '−' : '+'} {step.name}
-                      {step.valueType === 'percentage' && ` (${step.value}%)`}
-                    </span>
+                  <td colSpan={4} className="px-3 py-1.5 text-right text-xs text-slate-900 uppercase font-medium">
+                    {step.computedAmount < 0 ? '−' : '+'} {step.name}
+                    {step.valueType === 'percentage' && ` (${step.value}%)`}
                   </td>
-                  <td className={`px-3 py-1.5 text-right text-xs font-medium ${step.computedAmount < 0 ? 'text-red-600' : 'text-green-700'}`}>
+                  <td className="px-3 py-1.5 text-right text-xs font-medium text-slate-900 uppercase">
                     {step.computedAmount < 0 ? '− ' : '+ '}{currency} {fmt(Math.abs(step.computedAmount))}
                   </td>
                   {!pdfCapturing && <td className="print:hidden" />}
                 </tr>
               ))}
               <tr className="border-t-2 border-slate-800 bg-slate-50">
-                <td colSpan={4} className="px-3 py-3 text-right text-xs font-bold text-slate-700 uppercase">
+                <td colSpan={4} className="px-3 py-3 text-right text-xs font-bold text-slate-900 uppercase">
                   TOTAL {settings.deliveryTerms || ''} {proforma.portOfLoading || ''}
                 </td>
                 <td className="px-3 py-3 text-right text-sm font-bold text-slate-900">

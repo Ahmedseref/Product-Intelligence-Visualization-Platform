@@ -159,15 +159,15 @@ const ProformaCreate: React.FC<ProformaCreateProps> = ({ products, onCreated, on
       <div className="bg-white rounded-xl border border-slate-200 overflow-hidden">
         <div className="px-6 py-4 border-b border-slate-100 bg-slate-50">
           <h3 className="text-sm font-semibold text-slate-700">Shipping & Delivery Details</h3>
-          <p className="text-xs text-slate-400 mt-0.5">If Ship To is left empty, it will appear as "SAME AS CONSIGNEE" on the invoice</p>
+          <p className="text-xs text-slate-400 mt-0.5">If Invoiced To is left empty, it will appear as "SAME AS CONSIGNEE" on the invoice</p>
         </div>
         <div className="p-6 grid grid-cols-2 gap-4">
           <div className="col-span-2">
-            <label className="block text-xs font-medium text-slate-500 mb-1.5">Ship To</label>
+            <label className="block text-xs font-medium text-slate-500 mb-1.5">Invoiced To</label>
             <textarea
               value={shipTo}
               onChange={e => setShipTo(e.target.value)}
-              placeholder="Leave empty if same as customer address"
+              placeholder="Leave empty for 'SAME AS CONSIGNEE'"
               rows={2}
               className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-400 resize-none"
             />
