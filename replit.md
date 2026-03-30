@@ -12,9 +12,7 @@ I prefer detailed explanations and thorough code comments. I value iterative dev
 - Modern, clean design using Tailwind CSS.
 - Data visualizations powered by Nivo for consistent and professional charts (bar, line, pie, heatmap).
 - Iconography provided by Lucide React.
-- Interactive elements: drag-and-drop for taxonomy nodes, inline editing, contextual action bars.
-- Visual hierarchy and depth indicators for taxonomy builder.
-- Comprehensive filtering and column visibility controls for data tables.
+- Interactive elements include drag-and-drop for taxonomy nodes, inline editing, and contextual action bars.
 - The platform uses a 2-Tier Product Architecture (Suppliers > Products).
 
 ### Technical Implementations
@@ -23,141 +21,37 @@ I prefer detailed explanations and thorough code comments. I value iterative dev
 - **Database**: PostgreSQL for data persistence, managed with Drizzle ORM.
 - **Key Features**:
     - Unlimited-level product taxonomy tree with CRUD operations.
-    - **TaxonomyNodeSelector**: Reusable component for selecting taxonomy nodes at any depth with search, expand/collapse, and path display.
-    - Products can be assigned to ANY depth in taxonomy (not limited to fixed levels).
-    - Supplier management with contact details.
+    - Supplier management.
     - Product management with detailed forms, including custom fields and technical specifications.
-    - Interactive product usage density heatmap.
-    - Dashboard with analytics and visualizations.
-    - Mass product import wizard (CSV, XLS, XLSX) with file upload and paste-from-Excel modes.
+    - Interactive product usage density heatmap and a dashboard with analytics.
+    - Mass product import wizard (CSV, XLS, XLSX).
     - Global floating notes widget.
-    - Advanced product inventory table with:
-        - Dynamic Taxonomy Path column showing full hierarchy
-        - Inline taxonomy editing via tree selector
-        - Descendant-aware filtering (filter by any node includes all children)
-        - Column visibility controls and export.
+    - Advanced product inventory table with dynamic taxonomy path, inline taxonomy editing, descendant-aware filtering, and column visibility controls.
     - Real-time database synchronization.
-    - **Settings page with dynamic Usage Areas management** (add/edit/delete) stored in database.
-    - Usage Areas are used system-wide in ProductForm, MassImportWizard, and ProductUsageHeatmap.
-    - **Dynamic Units Management**: Database-backed unit system (app_settings table, key: 'units') with:
-        - CRUD management in Settings page (add/edit/delete units)
-        - Dynamic unit dropdowns in ProductForm, ProductList (inline edit), and MassImportWizard
-        - Auto-discovery of new units during mass import (auto-added to database)
-        - API routes: GET/PUT /api/settings/units
-        - Default units: kg, ton, piece, liter, box, pallet, m, m², m³, ft, ft², ft³, inch, cm, mm, gallon, oz, lb, set, pair, roll, sheet, pack, carton
-    - **Inventory Column Management**: Database-backed column configuration (app_settings table, key: 'inventory_columns') with:
-        - Settings page section for managing inventory table columns
-        - Show/hide toggles for each column with eye icon
-        - Drag-and-drop column reordering (arrangement done in Settings)
-        - Quick actions: Show All, Defaults Only, Reset Order & Visibility
-        - Real-time sync: changes in Settings immediately apply to ProductList inventory table
-        - API routes: GET/PUT /api/settings/inventory-columns
-        - 19 configurable columns: stockCode, name, supplier, taxonomyPath, price, usageAreas, id, sector, category, subCategory, currency, unit, moq, leadTime, manufacturer, location, description, dateAdded, lastUpdated
-    - **Backup & Versioning System**: Full data protection with gzip compression, point-in-time recovery, scheduled auto-backups (every 6 hours), manual backup creation, export/import functionality, and restore preview with safety net backups.
-    - **Authentication System**: Secure session-based authentication with bcrypt password hashing (12 rounds), cryptographically secure tokens (crypto.randomBytes), rate-limited login (10 attempts/15 min), first-login password change enforcement, and logout functionality.
-    - **Dynamic Stock Code Engine**: Structured product codes in format `P.SUP.BRANCH.BRANCH.COLOR.0001` with:
-        - Auto-generation based on supplier code, taxonomy path branch codes, and product color
-        - Supplier code management (2-5 uppercase chars) in SupplierManager with auto-suggestion
-        - Branch code management (2-5 uppercase chars) in TaxonomyBuilder with auto-suggestion
-        - Color management CRUD in Settings with hex color picker and numeric codes
-        - Stock code preview in ProductForm showing generated code before save (updates live with supplier/node/color changes)
-        - Stock Code column in ProductList inventory table with sort support
-        - Bulk migration and regeneration tools in Settings
-        - Full history tracking in stock_code_history table
-        - Supplier code changes auto-regenerate stock codes for all affected products
-        - Backend: server/stockCodeService.ts handles generation, validation, preview, migration, bulk operations
-        - Database: products.stockCode, products.colorId, products.supplierId, treeNodes.branchCode, suppliers.supplierCode, colors table, stock_code_history table
-
-    - **Systematic Product & System Management Module**: Full system builder for construction chemicals, flooring, and waterproofing systems with:
-        - 3-panel layout: system list, layer editor, and live build-up preview
-        - System CRUD with status management (draft/active/archived)
-        - System layers with drag-and-drop reorder and CRUD
-        - Product assignment to layers with benefits, default product marking
-        - Version snapshots and change history tracking
-        - Export engine (JSON, CSV) with system spec sheets
-        - Import engine (JSON, CSV) with validation preview, error/warning display
-        - Analytics dashboard with Nivo charts:
-            - Product Utilization Frequency (horizontal bar)
-            - System Complexity (grouped bar)
-            - Layer Type Distribution (vertical bar)
-            - Product Matrix Heatmap with axis switching (Product→System, Product→Sector, Layer→Product, System→Layer)
-        - Database: systems, system_layers, system_product_options, sectors, system_history tables
-        - Backend: server/systemRoutes.ts with full REST API
-        - Frontend: components/systemBuilder/ (SystemBuilder, SystemDashboard, SystemImport)
-
-    - **Proforma Invoice**: Full proforma invoice system with advanced financial engine:
-        - Proforma list view with search, status filter, create/view/delete actions
-        - Creation wizard: customer info, product selection from central database (search by name/stock code/supplier/ID), quantity setting, currency selection
-        - Preview page with inline editing: click any cell (name, description, price, quantity) to edit inline
-        - Override logic: edits saved in `custom_*` fields only — original product data never modified
-        - Amber highlight on overridden fields; reset-to-original button per row
-        - Status management: draft / sent / accepted / rejected
-        - Company settings (Settings → Proforma Invoice): company name, logo URL, address, phone, email, default currency, payment terms, delivery terms (Incoterms), bank details, footer notes
-        - Print/PDF support via browser print dialog; Excel export via xlsx package (3-sheet workbook: Invoice, Products, Financials)
-        - Auto-generated sequential IDs: PI-0001, PI-0002, etc.
-        - **Dynamic Customer Database**: customers table with unlimited key-value custom fields (customers, customer_fields tables); CustomerManager tab for CRUD; CustomerSelector in creation form
-        - **Advanced Financial Engine**: proforma_financials table with per-proforma custom calculations; add/subtract; percentage/fixed; ordered list; live calculation preview showing subtotal → each step → final total; printed on invoice
-        - Database: proforma_settings, proformas (with customerId FK), proforma_items, proforma_financials, customers, customer_fields tables
-        - Backend: server/proformaRoutes.ts (financials routes + Excel export), server/customerRoutes.ts (full CRUD)
-        - Frontend: components/ProformaInvoice.tsx (Invoices + Customers tabs), components/proforma/ (ProformaCreate, ProformaPreview, ProformaSettings, CustomerSelector, CustomerManager, FinancialsEditor)
-        - Navigation: sidebar "Proforma Invoice" item, hash route #proforma
-
-    - **Document Memory / File Manager**: Central document management system for external links with:
-        - Stores document metadata (links only, no file binaries) for Google Drive, OneDrive, SharePoint, PDFs, websites
-        - Document types: TDS, MSDS, Certificate, Technical Drawing, Commercial, Contract, Catalog, Other
-        - Relation system linking documents to Suppliers, Products, or Systems via ID
-        - Autocomplete entity search by name, stock code, supplier code, or ID
-        - Full CRUD with sequential IDs (D-0001, D-0002, etc.)
-        - Search across name, description, tags, and related entity name
-        - Filters by document type, relation type, and supplier
-        - Tags system with comma-separated input
-        - Color-coded type badges and relation icons
-        - Independent from taxonomy hierarchy (direct ID linking only)
-        - Database: documents table with documentId, name, link, type, relatedToType, relatedToId, relatedToName, tags (jsonb), description
-        - Backend: server/documentRoutes.ts with REST API (GET/POST/PATCH/DELETE)
-        - Frontend: components/DocumentMemory.tsx
-
-    - **Technical Intelligence Dashboard**: Multi-supplier intelligence and comparison layer with:
-        - 7 tabs: Overview (12 KPIs), Product Intelligence, System Intelligence, Supplier Matrix, Taxonomy & Supplier, Technical Coverage, Competitive Benchmark
-        - Global filter panel (Supplier, Sector, Branch) applied across all tabs and API calls
-        - Overview: 12 KPI cards (products, systems, suppliers, variants, coverage, concentration index, etc.)
-        - Product Intelligence: Product utilization by supplier (stacked bar), supplier dependency pie chart
-        - System Intelligence: System variants by sector (grouped bar), complexity scatter, layer supplier flexibility
-        - Supplier Matrix: 6-mode heatmap (supplier-system, supplier-layer, supplier-sector, supplier-taxonomy, supplier-stockcode, supplier-complexity)
-        - Taxonomy & Supplier: Branch distribution (grouped bar), supplier specialization treemap, stock code vs supplier heatmap
-        - Technical Coverage: 6-dimension radar chart (sector coverage, layer coverage, system complexity, taxonomy depth, product variety, system reusability)
-        - Competitive Benchmark: System comparison table and per-system supplier radar
-        - Export engine: PNG/SVG image export and CSV data export for all chart types
-        - Error boundary wrapper preventing white-screen crashes
-        - Backend: server/analyticsRoutes.ts with 8 endpoints (overview, product-intelligence, system-intelligence, supplier-heatmap, taxonomy-supplier, coverage-radar, competitive-benchmark, filters)
-        - Frontend: components/technicalIntelligence/TechnicalIntelligenceDashboard.tsx
-
-### Authentication
-- **Default Credentials**: admin / 1111 (must change on first login)
-- **Password Requirements**: Minimum 6 characters
-- **Session Duration**: 24 hours
-- **Security Features**:
-    - bcrypt password hashing with 12 salt rounds
-    - Cryptographically secure session tokens (64 hex characters)
-    - Rate limiting on login attempts
-    - Server-side enforcement of password change before accessing protected routes
-    - Generic error messages to prevent user enumeration
+    - **Dynamic Settings Management**: Database-backed management for Usage Areas, Units, and Inventory Columns, configurable via a dedicated Settings page.
+    - **Backup & Versioning System**: Full data protection with gzip compression, point-in-time recovery, scheduled auto-backups, manual backup, export/import, and restore preview.
+    - **Authentication System**: Secure session-based authentication with bcrypt hashing, cryptographically secure tokens, rate-limited login, and first-login password change enforcement.
+    - **Dynamic Stock Code Engine**: Structured product codes with auto-generation, management of supplier/branch codes and colors, live preview, and bulk migration tools.
+    - **Systematic Product & System Management Module**: A system builder for construction chemicals and flooring, featuring system CRUD, layer editing, product assignment, version tracking, export/import, and an analytics dashboard.
+    - **Proforma Invoice System**: A comprehensive proforma invoice generation system with customer management, product selection, inline editing, financial engine for custom calculations, PDF/Excel export, and professional layout.
+    - **Document Memory / File Manager**: Centralized document management for external links (Google Drive, OneDrive, PDFs, etc.) with document typing, relation system to products/suppliers/systems, CRUD, search, and filtering.
+    - **Technical Intelligence Dashboard**: A multi-supplier intelligence and comparison layer with 7 tabs providing various KPIs, product/system intelligence, supplier matrix heatmaps, technical coverage radar charts, and competitive benchmarking, all with global filtering and export capabilities.
 
 ### System Design Choices
 - Monorepo structure with `client/` and `server/` directories.
-- API endpoints for all CRUD operations across taxonomy nodes, products, and suppliers.
+- API endpoints for all CRUD operations.
 - Production build targets a single port deployment where the Express server serves both API and static frontend files.
 - CORS is configured to accept requests from any origin.
 
 ## External Dependencies
 - **React**: Frontend library.
 - **Vite**: Frontend build tool.
-- **Tailwind CSS**: Utility-first CSS framework (via CDN).
-- **Nivo**: Data visualization library (bar, line, pie, heatmap, treemap, sunburst, network charts).
+- **Tailwind CSS**: Utility-first CSS framework.
+- **Nivo**: Data visualization library.
 - **Lucide React**: Icon library.
 - **Express.js**: Backend web application framework.
 - **Drizzle ORM**: TypeScript ORM for PostgreSQL.
 - **PostgreSQL**: Relational database.
-- **html2canvas**: Used for exporting taxonomy tree to image.
-- **bcryptjs**: Pure JavaScript password hashing library (production-compatible).
-- **express-rate-limit**: Rate limiting middleware for login protection.
+- **html2canvas**: Used for exporting elements to images.
+- **bcryptjs**: Password hashing library.
+- **express-rate-limit**: Rate limiting middleware.

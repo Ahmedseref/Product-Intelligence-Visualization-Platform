@@ -260,6 +260,9 @@ export const proformaSettings = pgTable("proforma_settings", {
   deliveryTerms: text("delivery_terms"),
   notes: text("notes"),
   bankDetails: text("bank_details"),
+  defaultPortOfLoading: varchar("default_port_of_loading", { length: 255 }),
+  defaultCountryOfOrigin: varchar("default_country_of_origin", { length: 255 }),
+  defaultTransportationMode: varchar("default_transportation_mode", { length: 255 }),
   updatedAt: timestamp("updated_at").defaultNow(),
 });
 
@@ -289,6 +292,12 @@ export const proformas = pgTable("proformas", {
   currency: varchar("currency", { length: 10 }).default("USD"),
   status: varchar("status", { length: 20 }).default("draft"),
   notes: text("notes"),
+  shipTo: text("ship_to"),
+  portOfLoading: varchar("port_of_loading", { length: 255 }),
+  placeOfDestination: varchar("place_of_destination", { length: 255 }),
+  finalPlaceOfDelivery: varchar("final_place_of_delivery", { length: 255 }),
+  countryOfOrigin: varchar("country_of_origin", { length: 255 }),
+  transportationMode: varchar("transportation_mode", { length: 255 }),
   date: timestamp("date").defaultNow(),
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow(),

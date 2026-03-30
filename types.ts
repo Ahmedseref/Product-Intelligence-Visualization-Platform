@@ -256,6 +256,9 @@ export interface ProformaSettingsData {
   deliveryTerms?: string;
   notes?: string;
   bankDetails?: string;
+  defaultPortOfLoading?: string;
+  defaultCountryOfOrigin?: string;
+  defaultTransportationMode?: string;
 }
 
 export interface ProformaItemData {
@@ -311,6 +314,12 @@ export interface ProformaData {
   currency?: string | null;
   status?: string | null;
   notes?: string | null;
+  shipTo?: string | null;
+  portOfLoading?: string | null;
+  placeOfDestination?: string | null;
+  finalPlaceOfDelivery?: string | null;
+  countryOfOrigin?: string | null;
+  transportationMode?: string | null;
   date?: string | null;
   createdAt?: string | null;
   updatedAt?: string | null;

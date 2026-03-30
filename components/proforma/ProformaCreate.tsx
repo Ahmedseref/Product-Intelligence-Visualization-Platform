@@ -21,6 +21,12 @@ const ProformaCreate: React.FC<ProformaCreateProps> = ({ products, onCreated, on
   const [selectedCustomer, setSelectedCustomer] = useState<CustomerData | null>(null);
   const [currency, setCurrency] = useState('USD');
   const [notes, setNotes] = useState('');
+  const [shipTo, setShipTo] = useState('');
+  const [portOfLoading, setPortOfLoading] = useState('');
+  const [placeOfDestination, setPlaceOfDestination] = useState('');
+  const [finalPlaceOfDelivery, setFinalPlaceOfDelivery] = useState('');
+  const [countryOfOrigin, setCountryOfOrigin] = useState('');
+  const [transportationMode, setTransportationMode] = useState('');
   const [draftItems, setDraftItems] = useState<DraftItem[]>([]);
   const [productSearch, setProductSearch] = useState('');
   const [showProductDropdown, setShowProductDropdown] = useState(false);
@@ -31,6 +37,9 @@ const ProformaCreate: React.FC<ProformaCreateProps> = ({ products, onCreated, on
     api.getProformaSettings().then((s: ProformaSettingsData) => {
       if (s.defaultCurrency) setCurrency(s.defaultCurrency);
       if (s.notes) setNotes(s.notes);
+      if (s.defaultPortOfLoading) setPortOfLoading(s.defaultPortOfLoading);
+      if (s.defaultCountryOfOrigin) setCountryOfOrigin(s.defaultCountryOfOrigin);
+      if (s.defaultTransportationMode) setTransportationMode(s.defaultTransportationMode);
     }).catch(() => {});
   }, []);
 
@@ -73,6 +82,12 @@ const ProformaCreate: React.FC<ProformaCreateProps> = ({ products, onCreated, on
         customerContact: selectedCustomer.fields?.find(f => f.fieldName.toLowerCase() === 'contact' || f.fieldName.toLowerCase() === 'email')?.fieldValue || null,
         currency,
         notes: notes.trim() || null,
+        shipTo: shipTo.trim() || null,
+        portOfLoading: portOfLoading.trim() || null,
+        placeOfDestination: placeOfDestination.trim() || null,
+        finalPlaceOfDelivery: finalPlaceOfDelivery.trim() || null,
+        countryOfOrigin: countryOfOrigin.trim() || null,
+        transportationMode: transportationMode.trim() || null,
         status: 'draft',
       });
 
@@ -98,7 +113,6 @@ const ProformaCreate: React.FC<ProformaCreateProps> = ({ products, onCreated, on
 
   return (
     <div className="max-w-4xl mx-auto space-y-6">
-      {/* Header */}
       <div className="flex items-center justify-between">
         <div>
           <h2 className="text-xl font-bold text-slate-800">New Proforma Invoice</h2>
@@ -109,9 +123,8 @@ const ProformaCreate: React.FC<ProformaCreateProps> = ({ products, onCreated, on
         </button>
       </div>
 
-      {/* Customer Selection */}
-      <div className="bg-white rounded-xl border border-slate-200 overflow-hidden">
-        <div className="px-6 py-4 border-b border-slate-100 bg-slate-50">
+      <div className="bg-white rounded-xl border border-slate-200 overflow-visible">
+        <div className="px-6 py-4 border-b border-slate-100 bg-slate-50 rounded-t-xl">
           <h3 className="text-sm font-semibold text-slate-700">Customer</h3>
           <p className="text-xs text-slate-400 mt-0.5">Select an existing customer or create a new one with custom fields</p>
         </div>
@@ -143,7 +156,45 @@ const ProformaCreate: React.FC<ProformaCreateProps> = ({ products, onCreated, on
         </div>
       </div>
 
-      {/* Product Selection */}
+      <div className="bg-white rounded-xl border border-slate-200 overflow-hidden">
+        <div className="px-6 py-4 border-b border-slate-100 bg-slate-50">
+          <h3 className="text-sm font-semibold text-slate-700">Shipping & Delivery Details</h3>
+          <p className="text-xs text-slate-400 mt-0.5">If Ship To is left empty, it will appear as "SAME AS CONSIGNEE" on the invoice</p>
+        </div>
+        <div className="p-6 grid grid-cols-2 gap-4">
+          <div className="col-span-2">
+            <label className="block text-xs font-medium text-slate-500 mb-1.5">Ship To</label>
+            <textarea
+              value={shipTo}
+              onChange={e => setShipTo(e.target.value)}
+              placeholder="Leave empty if same as customer address"
+              rows={2}
+              className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-400 resize-none"
+            />
+          </div>
+          <div>
+            <label className="block text-xs font-medium text-slate-500 mb-1.5">Port of Loading</label>
+            <input type="text" value={portOfLoading} onChange={e => setPortOfLoading(e.target.value)} placeholder="e.g. AMBARLI" className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-400" />
+          </div>
+          <div>
+            <label className="block text-xs font-medium text-slate-500 mb-1.5">Place of Destination</label>
+            <input type="text" value={placeOfDestination} onChange={e => setPlaceOfDestination(e.target.value)} placeholder="e.g. LIBYA" className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-400" />
+          </div>
+          <div>
+            <label className="block text-xs font-medium text-slate-500 mb-1.5">Final Place of Delivery</label>
+            <input type="text" value={finalPlaceOfDelivery} onChange={e => setFinalPlaceOfDelivery(e.target.value)} placeholder="e.g. MISURATA" className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-400" />
+          </div>
+          <div>
+            <label className="block text-xs font-medium text-slate-500 mb-1.5">Country of Origin</label>
+            <input type="text" value={countryOfOrigin} onChange={e => setCountryOfOrigin(e.target.value)} placeholder="e.g. MADE IN TURKIYE" className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-400" />
+          </div>
+          <div>
+            <label className="block text-xs font-medium text-slate-500 mb-1.5">Transportation Mode</label>
+            <input type="text" value={transportationMode} onChange={e => setTransportationMode(e.target.value)} placeholder="e.g. 1X40HC" className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-400" />
+          </div>
+        </div>
+      </div>
+
       <div className="bg-white rounded-xl border border-slate-200 overflow-hidden">
         <div className="px-6 py-4 border-b border-slate-100 bg-slate-50 flex items-center justify-between">
           <h3 className="text-sm font-semibold text-slate-700">Products</h3>
