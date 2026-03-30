@@ -1,0 +1,151 @@
+Build a new feature in my Product Management App called “Proforma Invoice” with clean architecture, modular design, and no data conflicts.
+
+🎯 FEATURE OVERVIEW
+
+Add a new tab:
+
+Proforma Invoice
+
+This feature must include:
+
+Proforma Invoice Manager (in Settings)
+Proforma Creation Page
+Proforma Preview with Inline Editing
+1) 🧠 PROFORMA INVOICE MANAGER (SETTINGS)
+
+Create a new section inside Settings → Proforma Invoice Manager
+
+Purpose:
+
+Define default values and structure for all proforma invoices.
+
+Fields to include:
+Company Name
+Company Logo (upload or URL)
+Address
+Phone / Email
+Default Currency
+Payment Terms
+Delivery Terms (Incoterms)
+Notes / Footer
+Default Bank Details
+Behavior:
+Save this data in a structured table: proforma_settings
+This acts as default template data
+These values auto-fill when creating a new Proforma Invoice
+2) 🧾 PROFORMA CREATION PAGE
+
+Create a new tab/page:
+
+/proforma/create
+User Inputs:
+Customer Name
+Customer Country
+Customer Contact Info
+Select Products (from Product Database)
+Quantity per product
+Product Selection Rules:
+Products must be fetched from central product database
+Use product_id (NOT product name)
+Auto-fill:
+product_name
+base_price
+description
+3) ⚙️ DATA STRUCTURE
+
+Create new tables:
+
+proformas
+id (unique)
+customer_name
+customer_country
+date
+currency
+created_at
+proforma_items
+id
+proforma_id (relation)
+product_id (relation)
+custom_name (editable override)
+custom_description (editable override)
+custom_price (editable override)
+quantity
+
+👉 IMPORTANT:
+
+Do NOT overwrite original product data
+Store overrides only in custom_* fields
+4) 👁️ PROFORMA PREVIEW (KEY FEATURE)
+
+After creating a proforma, open:
+
+/proforma/:id/preview
+Display:
+Company info (from settings)
+Customer info
+Product table:
+Product Name
+Description
+Quantity
+Unit Price
+Total
+5) ✏️ INLINE EDITING (CRITICAL REQUIREMENT)
+
+Inside preview:
+
+User must be able to edit inline:
+
+Product Name
+Description
+Price
+Quantity
+Behavior:
+If user edits a field:
+→ Save it in custom_* fields
+If no edit:
+→ Use original product data
+Logic:
+display_value =
+    custom_value if exists
+    else original product value
+6) 🧮 PRICING LOGIC
+Default price comes from pricing engine
+If user edits price → override only for this proforma
+Do NOT update product database
+7) 🔒 DATA SAFETY RULES
+No direct editing of product database from proforma
+All edits are local to proforma_items
+Use product_id as reference (never product name)
+8) 🧩 ARCHITECTURE RULES
+Create separate modules:
+proforma_service.py
+pricing_service.py
+product_service.py
+Never mix logic across modules
+Use API endpoints:
+create_proforma()
+add_product_to_proforma()
+update_proforma_item()
+9) 🎨 UI REQUIREMENTS
+Clean table layout for preview
+Editable fields (input on click)
+Highlight edited fields
+Add button: “Reset to original product data”
+10) 🚀 OPTIONAL (IF POSSIBLE)
+Export to PDF
+Download as Excel
+Duplicate Proforma
+Version history
+⚠️ IMPORTANT RULES
+Maintain single source of truth (product database)
+Avoid duplication of product data
+Ensure no mismatch between product and proforma
+Use clean relational structure
+✅ EXPECTED RESULT
+
+A fully working Proforma Invoice system where:
+
+Settings define defaults
+Products come from database
+User can override any field safely
+No conflicts or data corruption occur
