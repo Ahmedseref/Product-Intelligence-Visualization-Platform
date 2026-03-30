@@ -1,5 +1,5 @@
-import React, { useState, useEffect, useRef } from 'react';
-import { Search, Plus, X, ChevronDown, Trash2, Edit2, Check, User } from 'lucide-react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
+import { Search, Plus, X, Trash2, Edit2, Check, User, ChevronDown } from 'lucide-react';
 import { api } from '../../client/api';
 import { CustomerData, CustomerFieldData } from '../../types';
 
@@ -13,6 +13,12 @@ interface DraftField {
   fieldValue: string;
 }
 
+interface DropdownPos {
+  top: number;
+  left: number;
+  width: number;
+}
+
 const CustomerSelector: React.FC<CustomerSelectorProps> = ({ selectedCustomer, onSelect }) => {
   const [customers, setCustomers] = useState<CustomerData[]>([]);
   const [search, setSearch] = useState('');
@@ -22,22 +28,57 @@ const CustomerSelector: React.FC<CustomerSelectorProps> = ({ selectedCustomer, o
   const [draftFields, setDraftFields] = useState<DraftField[]>([]);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const ref = useRef<HTMLDivElement>(null);
+  const [dropdownPos, setDropdownPos] = useState<DropdownPos | null>(null);
+  const triggerRef = useRef<HTMLButtonElement>(null);
+  const dropdownRef = useRef<HTMLDivElement>(null);
 
-  useEffect(() => {
-    api.getCustomers().then(setCustomers).catch(() => {});
+  const loadCustomers = useCallback(() => {
+    api.getCustomers()
+      .then(list => setCustomers(list))
+      .catch(e => console.error('Failed to load customers:', e));
+  }, []);
+
+  useEffect(() => { loadCustomers(); }, [loadCustomers]);
+
+  const openDropdown = () => {
+    if (triggerRef.current) {
+      const rect = triggerRef.current.getBoundingClientRect();
+      setDropdownPos({
+        top: rect.bottom + window.scrollY + 4,
+        left: rect.left + window.scrollX,
+        width: rect.width,
+      });
+    }
+    setOpen(true);
+    setMode('select');
+    setSearch('');
+  };
+
+  const closeDropdown = useCallback(() => {
+    setOpen(false);
+    setMode('select');
+    setError(null);
   }, []);
 
   useEffect(() => {
-    const handler = (e: MouseEvent) => {
-      if (ref.current && !ref.current.contains(e.target as Node)) {
-        setOpen(false);
-        setMode('select');
+    if (!open) return;
+    const handleClick = (e: MouseEvent) => {
+      const target = e.target as Node;
+      if (
+        !triggerRef.current?.contains(target) &&
+        !dropdownRef.current?.contains(target)
+      ) {
+        closeDropdown();
       }
     };
-    document.addEventListener('mousedown', handler);
-    return () => document.removeEventListener('mousedown', handler);
-  }, []);
+    const handleScroll = () => closeDropdown();
+    document.addEventListener('mousedown', handleClick);
+    document.addEventListener('scroll', handleScroll, true);
+    return () => {
+      document.removeEventListener('mousedown', handleClick);
+      document.removeEventListener('scroll', handleScroll, true);
+    };
+  }, [open, closeDropdown]);
 
   const filtered = customers.filter(c =>
     c.name.toLowerCase().includes(search.toLowerCase())
@@ -65,9 +106,8 @@ const CustomerSelector: React.FC<CustomerSelectorProps> = ({ selectedCustomer, o
 
   const addDraftField = () => setDraftFields(prev => [...prev, { fieldName: '', fieldValue: '' }]);
   const removeDraftField = (idx: number) => setDraftFields(prev => prev.filter((_, i) => i !== idx));
-  const updateDraftField = (idx: number, key: 'fieldName' | 'fieldValue', val: string) => {
+  const updateDraftField = (idx: number, key: 'fieldName' | 'fieldValue', val: string) =>
     setDraftFields(prev => prev.map((f, i) => i === idx ? { ...f, [key]: val } : f));
-  };
 
   const handleCreate = async () => {
     if (!newName.trim()) { setError('Customer name is required'); return; }
@@ -82,8 +122,7 @@ const CustomerSelector: React.FC<CustomerSelectorProps> = ({ selectedCustomer, o
       const created = await api.createCustomer({ name: newName.trim(), fields });
       setCustomers(prev => [...prev, created].sort((a, b) => a.name.localeCompare(b.name)));
       onSelect(created);
-      setMode('select');
-      setOpen(false);
+      closeDropdown();
     } catch (e: any) {
       setError(e.message || 'Failed to create customer');
     } finally {
@@ -104,8 +143,7 @@ const CustomerSelector: React.FC<CustomerSelectorProps> = ({ selectedCustomer, o
       const updated = await api.updateCustomer(selectedCustomer.id, { name: newName.trim(), fields });
       setCustomers(prev => prev.map(c => c.id === updated.id ? updated : c));
       onSelect(updated);
-      setMode('select');
-      setOpen(false);
+      closeDropdown();
     } catch (e: any) {
       setError(e.message || 'Failed to update customer');
     } finally {
@@ -126,11 +164,13 @@ const CustomerSelector: React.FC<CustomerSelectorProps> = ({ selectedCustomer, o
   };
 
   const selectCustomer = async (c: CustomerData) => {
-    const full = await api.getCustomer(c.id);
-    onSelect(full);
-    setOpen(false);
-    setMode('select');
-    setSearch('');
+    try {
+      const full = await api.getCustomer(c.id);
+      onSelect(full);
+    } catch {
+      onSelect(c);
+    }
+    closeDropdown();
   };
 
   const clearSelection = (e: React.MouseEvent) => {
@@ -139,11 +179,12 @@ const CustomerSelector: React.FC<CustomerSelectorProps> = ({ selectedCustomer, o
   };
 
   return (
-    <div ref={ref} className="relative">
-      {/* Trigger button */}
+    <div className="relative">
+      {/* Trigger */}
       <button
+        ref={triggerRef}
         type="button"
-        onClick={() => { setOpen(prev => !prev); setMode('select'); }}
+        onClick={open ? closeDropdown : openDropdown}
         className="w-full flex items-center gap-2 px-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-400 bg-white text-left hover:border-slate-300 transition-colors"
       >
         <User className="w-4 h-4 text-slate-400 flex-shrink-0" />
@@ -151,19 +192,34 @@ const CustomerSelector: React.FC<CustomerSelectorProps> = ({ selectedCustomer, o
           {selectedCustomer ? selectedCustomer.name : 'Select or create customer…'}
         </span>
         {selectedCustomer && (
-          <button onClick={clearSelection} className="p-0.5 text-slate-400 hover:text-slate-600 transition-colors">
+          <span
+            role="button"
+            onClick={clearSelection}
+            className="p-0.5 text-slate-400 hover:text-slate-600 transition-colors cursor-pointer"
+          >
             <X className="w-3.5 h-3.5" />
-          </button>
+          </span>
         )}
-        <ChevronDown className="w-4 h-4 text-slate-400 flex-shrink-0" />
+        <ChevronDown className={`w-4 h-4 text-slate-400 flex-shrink-0 transition-transform ${open ? 'rotate-180' : ''}`} />
       </button>
 
-      {/* Dropdown */}
-      {open && (
-        <div className="absolute top-full left-0 right-0 mt-1 bg-white border border-slate-200 rounded-xl shadow-lg z-30">
+      {/* Fixed-position dropdown portal */}
+      {open && dropdownPos && (
+        <div
+          ref={dropdownRef}
+          style={{
+            position: 'fixed',
+            top: dropdownPos.top,
+            left: dropdownPos.left,
+            width: dropdownPos.width,
+            zIndex: 9999,
+            maxHeight: '70vh',
+          }}
+          className="bg-white border border-slate-200 rounded-xl shadow-xl overflow-hidden flex flex-col"
+        >
           {mode === 'select' && (
-            <div>
-              <div className="p-2 border-b border-slate-100">
+            <>
+              <div className="p-2 border-b border-slate-100 flex-shrink-0">
                 <div className="flex items-center gap-2 px-2 py-1.5 bg-slate-50 rounded-lg">
                   <Search className="w-3.5 h-3.5 text-slate-400" />
                   <input
@@ -174,17 +230,27 @@ const CustomerSelector: React.FC<CustomerSelectorProps> = ({ selectedCustomer, o
                     placeholder="Search customers…"
                     className="flex-1 text-sm bg-transparent outline-none"
                   />
+                  {search && (
+                    <button onClick={() => setSearch('')} className="text-slate-400 hover:text-slate-600">
+                      <X className="w-3 h-3" />
+                    </button>
+                  )}
                 </div>
               </div>
-              <div className="max-h-52 overflow-y-auto">
+              <div className="overflow-y-auto flex-1">
                 <button
                   onClick={startCreate}
-                  className="w-full flex items-center gap-2 px-4 py-2.5 text-sm text-blue-600 hover:bg-blue-50 transition-colors font-medium"
+                  className="w-full flex items-center gap-2 px-4 py-2.5 text-sm text-blue-600 hover:bg-blue-50 transition-colors font-medium border-b border-slate-100"
                 >
                   <Plus className="w-4 h-4" /> New Customer
                 </button>
-                {filtered.length === 0 && (
-                  <div className="px-4 py-3 text-sm text-slate-400">No customers found</div>
+                {customers.length === 0 && (
+                  <div className="px-4 py-4 text-sm text-slate-400 text-center">
+                    No customers yet — create your first one
+                  </div>
+                )}
+                {customers.length > 0 && filtered.length === 0 && (
+                  <div className="px-4 py-3 text-sm text-slate-400">No customers match "{search}"</div>
                 )}
                 {filtered.map(c => (
                   <div key={c.id} className="flex items-center gap-1 hover:bg-slate-50 transition-colors group">
@@ -192,40 +258,37 @@ const CustomerSelector: React.FC<CustomerSelectorProps> = ({ selectedCustomer, o
                       onClick={() => selectCustomer(c)}
                       className="flex-1 flex items-center gap-2 px-4 py-2.5 text-sm text-left"
                     >
-                      <User className="w-3.5 h-3.5 text-slate-400" />
-                      <span className="text-slate-700">{c.name}</span>
-                      {selectedCustomer?.id === c.id && <Check className="w-3.5 h-3.5 text-blue-500 ml-auto" />}
+                      <User className="w-3.5 h-3.5 text-slate-400 flex-shrink-0" />
+                      <span className="text-slate-700 flex-1 truncate">{c.name}</span>
+                      {selectedCustomer?.id === c.id && <Check className="w-3.5 h-3.5 text-blue-500 flex-shrink-0" />}
                     </button>
                     <button
                       onClick={e => startEdit(c, e)}
                       className="p-2 text-slate-300 hover:text-blue-500 opacity-0 group-hover:opacity-100 transition-all"
-                      title="Edit customer"
+                      title="Edit"
                     >
                       <Edit2 className="w-3.5 h-3.5" />
                     </button>
                     <button
                       onClick={e => handleDelete(c, e)}
                       className="p-2 text-slate-300 hover:text-red-500 opacity-0 group-hover:opacity-100 transition-all mr-1"
-                      title="Delete customer"
+                      title="Delete"
                     >
                       <Trash2 className="w-3.5 h-3.5" />
                     </button>
                   </div>
                 ))}
               </div>
-            </div>
+            </>
           )}
 
           {(mode === 'create' || mode === 'edit') && (
-            <div className="p-4 space-y-3">
+            <div className="overflow-y-auto flex-1 p-4 space-y-3">
               <div className="flex items-center justify-between mb-1">
                 <h4 className="text-sm font-semibold text-slate-700">
                   {mode === 'create' ? 'New Customer' : 'Edit Customer'}
                 </h4>
-                <button
-                  onClick={() => { setMode('select'); setError(null); }}
-                  className="text-slate-400 hover:text-slate-600"
-                >
+                <button onClick={() => { setMode('select'); setError(null); }} className="text-slate-400 hover:text-slate-600">
                   <X className="w-4 h-4" />
                 </button>
               </div>
@@ -237,6 +300,7 @@ const CustomerSelector: React.FC<CustomerSelectorProps> = ({ selectedCustomer, o
                   type="text"
                   value={newName}
                   onChange={e => setNewName(e.target.value)}
+                  onKeyDown={e => { if (e.key === 'Enter') mode === 'create' ? handleCreate() : handleEdit(); }}
                   placeholder="Company or person name"
                   className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-400"
                 />
@@ -245,21 +309,18 @@ const CustomerSelector: React.FC<CustomerSelectorProps> = ({ selectedCustomer, o
               <div>
                 <div className="flex items-center justify-between mb-2">
                   <label className="text-xs font-medium text-slate-500">Custom Fields</label>
-                  <button
-                    onClick={addDraftField}
-                    className="flex items-center gap-1 text-xs text-blue-600 hover:text-blue-700"
-                  >
+                  <button onClick={addDraftField} className="flex items-center gap-1 text-xs text-blue-600 hover:text-blue-700">
                     <Plus className="w-3 h-3" /> Add Field
                   </button>
                 </div>
-                <div className="space-y-2 max-h-40 overflow-y-auto">
+                <div className="space-y-2">
                   {draftFields.map((field, idx) => (
                     <div key={idx} className="flex items-center gap-2">
                       <input
                         type="text"
                         value={field.fieldName}
                         onChange={e => updateDraftField(idx, 'fieldName', e.target.value)}
-                        placeholder="Field name (e.g. VAT Number)"
+                        placeholder="Name (e.g. VAT No.)"
                         className="flex-1 px-2.5 py-1.5 border border-slate-200 rounded-lg text-xs focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-400"
                       />
                       <input
@@ -269,10 +330,7 @@ const CustomerSelector: React.FC<CustomerSelectorProps> = ({ selectedCustomer, o
                         placeholder="Value"
                         className="flex-1 px-2.5 py-1.5 border border-slate-200 rounded-lg text-xs focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-400"
                       />
-                      <button
-                        onClick={() => removeDraftField(idx)}
-                        className="p-1 text-slate-300 hover:text-red-500 transition-colors"
-                      >
+                      <button onClick={() => removeDraftField(idx)} className="p-1 text-slate-300 hover:text-red-500 transition-colors flex-shrink-0">
                         <Trash2 className="w-3.5 h-3.5" />
                       </button>
                     </div>
@@ -280,21 +338,21 @@ const CustomerSelector: React.FC<CustomerSelectorProps> = ({ selectedCustomer, o
                 </div>
               </div>
 
-              {error && <p className="text-xs text-red-600">{error}</p>}
+              {error && <p className="text-xs text-red-600 bg-red-50 px-3 py-2 rounded-lg">{error}</p>}
 
               <div className="flex gap-2 pt-1">
                 <button
                   onClick={() => { setMode('select'); setError(null); }}
                   className="flex-1 px-3 py-2 text-xs font-medium text-slate-600 border border-slate-200 rounded-lg hover:bg-slate-50 transition-colors"
                 >
-                  Cancel
+                  Back
                 </button>
                 <button
                   onClick={mode === 'create' ? handleCreate : handleEdit}
-                  disabled={saving}
+                  disabled={saving || !newName.trim()}
                   className="flex-1 px-3 py-2 text-xs font-medium bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors disabled:opacity-60"
                 >
-                  {saving ? 'Saving…' : mode === 'create' ? 'Create' : 'Save'}
+                  {saving ? 'Saving…' : mode === 'create' ? 'Create Customer' : 'Save Changes'}
                 </button>
               </div>
             </div>
@@ -307,7 +365,7 @@ const CustomerSelector: React.FC<CustomerSelectorProps> = ({ selectedCustomer, o
         <div className="mt-2 pl-1 space-y-1">
           {selectedCustomer.fields.map((f: CustomerFieldData, idx: number) => (
             <div key={idx} className="flex items-center gap-2 text-xs">
-              <span className="text-slate-400 min-w-[100px]">{f.fieldName}</span>
+              <span className="text-slate-400 min-w-[100px]">{f.fieldName}:</span>
               <span className="text-slate-600">{f.fieldValue || '—'}</span>
             </div>
           ))}
