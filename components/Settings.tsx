@@ -1,7 +1,8 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
-import { Plus, Edit2, Trash2, Check, X, AlertCircle, Tag, Hash, Archive, Settings as SettingsIcon, ChevronRight, Ruler, GripVertical, Eye, EyeOff, Columns, RotateCcw } from 'lucide-react';
+import { Plus, Edit2, Trash2, Check, X, AlertCircle, Tag, Hash, Archive, Settings as SettingsIcon, ChevronRight, Ruler, GripVertical, Eye, EyeOff, Columns, RotateCcw, Receipt } from 'lucide-react';
 import BackupManager from './settings/BackupManager';
 import StockCodeManager from './settings/StockCodeManager';
+import ProformaSettingsSection from './proforma/ProformaSettings';
 
 export interface InventoryColumnConfig {
   key: string;
@@ -23,7 +24,7 @@ interface SettingsProps {
   onUpdateInventoryColumns?: (columns: InventoryColumnConfig[]) => void;
 }
 
-type SettingsSection = 'usage-areas' | 'units' | 'stock-codes' | 'backups' | 'inventory-columns';
+type SettingsSection = 'usage-areas' | 'units' | 'stock-codes' | 'backups' | 'inventory-columns' | 'proforma';
 
 const NAV_ITEMS: { id: SettingsSection; label: string; description: string; icon: React.ReactNode; color: string; bgColor: string }[] = [
   { 
@@ -65,6 +66,14 @@ const NAV_ITEMS: { id: SettingsSection; label: string; description: string; icon
     icon: <Archive className="w-5 h-5" />, 
     color: 'text-indigo-600',
     bgColor: 'bg-indigo-50'
+  },
+  { 
+    id: 'proforma', 
+    label: 'Proforma Invoice', 
+    description: 'Default company & invoice settings',
+    icon: <Receipt className="w-5 h-5" />, 
+    color: 'text-teal-600',
+    bgColor: 'bg-teal-50'
   },
 ];
 
@@ -731,6 +740,25 @@ const Settings: React.FC<SettingsProps> = ({ usageAreas, onUpdateUsageAreas, onR
                 </div>
                 <div className="p-8">
                   <BackupManager />
+                </div>
+              </>
+            )}
+
+            {activeSection === 'proforma' && (
+              <>
+                <div className="px-8 py-6 border-b border-slate-100 bg-gradient-to-r from-teal-50/50 to-transparent">
+                  <div className="flex items-center gap-3">
+                    <div className="p-2.5 bg-teal-100 rounded-xl">
+                      <Receipt className="w-5 h-5 text-teal-600" />
+                    </div>
+                    <div>
+                      <h2 className="text-lg font-bold text-slate-800">Proforma Invoice Settings</h2>
+                      <p className="text-sm text-slate-500">Company info, bank details, and default values used across all proforma invoices</p>
+                    </div>
+                  </div>
+                </div>
+                <div className="p-8">
+                  <ProformaSettingsSection />
                 </div>
               </>
             )}

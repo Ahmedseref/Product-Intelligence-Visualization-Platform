@@ -248,6 +248,48 @@ export const backups = pgTable("backups", {
   entityCounts: jsonb("entity_counts").default({}), // { products: n, suppliers: n, treeNodes: n, ... }
 });
 
+export const proformaSettings = pgTable("proforma_settings", {
+  id: serial("id").primaryKey(),
+  companyName: varchar("company_name", { length: 255 }),
+  companyLogo: text("company_logo"),
+  address: text("address"),
+  phone: varchar("phone", { length: 100 }),
+  email: varchar("email", { length: 255 }),
+  defaultCurrency: varchar("default_currency", { length: 10 }).default("USD"),
+  paymentTerms: text("payment_terms"),
+  deliveryTerms: text("delivery_terms"),
+  notes: text("notes"),
+  bankDetails: text("bank_details"),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
+export const proformas = pgTable("proformas", {
+  id: serial("id").primaryKey(),
+  proformaId: varchar("proforma_id", { length: 50 }).notNull().unique(),
+  customerName: varchar("customer_name", { length: 255 }).notNull(),
+  customerCountry: varchar("customer_country", { length: 100 }),
+  customerContact: text("customer_contact"),
+  currency: varchar("currency", { length: 10 }).default("USD"),
+  status: varchar("status", { length: 20 }).default("draft"),
+  notes: text("notes"),
+  date: timestamp("date").defaultNow(),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
+export const proformaItems = pgTable("proforma_items", {
+  id: serial("id").primaryKey(),
+  proformaId: varchar("proforma_id", { length: 50 }).notNull(),
+  productId: varchar("product_id", { length: 100 }).notNull(),
+  customName: varchar("custom_name", { length: 255 }),
+  customDescription: text("custom_description"),
+  customPrice: real("custom_price"),
+  quantity: real("quantity").notNull().default(1),
+  sortOrder: integer("sort_order").default(0),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
 export const suppliersRelations = relations(suppliers, ({ many }) => ({
   supplierProducts: many(supplierProducts),
 }));
@@ -358,3 +400,9 @@ export type SystemHistory = typeof systemHistory.$inferSelect;
 export type InsertSystemHistory = typeof systemHistory.$inferInsert;
 export type Document = typeof documents.$inferSelect;
 export type InsertDocument = typeof documents.$inferInsert;
+export type ProformaSettings = typeof proformaSettings.$inferSelect;
+export type InsertProformaSettings = typeof proformaSettings.$inferInsert;
+export type Proforma = typeof proformas.$inferSelect;
+export type InsertProforma = typeof proformas.$inferInsert;
+export type ProformaItem = typeof proformaItems.$inferSelect;
+export type InsertProformaItem = typeof proformaItems.$inferInsert;

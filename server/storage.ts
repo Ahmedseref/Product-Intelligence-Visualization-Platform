@@ -1,7 +1,7 @@
 import { 
   treeNodes, products, customFieldDefinitions,
   suppliers, supplierProducts, attachments, appSettings,
-  colors, documents,
+  colors, documents, proformaSettings, proformas, proformaItems,
   type TreeNode, type InsertTreeNode,
   type Product, type InsertProduct,
   type CustomFieldDefinition, type InsertCustomFieldDefinition,
@@ -9,7 +9,10 @@ import {
   type SupplierProduct, type InsertSupplierProduct,
   type Attachment, type InsertAttachment,
   type Color, type InsertColor,
-  type Document, type InsertDocument
+  type Document, type InsertDocument,
+  type ProformaSettings, type InsertProformaSettings,
+  type Proforma, type InsertProforma,
+  type ProformaItem, type InsertProformaItem
 } from "@shared/schema";
 import { db } from "./db";
 import { eq, and, isNull, desc, sql } from "drizzle-orm";
@@ -346,6 +349,92 @@ export class DatabaseStorage implements IStorage {
     }
     const num = parseInt(maxId.replace("D-", ""), 10);
     return `D-${String(num + 1).padStart(4, "0")}`;
+  }
+
+  async getProformaSettings(): Promise<ProformaSettings | undefined> {
+    const [row] = await db.select().from(proformaSettings).limit(1);
+    return row || undefined;
+  }
+
+  async upsertProformaSettings(data: Partial<InsertProformaSettings>): Promise<ProformaSettings> {
+    const existing = await this.getProformaSettings();
+    if (existing) {
+      const [updated] = await db
+        .update(proformaSettings)
+        .set({ ...data, updatedAt: new Date() })
+        .where(eq(proformaSettings.id, existing.id))
+        .returning();
+      return updated;
+    } else {
+      const [created] = await db.insert(proformaSettings).values(data as InsertProformaSettings).returning();
+      return created;
+    }
+  }
+
+  async getProformas(): Promise<Proforma[]> {
+    return await db.select().from(proformas).orderBy(desc(proformas.createdAt));
+  }
+
+  async getProforma(proformaId: string): Promise<Proforma | undefined> {
+    const [row] = await db.select().from(proformas).where(eq(proformas.proformaId, proformaId));
+    return row || undefined;
+  }
+
+  async createProforma(data: InsertProforma): Promise<Proforma> {
+    const [created] = await db.insert(proformas).values(data).returning();
+    return created;
+  }
+
+  async updateProforma(proformaId: string, updates: Partial<InsertProforma>): Promise<Proforma | undefined> {
+    const [updated] = await db
+      .update(proformas)
+      .set({ ...updates, updatedAt: new Date() })
+      .where(eq(proformas.proformaId, proformaId))
+      .returning();
+    return updated || undefined;
+  }
+
+  async deleteProforma(proformaId: string): Promise<boolean> {
+    await db.delete(proformaItems).where(eq(proformaItems.proformaId, proformaId));
+    const result = await db.delete(proformas).where(eq(proformas.proformaId, proformaId)).returning();
+    return result.length > 0;
+  }
+
+  async getProformaItems(proformaId: string): Promise<ProformaItem[]> {
+    return await db
+      .select()
+      .from(proformaItems)
+      .where(eq(proformaItems.proformaId, proformaId))
+      .orderBy(proformaItems.sortOrder);
+  }
+
+  async createProformaItem(data: InsertProformaItem): Promise<ProformaItem> {
+    const [created] = await db.insert(proformaItems).values(data).returning();
+    return created;
+  }
+
+  async updateProformaItem(id: number, updates: Partial<InsertProformaItem>): Promise<ProformaItem | undefined> {
+    const [updated] = await db
+      .update(proformaItems)
+      .set({ ...updates, updatedAt: new Date() })
+      .where(eq(proformaItems.id, id))
+      .returning();
+    return updated || undefined;
+  }
+
+  async deleteProformaItem(id: number): Promise<boolean> {
+    const result = await db.delete(proformaItems).where(eq(proformaItems.id, id)).returning();
+    return result.length > 0;
+  }
+
+  async getNextProformaId(): Promise<string> {
+    const result = await db.select({ maxId: sql<string>`MAX(${proformas.proformaId})` }).from(proformas);
+    const maxId = result[0]?.maxId;
+    if (!maxId) {
+      return "PI-0001";
+    }
+    const num = parseInt(maxId.replace("PI-", ""), 10);
+    return `PI-${String(num + 1).padStart(4, "0")}`;
   }
 }
 

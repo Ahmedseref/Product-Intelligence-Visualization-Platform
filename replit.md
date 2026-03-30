@@ -85,6 +85,21 @@ I prefer detailed explanations and thorough code comments. I value iterative dev
         - Backend: server/systemRoutes.ts with full REST API
         - Frontend: components/systemBuilder/ (SystemBuilder, SystemDashboard, SystemImport)
 
+    - **Proforma Invoice**: Full proforma invoice system with:
+        - Proforma list view with search, status filter, create/view/delete actions
+        - Creation wizard: customer info, product selection from central database (search by name/stock code/supplier/ID), quantity setting, currency selection
+        - Preview page with inline editing: click any cell (name, description, price, quantity) to edit inline
+        - Override logic: edits saved in `custom_*` fields only — original product data never modified
+        - Amber highlight on overridden fields; reset-to-original button per row
+        - Status management: draft / sent / accepted / rejected
+        - Company settings (Settings → Proforma Invoice): company name, logo URL, address, phone, email, default currency, payment terms, delivery terms (Incoterms), bank details, footer notes
+        - Print support via browser print dialog
+        - Auto-generated sequential IDs: PI-0001, PI-0002, etc.
+        - Database: proforma_settings, proformas, proforma_items tables
+        - Backend: server/proformaRoutes.ts with REST API
+        - Frontend: components/ProformaInvoice.tsx, components/proforma/ (ProformaCreate, ProformaPreview, ProformaSettings)
+        - Navigation: sidebar "Proforma Invoice" item, hash route #proforma
+
     - **Document Memory / File Manager**: Central document management system for external links with:
         - Stores document metadata (links only, no file binaries) for Google Drive, OneDrive, SharePoint, PDFs, websites
         - Document types: TDS, MSDS, Certificate, Technical Drawing, Commercial, Contract, Catalog, Other

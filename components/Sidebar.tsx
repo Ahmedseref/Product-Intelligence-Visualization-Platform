@@ -18,6 +18,7 @@ const viewToHash: Record<ViewMode, string> = {
   'system-builder': '#system-builder',
   'document-memory': '#document-memory',
   'settings': '#settings',
+  'proforma': '#proforma',
 };
 
 const Sidebar: React.FC<SidebarProps> = ({ currentView, setView, user }) => {
@@ -28,6 +29,7 @@ const Sidebar: React.FC<SidebarProps> = ({ currentView, setView, user }) => {
     { id: 'inventory', label: 'Product Inventory', icon: ICONS.Inventory },
     { id: 'system-builder', label: 'System Builder', icon: ICONS.SystemBuilder },
     { id: 'document-memory', label: 'Document Memory', icon: ICONS.DocumentMemory },
+    { id: 'proforma', label: 'Proforma Invoice', icon: ICONS.ProformaInvoice },
     { id: 'add-product', label: 'Add Product', icon: ICONS.Add },
   ];
 

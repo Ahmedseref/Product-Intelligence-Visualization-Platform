@@ -574,6 +574,84 @@ export const api = {
     });
     if (!res.ok) throw new Error('Failed to delete document');
   },
+
+  // ── Proforma Invoice ────────────────────────────────────────────────
+  async getProformaSettings(): Promise<any> {
+    const res = await authFetch(`${API_BASE}/proforma/settings`);
+    if (!res.ok) throw new Error('Failed to fetch proforma settings');
+    return res.json();
+  },
+
+  async saveProformaSettings(data: any): Promise<any> {
+    const res = await authFetch(`${API_BASE}/proforma/settings`, {
+      method: 'PUT',
+      body: JSON.stringify(data),
+    });
+    if (!res.ok) throw new Error('Failed to save proforma settings');
+    return res.json();
+  },
+
+  async getProformas(): Promise<any[]> {
+    const res = await authFetch(`${API_BASE}/proforma/list`);
+    if (!res.ok) throw new Error('Failed to fetch proformas');
+    return res.json();
+  },
+
+  async createProforma(data: any): Promise<any> {
+    const res = await authFetch(`${API_BASE}/proforma/list`, {
+      method: 'POST',
+      body: JSON.stringify(data),
+    });
+    if (!res.ok) throw new Error('Failed to create proforma');
+    return res.json();
+  },
+
+  async getProforma(proformaId: string): Promise<any> {
+    const res = await authFetch(`${API_BASE}/proforma/${proformaId}`);
+    if (!res.ok) throw new Error('Failed to fetch proforma');
+    return res.json();
+  },
+
+  async updateProforma(proformaId: string, data: any): Promise<any> {
+    const res = await authFetch(`${API_BASE}/proforma/${proformaId}`, {
+      method: 'PATCH',
+      body: JSON.stringify(data),
+    });
+    if (!res.ok) throw new Error('Failed to update proforma');
+    return res.json();
+  },
+
+  async deleteProforma(proformaId: string): Promise<void> {
+    const res = await authFetch(`${API_BASE}/proforma/${proformaId}`, {
+      method: 'DELETE',
+    });
+    if (!res.ok) throw new Error('Failed to delete proforma');
+  },
+
+  async addProformaItem(proformaId: string, data: any): Promise<any> {
+    const res = await authFetch(`${API_BASE}/proforma/${proformaId}/items`, {
+      method: 'POST',
+      body: JSON.stringify(data),
+    });
+    if (!res.ok) throw new Error('Failed to add proforma item');
+    return res.json();
+  },
+
+  async updateProformaItem(itemId: number, data: any): Promise<any> {
+    const res = await authFetch(`${API_BASE}/proforma-items/${itemId}`, {
+      method: 'PATCH',
+      body: JSON.stringify(data),
+    });
+    if (!res.ok) throw new Error('Failed to update proforma item');
+    return res.json();
+  },
+
+  async deleteProformaItem(itemId: number): Promise<void> {
+    const res = await authFetch(`${API_BASE}/proforma-items/${itemId}`, {
+      method: 'DELETE',
+    });
+    if (!res.ok) throw new Error('Failed to delete proforma item');
+  },
 };
 
 export interface BackupSummary {

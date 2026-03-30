@@ -24,7 +24,8 @@ import {
   FolderTree,
   Combine,
   Activity,
-  FileText
+  FileText,
+  Receipt
 } from 'lucide-react';
 
 export const ICONS = {
@@ -53,7 +54,8 @@ export const ICONS = {
   Package: <Package size={20} />,
   SystemBuilder: <Combine size={20} />,
   TechIntelligence: <Activity size={20} />,
-  DocumentMemory: <FileText size={20} />
+  DocumentMemory: <FileText size={20} />,
+  ProformaInvoice: <Receipt size={20} />
 };
 
 export const SECTORS = ['Retail', 'Industrial', 'Chemical', 'Textile', 'Food & Beverage', 'Electronics'];

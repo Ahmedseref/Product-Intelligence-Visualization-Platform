@@ -242,7 +242,55 @@ export interface DocumentRecord {
   updatedAt: string;
 }
 
-export type ViewMode = 'technical-intelligence' | 'inventory' | 'add-product' | 'taxonomy-manager' | 'suppliers' | 'settings' | 'system-builder' | 'document-memory';
+export type ViewMode = 'technical-intelligence' | 'inventory' | 'add-product' | 'taxonomy-manager' | 'suppliers' | 'settings' | 'system-builder' | 'document-memory' | 'proforma';
+
+export interface ProformaSettingsData {
+  id?: number;
+  companyName?: string;
+  companyLogo?: string;
+  address?: string;
+  phone?: string;
+  email?: string;
+  defaultCurrency?: string;
+  paymentTerms?: string;
+  deliveryTerms?: string;
+  notes?: string;
+  bankDetails?: string;
+}
+
+export interface ProformaItemData {
+  id: number;
+  proformaId: string;
+  productId: string;
+  customName?: string | null;
+  customDescription?: string | null;
+  customPrice?: number | null;
+  quantity: number;
+  sortOrder?: number;
+  productName?: string;
+  productDescription?: string;
+  productPrice?: number;
+  productUnit?: string;
+  productCurrency?: string;
+  productStockCode?: string;
+  productSupplier?: string;
+}
+
+export interface ProformaData {
+  id: number;
+  proformaId: string;
+  customerName: string;
+  customerCountry?: string | null;
+  customerContact?: string | null;
+  currency?: string | null;
+  status?: string | null;
+  notes?: string | null;
+  date?: string | null;
+  createdAt?: string | null;
+  updatedAt?: string | null;
+  items?: ProformaItemData[];
+}
+
 export type UserRole = 'Admin' | 'Editor' | 'Viewer';
 
 export interface User {

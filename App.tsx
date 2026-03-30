@@ -17,6 +17,7 @@ import ChangePassword from './components/ChangePassword';
 import SystemBuilder from './components/systemBuilder/SystemBuilder';
 import TechnicalIntelligenceDashboard from './components/technicalIntelligence/TechnicalIntelligenceDashboard';
 import DocumentMemory from './components/DocumentMemory';
+import ProformaInvoice from './components/ProformaInvoice';
 import { api, authApi, setAuthToken, initAuthToken, AuthUser } from './client/api';
 import { LogOut, PanelLeftClose, PanelLeftOpen } from 'lucide-react';
 
@@ -35,6 +36,7 @@ const App: React.FC = () => {
     '#system-builder': 'system-builder',
     '#document-memory': 'document-memory',
     '#settings': 'settings',
+    '#proforma': 'proforma',
   };
   const viewToHash: Record<ViewMode, string> = Object.fromEntries(
     Object.entries(hashToView).map(([h, v]) => [v, h])
@@ -938,6 +940,9 @@ const App: React.FC = () => {
                 products={products}
                 suppliers={suppliers}
               />
+            )}
+            {viewMode === 'proforma' && (
+              <ProformaInvoice products={products} />
             )}
             {viewMode === 'technical-intelligence' && (
               <TechnicalIntelligenceDashboard 
