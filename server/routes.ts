@@ -1,8 +1,8 @@
 import type { Express } from "express";
 import { storage } from "./storage";
 import { db } from "./db";
-import { stockCodeHistory, products as productsTable, suppliers as suppliersTable } from "@shared/schema";
-import { eq } from "drizzle-orm";
+import { stockCodeHistory, products as productsTable, suppliers as suppliersTable, documents as documentsTable } from "@shared/schema";
+import { eq, and } from "drizzle-orm";
 import * as backupService from "./backupService";
 import * as stockCodeService from "./stockCodeService";
 import { authMiddleware, requirePasswordChange } from "./authRoutes";
@@ -58,6 +58,12 @@ export function registerRoutes(app: Express): void {
       const node = await storage.updateTreeNode(req.params.nodeId, req.body);
       if (!node) {
         return res.status(404).json({ error: "Node not found" });
+      }
+      // Auto-regen stock codes when branch code or parent changes (affects code segments)
+      if (req.body.branchCode !== undefined || req.body.parentId !== undefined) {
+        stockCodeService.regenerateStockCodesForNode(req.params.nodeId, 'System').catch(e =>
+          console.error("Stock code regen after node update failed:", e)
+        );
       }
       res.json(node);
     } catch (error) {
@@ -226,6 +232,10 @@ export function registerRoutes(app: Express): void {
 
   app.delete("/api/products/:productId", async (req, res) => {
     try {
+      // Cascade: remove any documents linked to this product
+      await db.delete(documentsTable).where(
+        and(eq(documentsTable.relatedToType, 'Product'), eq(documentsTable.relatedToId, req.params.productId))
+      );
       await storage.deleteProduct(req.params.productId);
       res.status(204).send();
     } catch (error) {
@@ -493,6 +503,10 @@ export function registerRoutes(app: Express): void {
 
   app.delete("/api/suppliers/:supplierId", async (req, res) => {
     try {
+      // Cascade: remove any documents linked to this supplier
+      await db.delete(documentsTable).where(
+        and(eq(documentsTable.relatedToType, 'Supplier'), eq(documentsTable.relatedToId, req.params.supplierId))
+      );
       await storage.deleteSupplier(req.params.supplierId);
       res.status(204).send();
     } catch (error) {
@@ -1034,6 +1048,15 @@ export function registerRoutes(app: Express): void {
       if (isNaN(id)) return res.status(400).json({ error: "Invalid ID" });
       const color = await storage.updateColor(id, req.body);
       if (!color) return res.status(404).json({ error: "Color not found" });
+      // When the color numeric code changes, regen stock codes for all products using this color
+      if (req.body.code !== undefined) {
+        const affected = await db.select().from(productsTable).where(eq(productsTable.colorId, id));
+        for (const p of affected) {
+          stockCodeService.updateProductStockCode(p.productId, 'Color code changed', 'System').catch(e =>
+            console.error(`Stock code regen for product ${p.productId} failed:`, e)
+          );
+        }
+      }
       res.json(color);
     } catch (error) {
       console.error("Error updating color:", error);
@@ -1045,6 +1068,16 @@ export function registerRoutes(app: Express): void {
     try {
       const id = parseInt(req.params.id);
       if (isNaN(id)) return res.status(400).json({ error: "Invalid ID" });
+      // Null out colorId on all products using this color, then regen their stock codes
+      const affected = await db.select().from(productsTable).where(eq(productsTable.colorId, id));
+      if (affected.length > 0) {
+        await db.update(productsTable).set({ colorId: null }).where(eq(productsTable.colorId, id));
+        for (const p of affected) {
+          stockCodeService.updateProductStockCode(p.productId, 'Color deleted', 'System').catch(e =>
+            console.error(`Stock code regen for product ${p.productId} after color delete failed:`, e)
+          );
+        }
+      }
       await storage.deleteColor(id);
       res.status(204).send();
     } catch (error) {

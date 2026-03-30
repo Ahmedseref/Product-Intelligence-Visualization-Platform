@@ -1557,6 +1557,19 @@ const ProductList: React.FC<ProductListProps> = ({
                                           }
                                           updatedProduct.sector = sector;
                                           updatedProduct.category = path[path.length - 1] || 'Uncategorized';
+                                          updatedProduct.lastUpdated = new Date().toISOString();
+                                          // Record taxonomy change in history
+                                          if (p.nodeId !== nodeId) {
+                                            const histEntry = {
+                                              id: `HIST-${Date.now()}`,
+                                              timestamp: new Date().toISOString(),
+                                              userId: currentUser?.id || 'U-01',
+                                              userName: currentUser?.name || 'Admin',
+                                              changes: { nodeId: { old: p.nodeId, new: nodeId } },
+                                              snapshot: {}
+                                            };
+                                            updatedProduct.history = [histEntry, ...(p.history || [])];
+                                          }
                                           onUpdate(updatedProduct);
                                           setEditingCell(null);
                                         }}

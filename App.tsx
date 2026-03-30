@@ -8,7 +8,7 @@ import ProductForm from './components/ProductForm';
 import ProductTree from './components/ProductTree';
 import TaxonomyBuilder from './components/TaxonomyBuilder';
 import SupplierManager from './components/SupplierManager';
-import MassImportWizard from './components/MassImportWizard';
+
 import FloatingNotesWidget from './components/FloatingNotesWidget';
 import Settings, { InventoryColumnConfig } from './components/Settings';
 import Login from './components/Login';
@@ -77,7 +77,6 @@ const App: React.FC = () => {
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [isDbConnected, setIsDbConnected] = useState(false);
-  const [addProductMode, setAddProductMode] = useState<'single' | 'mass'>('single');
   const [usageAreas, setUsageAreas] = useState<string[]>([]);
   const [units, setUnits] = useState<string[]>([]);
   const [colorsList, setColorsList] = useState<any[]>([]);
@@ -369,55 +368,14 @@ const App: React.FC = () => {
         createdBy: newProduct.createdBy,
         history: newProduct.history,
       });
-      const merged = { ...newProduct, ...savedProduct };
+      // Preserve the frontend string id (productId) — savedProduct.id is the numeric DB row id
+      const merged = { ...newProduct, ...savedProduct, id: newProduct.id };
       setProducts(prev => [merged, ...prev]);
       setViewMode('inventory');
     } catch (err) {
       console.error('Failed to add product:', err);
       setProducts(prev => [newProduct, ...prev]);
       setViewMode('inventory');
-    }
-  };
-
-  const massImportProducts = async (importedProducts: Product[]) => {
-    try {
-      for (const product of importedProducts) {
-        await api.createProduct({
-          productId: product.id,
-          name: product.name,
-          supplier: product.supplier,
-          supplierId: product.supplierId,
-          nodeId: product.nodeId,
-          manufacturer: product.manufacturer,
-          manufacturingLocation: product.manufacturingLocation,
-          description: product.description,
-          imageUrl: product.imageUrl || `https://picsum.photos/seed/${Math.random()}/400/300`,
-          price: product.price,
-          currency: product.currency,
-          unit: product.unit,
-          moq: product.moq,
-          leadTime: product.leadTime,
-          packagingType: product.packagingType,
-          hsCode: product.hsCode,
-          certifications: product.certifications || [],
-          shelfLife: product.shelfLife,
-          storageConditions: product.storageConditions,
-          customFields: product.customFields || {},
-          technicalSpecs: product.technicalSpecs || [],
-          category: product.category,
-          sector: product.sector,
-          createdBy: currentUser.name,
-          history: [],
-        });
-      }
-      setProducts(prev => [...importedProducts, ...prev]);
-      setViewMode('inventory');
-      setAddProductMode('single');
-    } catch (err) {
-      console.error('Failed to import products:', err);
-      setProducts(prev => [...importedProducts, ...prev]);
-      setViewMode('inventory');
-      setAddProductMode('single');
     }
   };
 
@@ -448,7 +406,8 @@ const App: React.FC = () => {
         sector: updatedProduct.sector,
         history: updatedProduct.history,
       });
-      const merged = { ...updatedProduct, ...savedProduct };
+      // Preserve the frontend string id (productId) — savedProduct.id is the numeric DB row id
+      const merged = { ...updatedProduct, ...savedProduct, id: updatedProduct.id };
       setProducts(prev => prev.map(p => p.id === updatedProduct.id ? merged : p));
     } catch (err) {
       console.error('Failed to update product:', err);
@@ -848,67 +807,19 @@ const App: React.FC = () => {
               />
             )}
             {viewMode === 'add-product' && (
-              <div className="space-y-6">
-                <div className="flex items-center gap-4 bg-white p-4 rounded-2xl border border-slate-200 shadow-sm">
-                  <span className="text-sm font-semibold text-slate-600">Import Mode:</span>
-                  <div className="flex bg-slate-100 rounded-xl p-1">
-                    <button
-                      onClick={() => setAddProductMode('single')}
-                      className={`px-4 py-2 text-sm font-semibold rounded-lg transition-all ${
-                        addProductMode === 'single' 
-                          ? 'bg-white text-blue-600 shadow-sm' 
-                          : 'text-slate-500 hover:text-slate-700'
-                      }`}
-                    >
-                      Single Product
-                    </button>
-                    <button
-                      onClick={() => setAddProductMode('mass')}
-                      className={`px-4 py-2 text-sm font-semibold rounded-lg transition-all ${
-                        addProductMode === 'mass' 
-                          ? 'bg-white text-blue-600 shadow-sm' 
-                          : 'text-slate-500 hover:text-slate-700'
-                      }`}
-                    >
-                      Mass Import
-                    </button>
-                  </div>
-                </div>
-                
-                {addProductMode === 'single' ? (
-                  <ProductForm 
-                    onSubmit={addProduct} 
-                    onCancel={() => setViewMode('inventory')}
-                    currentUser={currentUser}
-                    customFields={customFieldConfigs}
-                    treeNodes={treeNodes}
-                    suppliers={suppliers}
-                    usageAreas={usageAreas}
-                    units={units}
-                    colors={colorsList}
-                    onAddFieldDefinition={addCustomFieldDefinition}
-                    onAddTreeNode={addTreeNode}
-                  />
-                ) : (
-                  <MassImportWizard
-                    onImport={massImportProducts}
-                    onCancel={() => { setViewMode('inventory'); setAddProductMode('single'); }}
-                    treeNodes={treeNodes}
-                    suppliers={suppliers}
-                    existingProducts={products}
-                    usageAreas={usageAreas}
-                    units={units}
-                    onUnitsChange={async (newUnits) => {
-                      try {
-                        const updated = await api.updateUnits(newUnits);
-                        setUnits(updated);
-                      } catch (e) {
-                        console.error('Failed to auto-add units:', e);
-                      }
-                    }}
-                  />
-                )}
-              </div>
+              <ProductForm 
+                onSubmit={addProduct} 
+                onCancel={() => setViewMode('inventory')}
+                currentUser={currentUser}
+                customFields={customFieldConfigs}
+                treeNodes={treeNodes}
+                suppliers={suppliers}
+                usageAreas={usageAreas}
+                units={units}
+                colors={colorsList}
+                onAddFieldDefinition={addCustomFieldDefinition}
+                onAddTreeNode={addTreeNode}
+              />
             )}
             {viewMode === 'taxonomy-manager' && (
               <TaxonomyBuilder

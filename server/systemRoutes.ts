@@ -1,7 +1,7 @@
 import type { Express } from "express";
 import { db } from "./db";
-import { systems, systemLayers, systemProductOptions, sectors, systemHistory, products } from "@shared/schema";
-import { eq, asc, desc } from "drizzle-orm";
+import { systems, systemLayers, systemProductOptions, sectors, systemHistory, products, documents as documentsTable } from "@shared/schema";
+import { eq, asc, desc, and } from "drizzle-orm";
 import { authMiddleware, requirePasswordChange } from "./authRoutes";
 
 function generateId(prefix: string): string {
@@ -152,17 +152,16 @@ export function registerSystemRoutes(app: Express): void {
 
   app.delete("/api/systems/:systemId", async (req, res) => {
     try {
-      await db.delete(systemProductOptions).where(
-        eq(systemProductOptions.layerId, 
-          db.select({ layerId: systemLayers.layerId }).from(systemLayers).where(eq(systemLayers.systemId, req.params.systemId)).limit(1) as any
-        )
-      );
       const sysLayers = await db.select().from(systemLayers).where(eq(systemLayers.systemId, req.params.systemId));
       for (const layer of sysLayers) {
         await db.delete(systemProductOptions).where(eq(systemProductOptions.layerId, layer.layerId));
       }
       await db.delete(systemLayers).where(eq(systemLayers.systemId, req.params.systemId));
       await db.delete(systemHistory).where(eq(systemHistory.systemId, req.params.systemId));
+      // Cascade: remove any documents linked to this system
+      await db.delete(documentsTable).where(
+        and(eq(documentsTable.relatedToType, 'System'), eq(documentsTable.relatedToId, req.params.systemId))
+      );
       const [deleted] = await db.delete(systems).where(eq(systems.systemId, req.params.systemId)).returning();
       if (!deleted) return res.status(404).json({ error: "System not found" });
       res.json({ success: true });
