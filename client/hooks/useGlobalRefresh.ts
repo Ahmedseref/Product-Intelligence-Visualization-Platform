@@ -39,6 +39,7 @@ export function useGlobalRefresh(
   }, [recalcEditing]);
 
   const doRefresh = useCallback(async () => {
+    if (isEditingRef.current || isRefreshingRef.current) return;
     isRefreshingRef.current = true;
     try {
       await onRefreshRef.current();
@@ -72,7 +73,6 @@ export function useGlobalRefresh(
           debouncedRefresh();
         } else if (triggerIdRef.current === null) {
           triggerIdRef.current = data.triggerId;
-          setLastSynced(new Date());
         }
       } catch {
       } finally {
