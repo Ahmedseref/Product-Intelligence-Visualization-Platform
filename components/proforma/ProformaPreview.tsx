@@ -3,6 +3,7 @@ import { ArrowLeft, Edit2, RotateCcw, Plus, Trash2, CheckCircle, X, Printer, Fil
 import { api } from '../../client/api';
 import { ProformaData, ProformaItemData, ProformaSettingsData, ProformaFinancialData, CustomerFieldData } from '../../types';
 import FinancialsEditor, { computeFinancials } from './FinancialsEditor';
+import { useRefreshContext } from '../../client/contexts/RefreshContext';
 
 interface ProformaPreviewProps {
   proformaId: string;
@@ -22,6 +23,7 @@ interface EditingCell {
 }
 
 const ProformaPreview: React.FC<ProformaPreviewProps> = ({ proformaId, onBack }) => {
+  const { setIsEditing } = useRefreshContext();
   const [proforma, setProforma] = useState<ProformaData | null>(null);
   const [settings, setSettings] = useState<ProformaSettingsData>({});
   const [financials, setFinancials] = useState<ProformaFinancialData[]>([]);
@@ -37,6 +39,10 @@ const ProformaPreview: React.FC<ProformaPreviewProps> = ({ proformaId, onBack })
   const [metaDraft, setMetaDraft] = useState<Record<string, string>>({});
   const [savingMeta, setSavingMeta] = useState(false);
   const invoiceRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    setIsEditing(editingCell !== null || editingMeta);
+  }, [editingCell, editingMeta, setIsEditing]);
 
   const load = useCallback(async () => {
     setLoading(true);

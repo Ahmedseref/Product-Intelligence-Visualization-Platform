@@ -24,23 +24,26 @@ export function useGlobalRefresh(
   const isEditingRef = useRef(isEditing);
   isEditingRef.current = isEditing;
 
+  const doRefresh = useCallback(async () => {
+    isRefreshingRef.current = true;
+    try {
+      await onRefreshRef.current();
+      setLastSynced(new Date());
+    } finally {
+      isRefreshingRef.current = false;
+    }
+  }, []);
+
   const debouncedRefresh = useCallback(() => {
     if (debounceTimerRef.current) clearTimeout(debounceTimerRef.current);
-    debounceTimerRef.current = setTimeout(async () => {
-      if (isRefreshingRef.current) return;
-      isRefreshingRef.current = true;
-      try {
-        await onRefreshRef.current();
-        setLastSynced(new Date());
-      } finally {
-        isRefreshingRef.current = false;
-      }
+    debounceTimerRef.current = setTimeout(() => {
+      doRefresh();
     }, debounceMs);
-  }, [debounceMs]);
+  }, [debounceMs, doRefresh]);
 
   useEffect(() => {
     const poll = async () => {
-      if (isEditingRef.current || isPollFetchingRef.current) return;
+      if (isEditingRef.current || isPollFetchingRef.current || isRefreshingRef.current) return;
 
       isPollFetchingRef.current = true;
       try {
@@ -51,11 +54,12 @@ export function useGlobalRefresh(
         const data: { triggerId: number; lastUpdated: string | null } = await res.json();
 
         if (triggerIdRef.current !== null && data.triggerId !== triggerIdRef.current) {
+          triggerIdRef.current = data.triggerId;
           debouncedRefresh();
         } else if (triggerIdRef.current === null) {
+          triggerIdRef.current = data.triggerId;
           setLastSynced(new Date());
         }
-        triggerIdRef.current = data.triggerId;
       } catch {
       } finally {
         isPollFetchingRef.current = false;
@@ -83,7 +87,7 @@ export function useGlobalRefresh(
     const handleFocusOut = () => {
       setTimeout(() => {
         const active = document.activeElement as HTMLElement | null;
-        if (!active || (!['INPUT', 'TEXTAREA', 'SELECT'].includes(active.tagName) && !active.isContentEditable)) {
+        if (!active || (!EDITABLE_TAGS.has(active.tagName) && !active.isContentEditable)) {
           setIsEditing(false);
         }
       }, 200);

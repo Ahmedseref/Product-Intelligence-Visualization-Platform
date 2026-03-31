@@ -890,6 +890,7 @@ export function registerRoutes(app: Express): void {
     try {
       const { description } = req.body;
       const backup = await backupService.createBackup("MANUAL", description || "Manual backup");
+      refreshState.trigger();
       res.status(201).json(backup);
     } catch (error) {
       console.error("Error creating backup:", error);
@@ -998,6 +999,7 @@ export function registerRoutes(app: Express): void {
         return res.status(400).json({ error: "Invalid backup ID" });
       }
       await backupService.deleteBackup(id);
+      refreshState.trigger();
       res.status(204).send();
     } catch (error) {
       console.error("Error deleting backup:", error);
@@ -1032,6 +1034,7 @@ export function registerRoutes(app: Express): void {
   app.put("/api/backups/settings", async (req, res) => {
     try {
       const settings = await backupService.updateBackupSettings(req.body);
+      refreshState.trigger();
       res.json(settings);
     } catch (error) {
       console.error("Error updating backup settings:", error);

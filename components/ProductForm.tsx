@@ -4,6 +4,7 @@ import { CURRENCIES, UNITS, ICONS } from '../constants';
 import { Plus, Trash2, X, Check, Hash } from 'lucide-react';
 import TaxonomyNodeSelector from './TaxonomyNodeSelector';
 import { api } from '../client/api';
+import { useRefreshContext } from '../client/contexts/RefreshContext';
 
 interface ProductFormProps {
   onSubmit: (p: Product) => void;
@@ -22,6 +23,13 @@ interface ProductFormProps {
 }
 
 const ProductForm: React.FC<ProductFormProps> = ({ onSubmit, onCancel, currentUser, customFields, treeNodes, suppliers = [], usageAreas = [], units: unitsProp, colors = [], onAddFieldDefinition, onAddTreeNode, initialProduct, mode = 'create' }) => {
+  const { setIsEditing } = useRefreshContext();
+
+  useEffect(() => {
+    setIsEditing(true);
+    return () => setIsEditing(false);
+  }, [setIsEditing]);
+
   const isEditMode = mode === 'edit' && initialProduct;
   const USAGE_AREAS = usageAreas;
   const dynamicUnits = unitsProp && unitsProp.length > 0 ? unitsProp : UNITS;

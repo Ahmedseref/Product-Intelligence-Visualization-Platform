@@ -21,6 +21,7 @@ import ProformaInvoice from './components/ProformaInvoice';
 import { api, authApi, setAuthToken, initAuthToken, AuthUser } from './client/api';
 import { LogOut, PanelLeftClose, PanelLeftOpen } from 'lucide-react';
 import { useGlobalRefresh } from './client/hooks/useGlobalRefresh';
+import { RefreshProvider } from './client/contexts/RefreshContext';
 
 const App: React.FC = () => {
   const [authUser, setAuthUser] = useState<AuthUser | null>(null);
@@ -309,7 +310,7 @@ const App: React.FC = () => {
     return () => clearTimeout(timer);
   }, [syncWithDatabase]);
 
-  const { lastSynced } = useGlobalRefresh(syncWithDatabase);
+  const { setIsEditing, lastSynced } = useGlobalRefresh(syncWithDatabase);
 
   const lastSyncedLabel = lastSynced
     ? lastSynced.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' })
@@ -720,6 +721,7 @@ const App: React.FC = () => {
   }
 
   return (
+    <RefreshProvider value={{ setIsEditing }}>
     <div className="flex h-screen bg-slate-50 overflow-hidden">
       {error && (
         <div className="fixed top-4 right-4 bg-amber-100 border border-amber-300 text-amber-800 px-4 py-2 rounded-lg text-sm z-50">
@@ -1097,6 +1099,7 @@ const App: React.FC = () => {
       </div>
       <FloatingNotesWidget />
     </div>
+    </RefreshProvider>
   );
 };
 
