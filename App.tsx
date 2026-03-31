@@ -308,14 +308,14 @@ const App: React.FC = () => {
     }
   }, []);
 
-  const { lockEditing, unlockEditing, lastSynced, setLastSynced } = useGlobalRefresh(syncWithDatabase);
+  const { lockEditing, unlockEditing, lastSynced, markSynced } = useGlobalRefresh(syncWithDatabase);
 
   useEffect(() => {
     const timer = setTimeout(() => {
-      syncWithDatabase().then(() => setLastSynced(new Date()));
+      syncWithDatabase().then(() => markSynced());
     }, 2000);
     return () => clearTimeout(timer);
-  }, [syncWithDatabase, setLastSynced]);
+  }, [syncWithDatabase, markSynced]);
 
   const lastSyncedLabel = lastSynced
     ? lastSynced.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' })

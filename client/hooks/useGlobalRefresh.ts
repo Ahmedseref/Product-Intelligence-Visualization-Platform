@@ -120,5 +120,9 @@ export function useGlobalRefresh(
     };
   }, [recalcEditing]);
 
-  return { lockEditing, unlockEditing, lastSynced, setLastSynced };
+  const markSynced = useCallback(() => {
+    setLastSynced(new Date());
+  }, []);
+
+  return { lockEditing, unlockEditing, lastSynced, markSynced };
 }
