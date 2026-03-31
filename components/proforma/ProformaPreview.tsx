@@ -571,11 +571,11 @@ const ProformaPreview: React.FC<ProformaPreviewProps> = ({ proformaId, onBack })
               {calcSteps.map((step) => (
                 <tr key={step.id} className="border-t border-dashed border-slate-200">
                   <td colSpan={4} className="px-3 py-1.5 text-right text-xs text-slate-900 uppercase font-medium">
-                    {step.computedAmount < 0 ? '−' : '+'} {step.name}
+                    {step.name}
                     {step.valueType === 'percentage' && ` (${step.value}%)`}
                   </td>
                   <td className="px-3 py-1.5 text-right text-xs font-medium text-slate-900 uppercase">
-                    {step.computedAmount < 0 ? '− ' : '+ '}{currency} {fmt(Math.abs(step.computedAmount))}
+                    {currency} {fmt(Math.abs(step.computedAmount))}
                   </td>
                   {!pdfCapturing && <td className="print:hidden" />}
                 </tr>
