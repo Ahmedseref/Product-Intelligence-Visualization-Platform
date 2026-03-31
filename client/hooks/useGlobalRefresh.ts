@@ -60,10 +60,13 @@ export function useGlobalRefresh(
     const poll = async () => {
       if (isEditingRef.current || isPollFetchingRef.current || isRefreshingRef.current) return;
 
+      const token = localStorage.getItem('auth_token');
+      if (!token) return;
+
       isPollFetchingRef.current = true;
       try {
         const res = await fetch('/api/refresh-state', {
-          headers: { 'Authorization': `Bearer ${localStorage.getItem('auth_token') || ''}` },
+          headers: { 'Authorization': `Bearer ${token}` },
         });
         if (!res.ok) return;
         const data: { triggerId: number; lastUpdated: string | null } = await res.json();
@@ -117,5 +120,5 @@ export function useGlobalRefresh(
     };
   }, [recalcEditing]);
 
-  return { lockEditing, unlockEditing, lastSynced };
+  return { lockEditing, unlockEditing, lastSynced, setLastSynced };
 }
