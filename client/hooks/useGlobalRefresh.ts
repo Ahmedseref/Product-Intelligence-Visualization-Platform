@@ -13,8 +13,10 @@ export function useGlobalRefresh(
 
   const [lastSynced, setLastSynced] = useState<Date | null>(null);
 
-  const editLockCountRef = useRef(0);
+  const manualLockCountRef = useRef(0);
+  const isFocusEditingRef = useRef(false);
   const isEditingRef = useRef(false);
+
   const triggerIdRef = useRef<number | null>(null);
   const isPollFetchingRef = useRef(false);
   const isRefreshingRef = useRef(false);
@@ -22,19 +24,19 @@ export function useGlobalRefresh(
   const onRefreshRef = useRef(onRefresh);
   onRefreshRef.current = onRefresh;
 
-  const updateEditingState = useCallback(() => {
-    isEditingRef.current = editLockCountRef.current > 0;
+  const recalcEditing = useCallback(() => {
+    isEditingRef.current = manualLockCountRef.current > 0 || isFocusEditingRef.current;
   }, []);
 
   const lockEditing = useCallback(() => {
-    editLockCountRef.current += 1;
-    updateEditingState();
-  }, [updateEditingState]);
+    manualLockCountRef.current += 1;
+    recalcEditing();
+  }, [recalcEditing]);
 
   const unlockEditing = useCallback(() => {
-    editLockCountRef.current = Math.max(0, editLockCountRef.current - 1);
-    updateEditingState();
-  }, [updateEditingState]);
+    manualLockCountRef.current = Math.max(0, manualLockCountRef.current - 1);
+    recalcEditing();
+  }, [recalcEditing]);
 
   const doRefresh = useCallback(async () => {
     isRefreshingRef.current = true;
@@ -92,8 +94,8 @@ export function useGlobalRefresh(
     const handleFocusIn = (e: FocusEvent) => {
       const target = e.target as HTMLElement;
       if (EDITABLE_TAGS.has(target.tagName) || target.isContentEditable) {
-        editLockCountRef.current = Math.max(1, editLockCountRef.current);
-        updateEditingState();
+        isFocusEditingRef.current = true;
+        recalcEditing();
       }
     };
 
@@ -101,10 +103,8 @@ export function useGlobalRefresh(
       setTimeout(() => {
         const active = document.activeElement as HTMLElement | null;
         if (!active || (!EDITABLE_TAGS.has(active.tagName) && !active.isContentEditable)) {
-          if (editLockCountRef.current <= 1) {
-            editLockCountRef.current = 0;
-            updateEditingState();
-          }
+          isFocusEditingRef.current = false;
+          recalcEditing();
         }
       }, 200);
     };
@@ -115,7 +115,7 @@ export function useGlobalRefresh(
       document.removeEventListener('focusin', handleFocusIn);
       document.removeEventListener('focusout', handleFocusOut);
     };
-  }, [updateEditingState]);
+  }, [recalcEditing]);
 
   return { lockEditing, unlockEditing, lastSynced };
 }
