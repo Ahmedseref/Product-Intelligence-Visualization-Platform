@@ -122,6 +122,7 @@ const App: React.FC = () => {
         const colorsData = await api.getColors();
         setColorsList(colorsData);
       } catch {}
+      syncWithDatabase().then(() => markSynced());
     } catch (err: any) {
       setAuthError(err.message || 'Login failed');
     } finally {
@@ -311,11 +312,12 @@ const App: React.FC = () => {
   const { lockEditing, unlockEditing, lastSynced, markSynced } = useGlobalRefresh(syncWithDatabase);
 
   useEffect(() => {
+    if (!authUser) return;
     const timer = setTimeout(() => {
       syncWithDatabase().then(() => markSynced());
     }, 2000);
     return () => clearTimeout(timer);
-  }, [syncWithDatabase, markSynced]);
+  }, [authUser, syncWithDatabase, markSynced]);
 
   const lastSyncedLabel = lastSynced
     ? lastSynced.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' })
