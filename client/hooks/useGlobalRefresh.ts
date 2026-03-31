@@ -62,7 +62,7 @@ export function useGlobalRefresh(
       isPollFetchingRef.current = true;
       try {
         const res = await fetch('/api/refresh-state', {
-          headers: { 'Authorization': `Bearer ${localStorage.getItem('authToken') || ''}` },
+          headers: { 'Authorization': `Bearer ${localStorage.getItem('auth_token') || ''}` },
         });
         if (!res.ok) return;
         const data: { triggerId: number; lastUpdated: string | null } = await res.json();
