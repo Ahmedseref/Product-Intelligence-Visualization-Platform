@@ -6,7 +6,7 @@ interface UseGlobalRefreshOptions {
 }
 
 export function useGlobalRefresh(
-  onRefresh: () => void,
+  onRefresh: () => Promise<void>,
   options: UseGlobalRefreshOptions = {}
 ) {
   const { intervalMs = 30000, debounceMs = 500 } = options;
@@ -15,7 +15,8 @@ export function useGlobalRefresh(
   const [lastSynced, setLastSynced] = useState<Date | null>(null);
 
   const triggerIdRef = useRef<number | null>(null);
-  const isFetchingRef = useRef(false);
+  const isPollFetchingRef = useRef(false);
+  const isRefreshingRef = useRef(false);
   const debounceTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const onRefreshRef = useRef(onRefresh);
   onRefreshRef.current = onRefresh;
@@ -25,17 +26,23 @@ export function useGlobalRefresh(
 
   const debouncedRefresh = useCallback(() => {
     if (debounceTimerRef.current) clearTimeout(debounceTimerRef.current);
-    debounceTimerRef.current = setTimeout(() => {
-      onRefreshRef.current();
-      setLastSynced(new Date());
+    debounceTimerRef.current = setTimeout(async () => {
+      if (isRefreshingRef.current) return;
+      isRefreshingRef.current = true;
+      try {
+        await onRefreshRef.current();
+        setLastSynced(new Date());
+      } finally {
+        isRefreshingRef.current = false;
+      }
     }, debounceMs);
   }, [debounceMs]);
 
   useEffect(() => {
     const poll = async () => {
-      if (isEditingRef.current || isFetchingRef.current) return;
+      if (isEditingRef.current || isPollFetchingRef.current) return;
 
-      isFetchingRef.current = true;
+      isPollFetchingRef.current = true;
       try {
         const res = await fetch('/api/refresh-state', {
           headers: { 'Authorization': `Bearer ${localStorage.getItem('authToken') || ''}` },
@@ -51,7 +58,7 @@ export function useGlobalRefresh(
         triggerIdRef.current = data.triggerId;
       } catch {
       } finally {
-        isFetchingRef.current = false;
+        isPollFetchingRef.current = false;
       }
     };
 
@@ -62,6 +69,33 @@ export function useGlobalRefresh(
       if (debounceTimerRef.current) clearTimeout(debounceTimerRef.current);
     };
   }, [intervalMs, debouncedRefresh]);
+
+  useEffect(() => {
+    const EDITABLE_TAGS = new Set(['INPUT', 'TEXTAREA', 'SELECT']);
+
+    const handleFocusIn = (e: FocusEvent) => {
+      const target = e.target as HTMLElement;
+      if (EDITABLE_TAGS.has(target.tagName) || target.isContentEditable) {
+        setIsEditing(true);
+      }
+    };
+
+    const handleFocusOut = () => {
+      setTimeout(() => {
+        const active = document.activeElement as HTMLElement | null;
+        if (!active || (!['INPUT', 'TEXTAREA', 'SELECT'].includes(active.tagName) && !active.isContentEditable)) {
+          setIsEditing(false);
+        }
+      }, 200);
+    };
+
+    document.addEventListener('focusin', handleFocusIn);
+    document.addEventListener('focusout', handleFocusOut);
+    return () => {
+      document.removeEventListener('focusin', handleFocusIn);
+      document.removeEventListener('focusout', handleFocusOut);
+    };
+  }, []);
 
   return { setIsEditing, lastSynced };
 }

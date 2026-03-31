@@ -636,6 +636,7 @@ export function registerRoutes(app: Express): void {
   app.post("/api/attachments", async (req, res) => {
     try {
       const attachment = await storage.createAttachment(req.body);
+      refreshState.trigger();
       res.status(201).json(attachment);
     } catch (error) {
       console.error("Error creating attachment:", error);
@@ -649,6 +650,7 @@ export function registerRoutes(app: Express): void {
       if (!attachment) {
         return res.status(404).json({ error: "Attachment not found" });
       }
+      refreshState.trigger();
       res.json(attachment);
     } catch (error) {
       console.error("Error updating attachment:", error);
@@ -659,6 +661,7 @@ export function registerRoutes(app: Express): void {
   app.delete("/api/attachments/:attachmentId", async (req, res) => {
     try {
       await storage.deleteAttachment(req.params.attachmentId);
+      refreshState.trigger();
       res.status(204).send();
     } catch (error) {
       console.error("Error deleting attachment:", error);
@@ -782,6 +785,7 @@ export function registerRoutes(app: Express): void {
         return res.status(400).json({ error: "Areas must be an array" });
       }
       const updatedAreas = await storage.setUsageAreas(areas);
+      refreshState.trigger();
       res.json(updatedAreas);
     } catch (error) {
       console.error("Error updating usage areas:", error);
@@ -824,6 +828,7 @@ export function registerRoutes(app: Express): void {
           migratedCount++;
         }
       }
+      refreshState.trigger();
       res.json({ migratedCount });
     } catch (error) {
       console.error("Error renaming usage area in products:", error);
@@ -848,6 +853,7 @@ export function registerRoutes(app: Express): void {
         return res.status(400).json({ error: "Units must be an array" });
       }
       const updatedUnits = await storage.setUnits(units);
+      refreshState.trigger();
       res.json(updatedUnits);
     } catch (error) {
       console.error("Error updating units:", error);
@@ -872,6 +878,7 @@ export function registerRoutes(app: Express): void {
         return res.status(400).json({ error: "Columns must be an array" });
       }
       const updated = await storage.setInventoryColumns(columns);
+      refreshState.trigger();
       res.json(updated);
     } catch (error) {
       console.error("Error updating inventory columns:", error);
@@ -938,6 +945,7 @@ export function registerRoutes(app: Express): void {
       }
       const result = await backupService.restoreBackup(id);
       if (result.success) {
+        refreshState.trigger();
         res.json(result);
       } else {
         res.status(500).json(result);
@@ -967,6 +975,7 @@ export function registerRoutes(app: Express): void {
           const buffer = Buffer.concat(chunks);
           const result = await backupService.importBackup(buffer);
           if (result.success) {
+            refreshState.trigger();
             res.status(201).json(result);
           } else {
             res.status(400).json(result);
@@ -1135,6 +1144,7 @@ export function registerRoutes(app: Express): void {
         (req as any).user?.username || "Admin"
       );
       if (!code) return res.status(404).json({ error: "Product not found" });
+      refreshState.trigger();
       res.json({ stockCode: code });
     } catch (error) {
       console.error("Error generating stock code:", error);
@@ -1147,6 +1157,7 @@ export function registerRoutes(app: Express): void {
       const updated = await stockCodeService.bulkRegenerateStockCodes(
         (req as any).user?.username || "Admin"
       );
+      refreshState.trigger();
       res.json({ updated });
     } catch (error) {
       console.error("Error bulk regenerating stock codes:", error);
@@ -1157,6 +1168,7 @@ export function registerRoutes(app: Express): void {
   app.post("/api/stock-codes/migrate-branch-codes", async (req, res) => {
     try {
       const migrated = await stockCodeService.migrateExistingBranchCodes();
+      refreshState.trigger();
       res.json({ migrated });
     } catch (error) {
       console.error("Error migrating branch codes:", error);

@@ -337,6 +337,7 @@ export function registerSystemRoutes(app: Express): void {
   app.post("/api/system-history", async (req, res) => {
     try {
       const [created] = await db.insert(systemHistory).values(req.body).returning();
+      refreshState.trigger();
       res.status(201).json(created);
     } catch (error) {
       console.error("Error creating history entry:", error);
@@ -446,6 +447,7 @@ export function registerSystemRoutes(app: Express): void {
 
       await db.update(systems).set({ version: newVersion, updatedAt: new Date() }).where(eq(systems.systemId, req.params.systemId));
 
+      refreshState.trigger();
       res.json({ success: true, version: newVersion });
     } catch (error) {
       console.error("Error creating snapshot:", error);
@@ -564,6 +566,7 @@ export function registerSystemRoutes(app: Express): void {
         }
       }
 
+      refreshState.trigger();
       res.status(201).json(createdSystem);
     } catch (error) {
       console.error("Error importing system:", error);
