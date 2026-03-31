@@ -2,6 +2,7 @@ import type { Express } from "express";
 import { storage } from "./storage";
 import { authMiddleware, requirePasswordChange } from "./authRoutes";
 import * as XLSX from "xlsx";
+import { refreshState } from "./refreshState";
 
 function computeFinancials(
   subtotal: number,
@@ -66,6 +67,7 @@ export function registerProformaRoutes(app: Express): void {
   app.put("/api/proforma/settings", async (req, res) => {
     try {
       const settings = await storage.upsertProformaSettings(req.body);
+      refreshState.trigger();
       res.json(settings);
     } catch (error) {
       console.error("Error saving proforma settings:", error);
@@ -88,6 +90,7 @@ export function registerProformaRoutes(app: Express): void {
     try {
       const nextId = await storage.getNextProformaId();
       const created = await storage.createProforma({ ...req.body, proformaId: nextId });
+      refreshState.trigger();
       res.status(201).json(created);
     } catch (error) {
       console.error("Error creating proforma:", error);
@@ -111,6 +114,7 @@ export function registerProformaRoutes(app: Express): void {
     try {
       const updated = await storage.updateProforma(req.params.proformaId, req.body);
       if (!updated) return res.status(404).json({ error: "Proforma not found" });
+      refreshState.trigger();
       res.json(updated);
     } catch (error) {
       console.error("Error updating proforma:", error);
@@ -122,6 +126,7 @@ export function registerProformaRoutes(app: Express): void {
     try {
       const deleted = await storage.deleteProforma(req.params.proformaId);
       if (!deleted) return res.status(404).json({ error: "Proforma not found" });
+      refreshState.trigger();
       res.json({ success: true });
     } catch (error) {
       console.error("Error deleting proforma:", error);
@@ -223,6 +228,7 @@ export function registerProformaRoutes(app: Express): void {
   app.post("/api/proforma/:proformaId/items", async (req, res) => {
     try {
       const item = await storage.createProformaItem({ ...req.body, proformaId: req.params.proformaId });
+      refreshState.trigger();
       res.status(201).json(item);
     } catch (error) {
       console.error("Error adding proforma item:", error);
@@ -236,6 +242,7 @@ export function registerProformaRoutes(app: Express): void {
       if (isNaN(id)) return res.status(400).json({ error: "Invalid item ID" });
       const updated = await storage.updateProformaItem(id, req.body);
       if (!updated) return res.status(404).json({ error: "Item not found" });
+      refreshState.trigger();
       res.json(updated);
     } catch (error) {
       console.error("Error updating proforma item:", error);
@@ -249,6 +256,7 @@ export function registerProformaRoutes(app: Express): void {
       if (isNaN(id)) return res.status(400).json({ error: "Invalid item ID" });
       const deleted = await storage.deleteProformaItem(id);
       if (!deleted) return res.status(404).json({ error: "Item not found" });
+      refreshState.trigger();
       res.json({ success: true });
     } catch (error) {
       console.error("Error deleting proforma item:", error);
@@ -279,6 +287,7 @@ export function registerProformaRoutes(app: Express): void {
         value: req.body.value || 0,
         orderIndex: nextOrder,
       });
+      refreshState.trigger();
       res.status(201).json(created);
     } catch (error) {
       console.error("Error creating proforma financial:", error);
@@ -292,6 +301,7 @@ export function registerProformaRoutes(app: Express): void {
       if (isNaN(id)) return res.status(400).json({ error: "Invalid ID" });
       const updated = await storage.updateProformaFinancial(id, req.body);
       if (!updated) return res.status(404).json({ error: "Financial not found" });
+      refreshState.trigger();
       res.json(updated);
     } catch (error) {
       console.error("Error updating proforma financial:", error);
@@ -305,6 +315,7 @@ export function registerProformaRoutes(app: Express): void {
       if (isNaN(id)) return res.status(400).json({ error: "Invalid ID" });
       const deleted = await storage.deleteProformaFinancial(id);
       if (!deleted) return res.status(404).json({ error: "Financial not found" });
+      refreshState.trigger();
       res.json({ success: true });
     } catch (error) {
       console.error("Error deleting proforma financial:", error);

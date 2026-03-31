@@ -6,6 +6,7 @@ import { eq, and } from "drizzle-orm";
 import * as backupService from "./backupService";
 import * as stockCodeService from "./stockCodeService";
 import { authMiddleware, requirePasswordChange } from "./authRoutes";
+import { refreshState } from "./refreshState";
 
 export function registerRoutes(app: Express): void {
   app.use("/api/tree-nodes", authMiddleware, requirePasswordChange);
@@ -46,6 +47,7 @@ export function registerRoutes(app: Express): void {
   app.post("/api/tree-nodes", async (req, res) => {
     try {
       const node = await storage.createTreeNode(req.body);
+      refreshState.trigger();
       res.status(201).json(node);
     } catch (error) {
       console.error("Error creating tree node:", error);
@@ -69,6 +71,7 @@ export function registerRoutes(app: Express): void {
           console.error("Stock code regen after node update failed:", e)
         );
       }
+      refreshState.trigger();
       res.json(node);
     } catch (error) {
       console.error("Error updating tree node:", error);
@@ -79,6 +82,7 @@ export function registerRoutes(app: Express): void {
   app.delete("/api/tree-nodes/:nodeId", async (req, res) => {
     try {
       await storage.deleteTreeNode(req.params.nodeId);
+      refreshState.trigger();
       res.status(204).send();
     } catch (error) {
       console.error("Error deleting tree node:", error);
@@ -198,6 +202,7 @@ export function registerRoutes(app: Express): void {
           console.error("Stock code generation failed (non-critical):", e);
         }
       }
+      refreshState.trigger();
       res.status(201).json(product);
     } catch (error) {
       console.error("Error creating product:", error);
@@ -227,6 +232,7 @@ export function registerRoutes(app: Express): void {
           console.error("Stock code regeneration failed (non-critical):", e);
         }
       }
+      refreshState.trigger();
       res.json(product);
     } catch (error) {
       console.error("Error updating product:", error);
@@ -241,6 +247,7 @@ export function registerRoutes(app: Express): void {
         and(eq(documentsTable.relatedToType, 'Product'), eq(documentsTable.relatedToId, req.params.productId))
       );
       await storage.deleteProduct(req.params.productId);
+      refreshState.trigger();
       res.status(204).send();
     } catch (error) {
       console.error("Error deleting product:", error);
@@ -261,6 +268,7 @@ export function registerRoutes(app: Express): void {
   app.post("/api/custom-fields", async (req, res) => {
     try {
       const field = await storage.createCustomFieldDefinition(req.body);
+      refreshState.trigger();
       res.status(201).json(field);
     } catch (error) {
       console.error("Error creating custom field:", error);
@@ -271,6 +279,7 @@ export function registerRoutes(app: Express): void {
   app.delete("/api/custom-fields/:fieldId", async (req, res) => {
     try {
       await storage.deleteCustomFieldDefinition(req.params.fieldId);
+      refreshState.trigger();
       res.status(204).send();
     } catch (error) {
       console.error("Error deleting custom field:", error);
@@ -475,6 +484,7 @@ export function registerRoutes(app: Express): void {
   app.post("/api/suppliers", async (req, res) => {
     try {
       const supplier = await storage.createSupplier(req.body);
+      refreshState.trigger();
       res.status(201).json(supplier);
     } catch (error) {
       console.error("Error creating supplier:", error);
@@ -498,6 +508,7 @@ export function registerRoutes(app: Express): void {
           console.error("Stock code regeneration after supplier code change failed:", e);
         }
       }
+      refreshState.trigger();
       res.json(supplier);
     } catch (error) {
       console.error("Error updating supplier:", error);
@@ -512,6 +523,7 @@ export function registerRoutes(app: Express): void {
         and(eq(documentsTable.relatedToType, 'Supplier'), eq(documentsTable.relatedToId, req.params.supplierId))
       );
       await storage.deleteSupplier(req.params.supplierId);
+      refreshState.trigger();
       res.status(204).send();
     } catch (error) {
       console.error("Error deleting supplier:", error);
@@ -555,6 +567,7 @@ export function registerRoutes(app: Express): void {
   app.post("/api/supplier-products", async (req, res) => {
     try {
       const supplierProduct = await storage.createSupplierProduct(req.body);
+      refreshState.trigger();
       res.status(201).json(supplierProduct);
     } catch (error) {
       console.error("Error creating supplier product:", error);
@@ -568,6 +581,7 @@ export function registerRoutes(app: Express): void {
       if (!supplierProduct) {
         return res.status(404).json({ error: "Supplier product not found" });
       }
+      refreshState.trigger();
       res.json(supplierProduct);
     } catch (error) {
       console.error("Error updating supplier product:", error);
@@ -578,6 +592,7 @@ export function registerRoutes(app: Express): void {
   app.delete("/api/supplier-products/:supplierProductId", async (req, res) => {
     try {
       await storage.deleteSupplierProduct(req.params.supplierProductId);
+      refreshState.trigger();
       res.status(204).send();
     } catch (error) {
       console.error("Error deleting supplier product:", error);
@@ -1036,6 +1051,7 @@ export function registerRoutes(app: Express): void {
         return res.status(400).json({ error: validation.error });
       }
       const color = await storage.createColor({ name, code: code.toUpperCase(), hexValue });
+      refreshState.trigger();
       res.status(201).json(color);
     } catch (error: any) {
       if (error.message?.includes('unique') || error.code === '23505') {
@@ -1063,6 +1079,7 @@ export function registerRoutes(app: Express): void {
           );
         }
       }
+      refreshState.trigger();
       res.json(color);
     } catch (error) {
       console.error("Error updating color:", error);
@@ -1085,6 +1102,7 @@ export function registerRoutes(app: Express): void {
         }
       }
       await storage.deleteColor(id);
+      refreshState.trigger();
       res.status(204).send();
     } catch (error) {
       console.error("Error deleting color:", error);
@@ -1246,5 +1264,10 @@ export function registerRoutes(app: Express): void {
       console.error("Error suggesting branch code:", error);
       res.status(500).json({ error: "Failed to suggest branch code" });
     }
+  });
+
+  app.use("/api/refresh-state", authMiddleware);
+  app.get("/api/refresh-state", (_req, res) => {
+    res.json({ triggerId: refreshState.triggerId, lastUpdated: refreshState.lastUpdated });
   });
 }

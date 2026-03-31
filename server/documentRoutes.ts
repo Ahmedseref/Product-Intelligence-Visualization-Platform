@@ -1,6 +1,7 @@
 import type { Express } from "express";
 import { storage } from "./storage";
 import { authMiddleware, requirePasswordChange } from "./authRoutes";
+import { refreshState } from "./refreshState";
 
 export function registerDocumentRoutes(app: Express): void {
   app.use("/api/documents", authMiddleware, requirePasswordChange);
@@ -42,6 +43,7 @@ export function registerDocumentRoutes(app: Express): void {
     try {
       const documentId = await storage.getNextDocumentId();
       const doc = await storage.createDocument({ ...req.body, documentId });
+      refreshState.trigger();
       res.status(201).json(doc);
     } catch (error) {
       console.error("Error creating document:", error);
@@ -55,6 +57,7 @@ export function registerDocumentRoutes(app: Express): void {
       if (!doc) {
         return res.status(404).json({ error: "Document not found" });
       }
+      refreshState.trigger();
       res.json(doc);
     } catch (error) {
       console.error("Error updating document:", error);
@@ -68,6 +71,7 @@ export function registerDocumentRoutes(app: Express): void {
       if (!deleted) {
         return res.status(404).json({ error: "Document not found" });
       }
+      refreshState.trigger();
       res.status(204).send();
     } catch (error) {
       console.error("Error deleting document:", error);

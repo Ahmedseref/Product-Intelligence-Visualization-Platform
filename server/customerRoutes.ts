@@ -1,6 +1,7 @@
 import type { Express } from "express";
 import { storage } from "./storage";
 import { authMiddleware, requirePasswordChange } from "./authRoutes";
+import { refreshState } from "./refreshState";
 
 export function registerCustomerRoutes(app: Express): void {
   app.use("/api/customers", authMiddleware, requirePasswordChange);
@@ -32,6 +33,7 @@ export function registerCustomerRoutes(app: Express): void {
         );
       }
       const customerFields = await storage.getCustomerFields(customer.id);
+      refreshState.trigger();
       res.status(201).json({ ...customer, fields: customerFields });
     } catch (error) {
       console.error("Error creating customer:", error);
@@ -74,6 +76,7 @@ export function registerCustomerRoutes(app: Express): void {
       }
       const updated = await storage.getCustomer(id);
       const customerFields = await storage.getCustomerFields(id);
+      refreshState.trigger();
       res.json({ ...updated, fields: customerFields });
     } catch (error) {
       console.error("Error updating customer:", error);
@@ -87,6 +90,7 @@ export function registerCustomerRoutes(app: Express): void {
       if (isNaN(id)) return res.status(400).json({ error: "Invalid ID" });
       const deleted = await storage.deleteCustomer(id);
       if (!deleted) return res.status(404).json({ error: "Customer not found" });
+      refreshState.trigger();
       res.json({ success: true });
     } catch (error) {
       console.error("Error deleting customer:", error);

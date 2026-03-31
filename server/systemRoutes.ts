@@ -3,6 +3,7 @@ import { db } from "./db";
 import { systems, systemLayers, systemProductOptions, sectors, systemHistory, products, documents as documentsTable } from "@shared/schema";
 import { eq, asc, desc, and } from "drizzle-orm";
 import { authMiddleware, requirePasswordChange } from "./authRoutes";
+import { refreshState } from "./refreshState";
 
 function generateId(prefix: string): string {
   return `${prefix}_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
@@ -29,6 +30,7 @@ export function registerSystemRoutes(app: Express): void {
     try {
       const sectorId = generateId("sec");
       const [created] = await db.insert(sectors).values({ ...req.body, sectorId }).returning();
+      refreshState.trigger();
       res.status(201).json(created);
     } catch (error) {
       console.error("Error creating sector:", error);
@@ -44,6 +46,7 @@ export function registerSystemRoutes(app: Express): void {
         .where(eq(sectors.sectorId, req.params.sectorId))
         .returning();
       if (!updated) return res.status(404).json({ error: "Sector not found" });
+      refreshState.trigger();
       res.json(updated);
     } catch (error) {
       console.error("Error updating sector:", error);
@@ -55,6 +58,7 @@ export function registerSystemRoutes(app: Express): void {
     try {
       const [deleted] = await db.delete(sectors).where(eq(sectors.sectorId, req.params.sectorId)).returning();
       if (!deleted) return res.status(404).json({ error: "Sector not found" });
+      refreshState.trigger();
       res.json({ success: true });
     } catch (error) {
       console.error("Error deleting sector:", error);
@@ -128,6 +132,7 @@ export function registerSystemRoutes(app: Express): void {
     try {
       const systemId = generateId("sys");
       const [created] = await db.insert(systems).values({ ...req.body, systemId }).returning();
+      refreshState.trigger();
       res.status(201).json(created);
     } catch (error) {
       console.error("Error creating system:", error);
@@ -143,6 +148,7 @@ export function registerSystemRoutes(app: Express): void {
         .where(eq(systems.systemId, req.params.systemId))
         .returning();
       if (!updated) return res.status(404).json({ error: "System not found" });
+      refreshState.trigger();
       res.json(updated);
     } catch (error) {
       console.error("Error updating system:", error);
