@@ -779,7 +779,7 @@ const App: React.FC = () => {
           <div className="flex items-center gap-4">
             {lastSyncedLabel && (
               <span className="hidden sm:block text-[10px] text-slate-400 whitespace-nowrap" title="Last synced with database">
-                Synced {lastSyncedLabel}
+                Last synced: {lastSyncedLabel}
               </span>
             )}
              <button className="p-2 text-slate-500 hover:bg-slate-100 rounded-full transition-colors relative">

@@ -435,6 +435,7 @@ export function registerRoutes(app: Express): void {
         }
       }
 
+      refreshState.trigger();
       res.json({ message: "Database seeded successfully" });
     } catch (error) {
       console.error("Error seeding database:", error);
@@ -1014,6 +1015,7 @@ export function registerRoutes(app: Express): void {
         return res.status(400).json({ error: "Reason is required" });
       }
       const backup = await backupService.triggerAutoBackup(reason);
+      refreshState.trigger();
       res.status(201).json(backup);
     } catch (error) {
       console.error("Error triggering auto-backup:", error);
