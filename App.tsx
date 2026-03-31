@@ -20,6 +20,7 @@ import DocumentMemory from './components/DocumentMemory';
 import ProformaInvoice from './components/ProformaInvoice';
 import { api, authApi, setAuthToken, initAuthToken, AuthUser } from './client/api';
 import { LogOut, PanelLeftClose, PanelLeftOpen } from 'lucide-react';
+import { useGlobalRefresh } from './client/hooks/useGlobalRefresh';
 
 const App: React.FC = () => {
   const [authUser, setAuthUser] = useState<AuthUser | null>(null);
@@ -307,6 +308,12 @@ const App: React.FC = () => {
     }, 2000);
     return () => clearTimeout(timer);
   }, [syncWithDatabase]);
+
+  const { lastSynced } = useGlobalRefresh(syncWithDatabase);
+
+  const lastSyncedLabel = lastSynced
+    ? lastSynced.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' })
+    : null;
 
   useEffect(() => {
     const handleMouseMove = (e: MouseEvent) => {
@@ -768,6 +775,11 @@ const App: React.FC = () => {
             </div>
           </div>
           <div className="flex items-center gap-4">
+            {lastSyncedLabel && (
+              <span className="hidden sm:block text-[10px] text-slate-400 whitespace-nowrap" title="Last synced with database">
+                Synced {lastSyncedLabel}
+              </span>
+            )}
              <button className="p-2 text-slate-500 hover:bg-slate-100 rounded-full transition-colors relative">
               <div className="absolute top-1 right-1 w-2 h-2 bg-red-500 rounded-full"></div>
               {ICONS.Settings}

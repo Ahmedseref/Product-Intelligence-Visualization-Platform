@@ -170,6 +170,7 @@ export function registerSystemRoutes(app: Express): void {
       );
       const [deleted] = await db.delete(systems).where(eq(systems.systemId, req.params.systemId)).returning();
       if (!deleted) return res.status(404).json({ error: "System not found" });
+      refreshState.trigger();
       res.json({ success: true });
     } catch (error) {
       console.error("Error deleting system:", error);
@@ -195,6 +196,7 @@ export function registerSystemRoutes(app: Express): void {
     try {
       const layerId = generateId("lyr");
       const [created] = await db.insert(systemLayers).values({ ...req.body, layerId }).returning();
+      refreshState.trigger();
       res.status(201).json(created);
     } catch (error) {
       console.error("Error creating layer:", error);
@@ -210,6 +212,7 @@ export function registerSystemRoutes(app: Express): void {
         .where(eq(systemLayers.layerId, req.params.layerId))
         .returning();
       if (!updated) return res.status(404).json({ error: "Layer not found" });
+      refreshState.trigger();
       res.json(updated);
     } catch (error) {
       console.error("Error updating layer:", error);
@@ -231,6 +234,7 @@ export function registerSystemRoutes(app: Express): void {
         .from(systemLayers)
         .where(eq(systemLayers.systemId, req.params.systemId))
         .orderBy(asc(systemLayers.orderSequence));
+      refreshState.trigger();
       res.json(layers);
     } catch (error) {
       console.error("Error reordering layers:", error);
@@ -243,6 +247,7 @@ export function registerSystemRoutes(app: Express): void {
       await db.delete(systemProductOptions).where(eq(systemProductOptions.layerId, req.params.layerId));
       const [deleted] = await db.delete(systemLayers).where(eq(systemLayers.layerId, req.params.layerId)).returning();
       if (!deleted) return res.status(404).json({ error: "Layer not found" });
+      refreshState.trigger();
       res.json({ success: true });
     } catch (error) {
       console.error("Error deleting layer:", error);
@@ -279,6 +284,7 @@ export function registerSystemRoutes(app: Express): void {
     try {
       const optionId = generateId("opt");
       const [created] = await db.insert(systemProductOptions).values({ ...req.body, optionId }).returning();
+      refreshState.trigger();
       res.status(201).json(created);
     } catch (error) {
       console.error("Error creating product option:", error);
@@ -294,6 +300,7 @@ export function registerSystemRoutes(app: Express): void {
         .where(eq(systemProductOptions.optionId, req.params.optionId))
         .returning();
       if (!updated) return res.status(404).json({ error: "Option not found" });
+      refreshState.trigger();
       res.json(updated);
     } catch (error) {
       console.error("Error updating product option:", error);
@@ -305,6 +312,7 @@ export function registerSystemRoutes(app: Express): void {
     try {
       const [deleted] = await db.delete(systemProductOptions).where(eq(systemProductOptions.optionId, req.params.optionId)).returning();
       if (!deleted) return res.status(404).json({ error: "Option not found" });
+      refreshState.trigger();
       res.json({ success: true });
     } catch (error) {
       console.error("Error deleting product option:", error);
