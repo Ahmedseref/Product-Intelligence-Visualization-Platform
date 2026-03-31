@@ -11,9 +11,10 @@ export function useGlobalRefresh(
 ) {
   const { intervalMs = 30000, debounceMs = 500 } = options;
 
-  const [isEditing, setIsEditing] = useState(false);
   const [lastSynced, setLastSynced] = useState<Date | null>(null);
 
+  const editLockCountRef = useRef(0);
+  const isEditingRef = useRef(false);
   const triggerIdRef = useRef<number | null>(null);
   const isPollFetchingRef = useRef(false);
   const isRefreshingRef = useRef(false);
@@ -21,8 +22,19 @@ export function useGlobalRefresh(
   const onRefreshRef = useRef(onRefresh);
   onRefreshRef.current = onRefresh;
 
-  const isEditingRef = useRef(isEditing);
-  isEditingRef.current = isEditing;
+  const updateEditingState = useCallback(() => {
+    isEditingRef.current = editLockCountRef.current > 0;
+  }, []);
+
+  const lockEditing = useCallback(() => {
+    editLockCountRef.current += 1;
+    updateEditingState();
+  }, [updateEditingState]);
+
+  const unlockEditing = useCallback(() => {
+    editLockCountRef.current = Math.max(0, editLockCountRef.current - 1);
+    updateEditingState();
+  }, [updateEditingState]);
 
   const doRefresh = useCallback(async () => {
     isRefreshingRef.current = true;
@@ -80,7 +92,8 @@ export function useGlobalRefresh(
     const handleFocusIn = (e: FocusEvent) => {
       const target = e.target as HTMLElement;
       if (EDITABLE_TAGS.has(target.tagName) || target.isContentEditable) {
-        setIsEditing(true);
+        editLockCountRef.current = Math.max(1, editLockCountRef.current);
+        updateEditingState();
       }
     };
 
@@ -88,7 +101,10 @@ export function useGlobalRefresh(
       setTimeout(() => {
         const active = document.activeElement as HTMLElement | null;
         if (!active || (!EDITABLE_TAGS.has(active.tagName) && !active.isContentEditable)) {
-          setIsEditing(false);
+          if (editLockCountRef.current <= 1) {
+            editLockCountRef.current = 0;
+            updateEditingState();
+          }
         }
       }, 200);
     };
@@ -99,7 +115,7 @@ export function useGlobalRefresh(
       document.removeEventListener('focusin', handleFocusIn);
       document.removeEventListener('focusout', handleFocusOut);
     };
-  }, []);
+  }, [updateEditingState]);
 
-  return { setIsEditing, lastSynced };
+  return { lockEditing, unlockEditing, lastSynced };
 }

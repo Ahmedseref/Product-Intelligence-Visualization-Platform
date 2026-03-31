@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useEffect, useCallback } from 'react';
+import React, { useState, useMemo, useEffect, useCallback, useRef } from 'react';
 import { Product, ViewMode, User, CustomField, TreeNode, Supplier, SupplierProduct } from './types';
 import { INITIAL_PRODUCTS, INITIAL_TREE_NODES } from './mockData';
 import { ICONS } from './constants';
@@ -152,6 +152,8 @@ const App: React.FC = () => {
     }
   };
 
+  const seededRef = useRef(false);
+
   const syncWithDatabase = useCallback(async () => {
     const retryFetch = async <T,>(fn: () => Promise<T>, attempts: number, delay: number): Promise<T> => {
       for (let i = 0; i < attempts; i++) {
@@ -166,7 +168,10 @@ const App: React.FC = () => {
     };
 
     try {
-      await retryFetch(() => api.seedDatabase(), 10, 1000);
+      if (!seededRef.current) {
+        await retryFetch(() => api.seedDatabase(), 10, 1000);
+        seededRef.current = true;
+      }
       
       const [nodesData, productsData, fieldsData, suppliersData, supplierProductsData] = await Promise.all([
         api.getTreeNodes(),
@@ -310,7 +315,7 @@ const App: React.FC = () => {
     return () => clearTimeout(timer);
   }, [syncWithDatabase]);
 
-  const { setIsEditing, lastSynced } = useGlobalRefresh(syncWithDatabase);
+  const { lockEditing, unlockEditing, lastSynced } = useGlobalRefresh(syncWithDatabase);
 
   const lastSyncedLabel = lastSynced
     ? lastSynced.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' })
@@ -721,7 +726,7 @@ const App: React.FC = () => {
   }
 
   return (
-    <RefreshProvider value={{ setIsEditing }}>
+    <RefreshProvider value={{ lockEditing, unlockEditing }}>
     <div className="flex h-screen bg-slate-50 overflow-hidden">
       {error && (
         <div className="fixed top-4 right-4 bg-amber-100 border border-amber-300 text-amber-800 px-4 py-2 rounded-lg text-sm z-50">

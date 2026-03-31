@@ -23,7 +23,7 @@ interface EditingCell {
 }
 
 const ProformaPreview: React.FC<ProformaPreviewProps> = ({ proformaId, onBack }) => {
-  const { setIsEditing } = useRefreshContext();
+  const { lockEditing, unlockEditing } = useRefreshContext();
   const [proforma, setProforma] = useState<ProformaData | null>(null);
   const [settings, setSettings] = useState<ProformaSettingsData>({});
   const [financials, setFinancials] = useState<ProformaFinancialData[]>([]);
@@ -41,9 +41,11 @@ const ProformaPreview: React.FC<ProformaPreviewProps> = ({ proformaId, onBack })
   const invoiceRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
-    setIsEditing(editingCell !== null || editingMeta);
-    return () => setIsEditing(false);
-  }, [editingCell, editingMeta, setIsEditing]);
+    if (editingCell !== null || editingMeta) {
+      lockEditing();
+      return () => unlockEditing();
+    }
+  }, [editingCell, editingMeta, lockEditing, unlockEditing]);
 
   const load = useCallback(async () => {
     setLoading(true);

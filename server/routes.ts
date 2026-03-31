@@ -435,6 +435,7 @@ export function registerRoutes(app: Express): void {
         }
       }
 
+      refreshState.trigger();
       res.json({ message: "Database seeded successfully" });
     } catch (error) {
       console.error("Error seeding database:", error);

@@ -23,12 +23,12 @@ interface ProductFormProps {
 }
 
 const ProductForm: React.FC<ProductFormProps> = ({ onSubmit, onCancel, currentUser, customFields, treeNodes, suppliers = [], usageAreas = [], units: unitsProp, colors = [], onAddFieldDefinition, onAddTreeNode, initialProduct, mode = 'create' }) => {
-  const { setIsEditing } = useRefreshContext();
+  const { lockEditing, unlockEditing } = useRefreshContext();
 
   useEffect(() => {
-    setIsEditing(true);
-    return () => setIsEditing(false);
-  }, [setIsEditing]);
+    lockEditing();
+    return () => unlockEditing();
+  }, [lockEditing, unlockEditing]);
 
   const isEditMode = mode === 'edit' && initialProduct;
   const USAGE_AREAS = usageAreas;

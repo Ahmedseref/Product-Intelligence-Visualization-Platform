@@ -1,11 +1,13 @@
 import React, { createContext, useContext } from 'react';
 
 interface RefreshContextValue {
-  setIsEditing: (editing: boolean) => void;
+  lockEditing: () => void;
+  unlockEditing: () => void;
 }
 
 const RefreshContext = createContext<RefreshContextValue>({
-  setIsEditing: () => {},
+  lockEditing: () => {},
+  unlockEditing: () => {},
 });
 
 export const RefreshProvider = RefreshContext.Provider;
