@@ -42,6 +42,7 @@ const ProformaPreview: React.FC<ProformaPreviewProps> = ({ proformaId, onBack })
 
   useEffect(() => {
     setIsEditing(editingCell !== null || editingMeta);
+    return () => setIsEditing(false);
   }, [editingCell, editingMeta, setIsEditing]);
 
   const load = useCallback(async () => {
