@@ -84,6 +84,8 @@ const ProformaPreview: React.FC<ProformaPreviewProps> = ({ proformaId, onBack })
       finalPlaceOfDelivery: proforma.finalPlaceOfDelivery || '',
       countryOfOrigin: proforma.countryOfOrigin || '',
       transportationMode: proforma.transportationMode || '',
+      paymentTerms: proforma.paymentTerms || '',
+      deliveryTerms: proforma.deliveryTerms || '',
       currency: proforma.currency || settings.defaultCurrency || 'USD',
     });
     setEditingMeta(true);
@@ -94,7 +96,7 @@ const ProformaPreview: React.FC<ProformaPreviewProps> = ({ proformaId, onBack })
     setSavingMeta(true);
     try {
       const patch: Record<string, any> = {};
-      for (const key of ['notes', 'shipTo', 'portOfLoading', 'placeOfDestination', 'finalPlaceOfDelivery', 'countryOfOrigin', 'transportationMode', 'currency']) {
+      for (const key of ['notes', 'shipTo', 'portOfLoading', 'placeOfDestination', 'finalPlaceOfDelivery', 'countryOfOrigin', 'transportationMode', 'paymentTerms', 'deliveryTerms', 'currency']) {
         patch[key] = metaDraft[key]?.trim() || null;
       }
       await api.updateProforma(proformaId, patch);
@@ -300,11 +302,14 @@ const ProformaPreview: React.FC<ProformaPreviewProps> = ({ proformaId, onBack })
 
   const invoicedToDisplay = proforma.shipTo?.trim() || 'SAME AS CONSIGNEE';
 
+  const effectivePaymentTerms = proforma.paymentTerms || settings.paymentTerms || '';
+  const effectiveDeliveryTerms = proforma.deliveryTerms || settings.deliveryTerms || '';
+
   const metaRows: [string, string][] = [
     ['DATE', invoiceDate],
     ['NUMBER', proforma.proformaId],
-    ['TERMS OF PAYMENT', settings.paymentTerms || '—'],
-    ['TERMS OF DELIVERY', settings.deliveryTerms || '—'],
+    ['TERMS OF PAYMENT', effectivePaymentTerms || '—'],
+    ['TERMS OF DELIVERY', effectiveDeliveryTerms || '—'],
     ['PORT OF LOADING', proforma.portOfLoading || '—'],
     ['TRANSACTION CURRENCY', currency],
     ['PLACE OF DESTINATION', proforma.placeOfDestination || '—'],
@@ -580,7 +585,7 @@ const ProformaPreview: React.FC<ProformaPreviewProps> = ({ proformaId, onBack })
               {calcSteps.length > 0 && (
                 <tr className="border-t-2 border-slate-300 bg-slate-50/50">
                   <td colSpan={4} className="px-3 py-2 text-right text-xs font-bold text-slate-700 uppercase">
-                    SUBTOTAL {settings.deliveryTerms || ''}{proforma.portOfLoading ? ` ${proforma.portOfLoading}` : ''}{proforma.countryOfOrigin ? `, ${proforma.countryOfOrigin}` : ''}
+                    SUBTOTAL {effectiveDeliveryTerms}{proforma.portOfLoading ? ` ${proforma.portOfLoading}` : ''}{proforma.countryOfOrigin ? `, ${proforma.countryOfOrigin}` : ''}
                   </td>
                   <td className="px-3 py-2 text-right text-sm font-bold text-slate-700">
                     {currency} {fmt(subtotal)}
@@ -603,8 +608,8 @@ const ProformaPreview: React.FC<ProformaPreviewProps> = ({ proformaId, onBack })
               <tr className="border-t-2 border-slate-800 bg-slate-50">
                 <td colSpan={4} className="px-3 py-3 text-right text-xs font-bold text-slate-900 uppercase">
                   {calcSteps.length > 0
-                    ? `TOTAL ${settings.deliveryTerms || 'CIF'}${proforma.finalPlaceOfDelivery ? ` ${proforma.finalPlaceOfDelivery}` : ''}${proforma.placeOfDestination ? `, ${proforma.placeOfDestination}` : ''}`
-                    : `TOTAL ${settings.deliveryTerms || ''}${proforma.portOfLoading ? ` ${proforma.portOfLoading}` : ''}`
+                    ? `TOTAL ${effectiveDeliveryTerms || 'CIF'}${proforma.finalPlaceOfDelivery ? ` ${proforma.finalPlaceOfDelivery}` : ''}${proforma.placeOfDestination ? `, ${proforma.placeOfDestination}` : ''}`
+                    : `TOTAL ${effectiveDeliveryTerms}${proforma.portOfLoading ? ` ${proforma.portOfLoading}` : ''}`
                   }
                 </td>
                 <td className="px-3 py-3 text-right text-sm font-bold text-slate-900">

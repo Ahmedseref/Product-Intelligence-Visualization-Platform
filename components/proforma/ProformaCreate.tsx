@@ -27,6 +27,9 @@ const ProformaCreate: React.FC<ProformaCreateProps> = ({ products, onCreated, on
   const [finalPlaceOfDelivery, setFinalPlaceOfDelivery] = useState('');
   const [countryOfOrigin, setCountryOfOrigin] = useState('');
   const [transportationMode, setTransportationMode] = useState('');
+  const [paymentTerms, setPaymentTerms] = useState('');
+  const [deliveryTerms, setDeliveryTerms] = useState('');
+  const [settingsData, setSettingsData] = useState<ProformaSettingsData>({});
   const [draftItems, setDraftItems] = useState<DraftItem[]>([]);
   const [productSearch, setProductSearch] = useState('');
   const [showProductDropdown, setShowProductDropdown] = useState(false);
@@ -35,6 +38,7 @@ const ProformaCreate: React.FC<ProformaCreateProps> = ({ products, onCreated, on
 
   useEffect(() => {
     api.getProformaSettings().then((s: ProformaSettingsData) => {
+      setSettingsData(s);
       if (s.defaultCurrency) setCurrency(s.defaultCurrency);
       if (s.notes) setNotes(s.notes);
       if (s.defaultPortOfLoading) setPortOfLoading(s.defaultPortOfLoading);
@@ -88,6 +92,8 @@ const ProformaCreate: React.FC<ProformaCreateProps> = ({ products, onCreated, on
         finalPlaceOfDelivery: finalPlaceOfDelivery.trim() || null,
         countryOfOrigin: countryOfOrigin.trim() || null,
         transportationMode: transportationMode.trim() || null,
+        paymentTerms: paymentTerms.trim() || null,
+        deliveryTerms: deliveryTerms.trim() || null,
         status: 'draft',
       });
 
@@ -142,6 +148,32 @@ const ProformaCreate: React.FC<ProformaCreateProps> = ({ products, onCreated, on
             >
               {CURRENCIES.map(c => <option key={c} value={c}>{c}</option>)}
             </select>
+          </div>
+          <div>
+            <label className="block text-xs font-medium text-slate-500 mb-1.5">Terms of Payment</label>
+            <input
+              type="text"
+              value={paymentTerms}
+              onChange={e => setPaymentTerms(e.target.value)}
+              placeholder={settingsData.paymentTerms || 'e.g. 50% ADVANCE, 50% BEFORE SHIPMENT'}
+              className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-400"
+            />
+            {settingsData.paymentTerms && !paymentTerms && (
+              <p className="text-[10px] text-slate-400 mt-1">Default: {settingsData.paymentTerms}</p>
+            )}
+          </div>
+          <div>
+            <label className="block text-xs font-medium text-slate-500 mb-1.5">Terms of Delivery (Incoterms)</label>
+            <input
+              type="text"
+              value={deliveryTerms}
+              onChange={e => setDeliveryTerms(e.target.value)}
+              placeholder={settingsData.deliveryTerms || 'e.g. EXWORK, CIF, FOB'}
+              className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-400"
+            />
+            {settingsData.deliveryTerms && !deliveryTerms && (
+              <p className="text-[10px] text-slate-400 mt-1">Default: {settingsData.deliveryTerms}</p>
+            )}
           </div>
           <div>
             <label className="block text-xs font-medium text-slate-500 mb-1.5">Notes</label>

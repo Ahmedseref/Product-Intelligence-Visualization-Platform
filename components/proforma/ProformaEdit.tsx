@@ -35,6 +35,8 @@ const ProformaEdit: React.FC<ProformaEditProps> = ({ proformaId, products, onSav
   const [finalPlaceOfDelivery, setFinalPlaceOfDelivery] = useState('');
   const [countryOfOrigin, setCountryOfOrigin] = useState('');
   const [transportationMode, setTransportationMode] = useState('');
+  const [paymentTerms, setPaymentTerms] = useState('');
+  const [deliveryTerms, setDeliveryTerms] = useState('');
   const [customerName, setCustomerName] = useState('');
   const [customerCountry, setCustomerCountry] = useState('');
   const [customerContact, setCustomerContact] = useState('');
@@ -68,6 +70,8 @@ const ProformaEdit: React.FC<ProformaEditProps> = ({ proformaId, products, onSav
       setFinalPlaceOfDelivery(pf.finalPlaceOfDelivery || '');
       setCountryOfOrigin(pf.countryOfOrigin || '');
       setTransportationMode(pf.transportationMode || '');
+      setPaymentTerms(pf.paymentTerms || '');
+      setDeliveryTerms(pf.deliveryTerms || '');
       setCustomerName(pf.customerName || '');
       setCustomerCountry(pf.customerCountry || '');
       setCustomerContact(pf.customerContact || '');
@@ -158,6 +162,8 @@ const ProformaEdit: React.FC<ProformaEditProps> = ({ proformaId, products, onSav
         finalPlaceOfDelivery: finalPlaceOfDelivery.trim() || null,
         countryOfOrigin: countryOfOrigin.trim() || null,
         transportationMode: transportationMode.trim() || null,
+        paymentTerms: paymentTerms.trim() || null,
+        deliveryTerms: deliveryTerms.trim() || null,
         status,
       });
 
@@ -251,6 +257,32 @@ const ProformaEdit: React.FC<ProformaEditProps> = ({ proformaId, products, onSav
               <option value="accepted">Accepted</option>
               <option value="rejected">Rejected</option>
             </select>
+          </div>
+          <div>
+            <label className="block text-xs font-medium text-slate-500 mb-1.5">Terms of Payment</label>
+            <input
+              type="text"
+              value={paymentTerms}
+              onChange={e => setPaymentTerms(e.target.value)}
+              placeholder={settings.paymentTerms || 'e.g. 50% ADVANCE, 50% BEFORE SHIPMENT'}
+              className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-400"
+            />
+            {settings.paymentTerms && !paymentTerms && (
+              <p className="text-[10px] text-slate-400 mt-1">Default: {settings.paymentTerms}</p>
+            )}
+          </div>
+          <div>
+            <label className="block text-xs font-medium text-slate-500 mb-1.5">Terms of Delivery (Incoterms)</label>
+            <input
+              type="text"
+              value={deliveryTerms}
+              onChange={e => setDeliveryTerms(e.target.value)}
+              placeholder={settings.deliveryTerms || 'e.g. EXWORK, CIF, FOB'}
+              className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-400"
+            />
+            {settings.deliveryTerms && !deliveryTerms && (
+              <p className="text-[10px] text-slate-400 mt-1">Default: {settings.deliveryTerms}</p>
+            )}
           </div>
           <div>
             <label className="block text-xs font-medium text-slate-500 mb-1.5">Notes</label>

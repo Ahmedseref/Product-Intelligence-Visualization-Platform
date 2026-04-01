@@ -191,11 +191,14 @@ export function registerProformaRoutes(app: Express): void {
       r++;
 
       // ─── HEADER SECTION: Company (left cols 1-2) + Meta Table (right cols 3-5) ───
+      const effectivePaymentTerms = (full as any).paymentTerms || settings?.paymentTerms || "";
+      const effectiveDeliveryTerms = (full as any).deliveryTerms || settings?.deliveryTerms || "";
+
       const metaRows: [string, string][] = [
         ["DATE", invoiceDate],
         ["NUMBER", full.proformaId],
-        ["TERMS OF PAYMENT", settings?.paymentTerms || "—"],
-        ["TERMS OF DELIVERY", settings?.deliveryTerms || "—"],
+        ["TERMS OF PAYMENT", effectivePaymentTerms || "—"],
+        ["TERMS OF DELIVERY", effectiveDeliveryTerms || "—"],
         ["PORT OF LOADING", (full as any).portOfLoading || "—"],
         ["TRANSACTION CURRENCY", currency],
         ["PLACE OF DESTINATION", (full as any).placeOfDestination || "—"],
@@ -364,7 +367,7 @@ export function registerProformaRoutes(app: Express): void {
         subtotalRow.height = 22;
         ws.mergeCells(r, 1, r, 4);
         const subLabelCell = ws.getCell(r, 1);
-        let subLabel = `SUBTOTAL ${settings?.deliveryTerms || ""}`;
+        let subLabel = `SUBTOTAL ${effectiveDeliveryTerms}`;
         if (portOfLoading) subLabel += ` ${portOfLoading}`;
         if (countryOfOrigin) subLabel += `, ${countryOfOrigin}`;
         subLabelCell.value = subLabel.trim();
@@ -411,11 +414,11 @@ export function registerProformaRoutes(app: Express): void {
       const totalLabelCell = ws.getCell(r, 1);
       let totalLabel: string;
       if (steps.length > 0) {
-        totalLabel = `TOTAL ${settings?.deliveryTerms || "CIF"}`;
+        totalLabel = `TOTAL ${effectiveDeliveryTerms || "CIF"}`;
         if (finalPlaceOfDelivery) totalLabel += ` ${finalPlaceOfDelivery}`;
         if (placeOfDestination) totalLabel += `, ${placeOfDestination}`;
       } else {
-        totalLabel = `TOTAL ${settings?.deliveryTerms || ""}`;
+        totalLabel = `TOTAL ${effectiveDeliveryTerms}`;
         if (portOfLoading) totalLabel += ` ${portOfLoading}`;
       }
       totalLabelCell.value = totalLabel.trim();

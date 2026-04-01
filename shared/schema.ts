@@ -298,6 +298,8 @@ export const proformas = pgTable("proformas", {
   finalPlaceOfDelivery: varchar("final_place_of_delivery", { length: 255 }),
   countryOfOrigin: varchar("country_of_origin", { length: 255 }),
   transportationMode: varchar("transportation_mode", { length: 255 }),
+  paymentTerms: text("payment_terms"),
+  deliveryTerms: text("delivery_terms"),
   date: timestamp("date").defaultNow(),
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow(),

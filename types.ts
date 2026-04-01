@@ -320,6 +320,8 @@ export interface ProformaData {
   finalPlaceOfDelivery?: string | null;
   countryOfOrigin?: string | null;
   transportationMode?: string | null;
+  paymentTerms?: string | null;
+  deliveryTerms?: string | null;
   date?: string | null;
   createdAt?: string | null;
   updatedAt?: string | null;
