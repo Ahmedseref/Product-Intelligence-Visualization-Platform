@@ -4,13 +4,14 @@ import { api } from '../client/api';
 import { Product, ProformaData } from '../types';
 import ProformaCreate from './proforma/ProformaCreate';
 import ProformaPreview from './proforma/ProformaPreview';
+import ProformaEdit from './proforma/ProformaEdit';
 import CustomerManager from './proforma/CustomerManager';
 
 interface ProformaInvoiceProps {
   products: Product[];
 }
 
-type SubView = 'list' | 'create' | 'preview' | 'customers';
+type SubView = 'list' | 'create' | 'preview' | 'edit' | 'customers';
 
 const STATUS_COLORS: Record<string, string> = {
   draft: 'bg-slate-100 text-slate-600',
@@ -89,6 +90,19 @@ const ProformaInvoice: React.FC<ProformaInvoiceProps> = ({ products }) => {
         <ProformaPreview
           proformaId={activeProformaId}
           onBack={() => { setSubView('list'); setActiveProformaId(null); }}
+        />
+      </div>
+    );
+  }
+
+  if (subView === 'edit' && activeProformaId) {
+    return (
+      <div className="flex-1 overflow-y-auto p-6 bg-slate-50">
+        <ProformaEdit
+          proformaId={activeProformaId}
+          products={products}
+          onSaved={(id) => { setActiveProformaId(id); setSubView('preview'); }}
+          onCancel={() => { setSubView('list'); setActiveProformaId(null); }}
         />
       </div>
     );
@@ -234,7 +248,7 @@ const ProformaInvoice: React.FC<ProformaInvoiceProps> = ({ products }) => {
                               View
                             </button>
                             <button
-                              onClick={() => { setActiveProformaId(p.proformaId); setSubView('preview'); }}
+                              onClick={() => { setActiveProformaId(p.proformaId); setSubView('edit'); }}
                               className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-amber-600 bg-amber-50 hover:bg-amber-100 rounded-lg transition-colors"
                             >
                               <Pencil className="w-3.5 h-3.5" />
