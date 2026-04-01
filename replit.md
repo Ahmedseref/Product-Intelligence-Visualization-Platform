@@ -52,6 +52,7 @@ I prefer detailed explanations and thorough code comments. I value iterative dev
 - **Express.js**: Backend web application framework.
 - **Drizzle ORM**: TypeScript ORM for PostgreSQL.
 - **PostgreSQL**: Relational database.
+- **ExcelJS**: Styled Excel export for proforma invoices (single-sheet, mirrors preview layout).
 - **html2canvas**: Used for exporting elements to images.
 - **bcryptjs**: Password hashing library.
 - **express-rate-limit**: Rate limiting middleware.
