@@ -591,7 +591,7 @@ const ProformaPreview: React.FC<ProformaPreviewProps> = ({ proformaId, onBack })
                     SUBTOTAL {effectiveDeliveryTerms}{proforma.portOfLoading ? ` ${proforma.portOfLoading}` : ''}{proforma.countryOfOrigin ? `, ${proforma.countryOfOrigin}` : ''}
                   </td>
                   <td className="px-3 py-2 text-right text-sm font-bold text-slate-700">
-                    {currency} {fmt(subtotal)}
+                    <div className="whitespace-nowrap">{currency} {fmt(subtotal)}</div>
                   </td>
                   {!pdfCapturing && <td className="print:hidden" />}
                 </tr>
@@ -603,7 +603,7 @@ const ProformaPreview: React.FC<ProformaPreviewProps> = ({ proformaId, onBack })
                     {step.valueType === 'percentage' && ` (${step.value}%)`}
                   </td>
                   <td className="px-3 py-1.5 text-right text-xs font-medium text-slate-900 uppercase">
-                    {currency} {fmt(Math.abs(step.computedAmount))}
+                    <div className="whitespace-nowrap">{currency} {fmt(Math.abs(step.computedAmount))}</div>
                   </td>
                   {!pdfCapturing && <td className="print:hidden" />}
                 </tr>
@@ -616,7 +616,7 @@ const ProformaPreview: React.FC<ProformaPreviewProps> = ({ proformaId, onBack })
                   }
                 </td>
                 <td className="px-3 py-3 text-right text-sm font-bold text-slate-900">
-                  {currency} {fmt(finalTotal)}
+                  <div className="whitespace-nowrap">{currency} {fmt(finalTotal)}</div>
                 </td>
                 {!pdfCapturing && <td className="print:hidden" />}
               </tr>
