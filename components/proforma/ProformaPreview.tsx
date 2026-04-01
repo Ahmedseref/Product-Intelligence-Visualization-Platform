@@ -550,7 +550,10 @@ const ProformaPreview: React.FC<ProformaPreviewProps> = ({ proformaId, onBack })
                       {item.productUnit || 'pc'}
                     </td>
                     <td className="px-3 py-2 text-right border-r border-slate-300 text-slate-800">
-                      {currency} <EditableCell item={item} field="price" displayValue={displayPrice} isNum />
+                      <div className="flex items-center justify-end gap-1">
+                        <span className="text-sm">{currency}</span>
+                        <EditableCell item={item} field="price" displayValue={displayPrice} isNum />
+                      </div>
                     </td>
                     <td className="px-3 py-2 text-right font-semibold text-slate-800">
                       {currency} {fmt(lineTotal)}
