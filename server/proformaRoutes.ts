@@ -353,6 +353,33 @@ export function registerProformaRoutes(app: Express): void {
         r++;
       }
 
+      // ─── SUBTOTAL ROW (only when financial steps exist) ───
+      const portOfLoading = (full as any).portOfLoading || "";
+      const countryOfOrigin = (full as any).countryOfOrigin || "";
+      const finalPlaceOfDelivery = (full as any).finalPlaceOfDelivery || "";
+      const placeOfDestination = (full as any).placeOfDestination || "";
+
+      if (steps.length > 0) {
+        const subtotalRow = ws.getRow(r);
+        subtotalRow.height = 22;
+        ws.mergeCells(r, 1, r, 4);
+        const subLabelCell = ws.getCell(r, 1);
+        let subLabel = `SUBTOTAL ${settings?.deliveryTerms || ""}`;
+        if (portOfLoading) subLabel += ` ${portOfLoading}`;
+        if (countryOfOrigin) subLabel += `, ${countryOfOrigin}`;
+        subLabelCell.value = subLabel.trim();
+        subLabelCell.font = { name: FONT_FAMILY, size: 8, bold: true, color: { argb: MED } };
+        subLabelCell.alignment = { vertical: "middle", horizontal: "right" };
+        subLabelCell.border = { left: BORDER_DARK, top: BORDER_DARK };
+        for (let c = 2; c <= 4; c++) ws.getCell(r, c).border = { top: BORDER_DARK };
+        const subAmtCell = ws.getCell(r, 5);
+        subAmtCell.value = `${currency} ${fmt(subtotal)}`;
+        subAmtCell.font = { name: FONT_FAMILY, size: 9, bold: true, color: { argb: MED } };
+        subAmtCell.alignment = { vertical: "middle", horizontal: "right" };
+        subAmtCell.border = { right: BORDER_DARK, top: BORDER_DARK };
+        r++;
+      }
+
       // ─── FINANCIAL CALCULATION STEPS ───
       for (const step of steps) {
         const row = ws.getRow(r);
@@ -382,7 +409,16 @@ export function registerProformaRoutes(app: Express): void {
       totalRow.height = 24;
       ws.mergeCells(r, 1, r, 4);
       const totalLabelCell = ws.getCell(r, 1);
-      totalLabelCell.value = `TOTAL ${settings?.deliveryTerms || ""} ${(full as any).portOfLoading || ""}`.trim();
+      let totalLabel: string;
+      if (steps.length > 0) {
+        totalLabel = `TOTAL ${settings?.deliveryTerms || "CIF"}`;
+        if (finalPlaceOfDelivery) totalLabel += ` ${finalPlaceOfDelivery}`;
+        if (placeOfDestination) totalLabel += `, ${placeOfDestination}`;
+      } else {
+        totalLabel = `TOTAL ${settings?.deliveryTerms || ""}`;
+        if (portOfLoading) totalLabel += ` ${portOfLoading}`;
+      }
+      totalLabelCell.value = totalLabel.trim();
       totalLabelCell.font = { name: FONT_FAMILY, size: 9, bold: true, color: { argb: DARK } };
       totalLabelCell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: BG_HEADER } };
       totalLabelCell.alignment = { vertical: "middle", horizontal: "right" };

@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { Plus, Trash2, Eye, FileText, Search, X, Users } from 'lucide-react';
+import { Plus, Trash2, Eye, Pencil, FileText, Search, X, Users } from 'lucide-react';
 import { api } from '../client/api';
 import { Product, ProformaData } from '../types';
 import ProformaCreate from './proforma/ProformaCreate';
@@ -232,6 +232,13 @@ const ProformaInvoice: React.FC<ProformaInvoiceProps> = ({ products }) => {
                             >
                               <Eye className="w-3.5 h-3.5" />
                               View
+                            </button>
+                            <button
+                              onClick={() => { setActiveProformaId(p.proformaId); setSubView('preview'); }}
+                              className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-amber-600 bg-amber-50 hover:bg-amber-100 rounded-lg transition-colors"
+                            >
+                              <Pencil className="w-3.5 h-3.5" />
+                              Edit
                             </button>
                             <button
                               onClick={() => handleDelete(p.proformaId)}

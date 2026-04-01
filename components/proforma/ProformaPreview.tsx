@@ -577,6 +577,17 @@ const ProformaPreview: React.FC<ProformaPreviewProps> = ({ proformaId, onBack })
             </tbody>
             {/* Totals */}
             <tfoot>
+              {calcSteps.length > 0 && (
+                <tr className="border-t-2 border-slate-300 bg-slate-50/50">
+                  <td colSpan={4} className="px-3 py-2 text-right text-xs font-bold text-slate-700 uppercase">
+                    SUBTOTAL {settings.deliveryTerms || ''}{proforma.portOfLoading ? ` ${proforma.portOfLoading}` : ''}{proforma.countryOfOrigin ? `, ${proforma.countryOfOrigin}` : ''}
+                  </td>
+                  <td className="px-3 py-2 text-right text-sm font-bold text-slate-700">
+                    {currency} {fmt(subtotal)}
+                  </td>
+                  {!pdfCapturing && <td className="print:hidden" />}
+                </tr>
+              )}
               {calcSteps.map((step) => (
                 <tr key={step.id} className="border-t border-dashed border-slate-200">
                   <td colSpan={4} className="px-3 py-1.5 text-right text-xs text-slate-900 uppercase font-medium">
@@ -591,7 +602,10 @@ const ProformaPreview: React.FC<ProformaPreviewProps> = ({ proformaId, onBack })
               ))}
               <tr className="border-t-2 border-slate-800 bg-slate-50">
                 <td colSpan={4} className="px-3 py-3 text-right text-xs font-bold text-slate-900 uppercase">
-                  TOTAL {settings.deliveryTerms || ''} {proforma.portOfLoading || ''}
+                  {calcSteps.length > 0
+                    ? `TOTAL ${settings.deliveryTerms || 'CIF'}${proforma.finalPlaceOfDelivery ? ` ${proforma.finalPlaceOfDelivery}` : ''}${proforma.placeOfDestination ? `, ${proforma.placeOfDestination}` : ''}`
+                    : `TOTAL ${settings.deliveryTerms || ''}${proforma.portOfLoading ? ` ${proforma.portOfLoading}` : ''}`
+                  }
                 </td>
                 <td className="px-3 py-3 text-right text-sm font-bold text-slate-900">
                   {currency} {fmt(finalTotal)}
