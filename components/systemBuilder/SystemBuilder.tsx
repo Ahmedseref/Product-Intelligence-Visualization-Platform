@@ -726,15 +726,19 @@ const SystemBuilder: React.FC<SystemBuilderProps> = ({ products }) => {
                               Add Selected
                             </button>
                           </div>
-                          <div className="max-h-48 overflow-y-auto space-y-0.5">
-                            {filteredProducts.slice(0, 20).map((prod) => {
+                          <div className="max-h-72 overflow-y-auto space-y-0.5 pr-0.5">
+                            {filteredProducts.slice(0, 50).map((prod) => {
                               const alreadyAdded = layer.productOptions.some((o) => o.productId === prod.id);
                               const isSelected = selectedProductIds.includes(prod.id);
                               return (
                                 <div
                                   key={prod.id}
-                                  className={`flex items-center justify-between px-2 py-1.5 rounded text-sm border ${
-                                    isSelected ? 'bg-green-50 border-green-300' : 'bg-white border-transparent hover:bg-green-50 hover:border-green-200'
+                                  className={`flex items-start gap-2.5 px-2.5 py-2 rounded-lg border cursor-pointer transition-all ${
+                                    alreadyAdded
+                                      ? 'bg-slate-50 border-slate-200 opacity-60 cursor-default'
+                                      : isSelected
+                                      ? 'bg-green-50 border-green-300 shadow-sm'
+                                      : 'bg-white border-transparent hover:bg-green-50/60 hover:border-green-200'
                                   }`}
                                   onClick={() => {
                                     if (alreadyAdded) return;
@@ -745,33 +749,77 @@ const SystemBuilder: React.FC<SystemBuilderProps> = ({ products }) => {
                                     );
                                   }}
                                 >
-                                  <div className="flex items-center gap-2">
-                                    <input
-                                      type="checkbox"
-                                      checked={isSelected}
-                                      readOnly
-                                      className="w-3.5 h-3.5 accent-green-600"
-                                    />
-                                    <Package size={12} className="flex-shrink-0 text-slate-500" />
-                                    <span className="truncate">{prod.name}</span>
-                                    {prod.stockCode && <span className="text-xs text-slate-400">{prod.stockCode}</span>}
+                                  {/* Checkbox */}
+                                  <div className="flex-shrink-0 mt-0.5">
+                                    {alreadyAdded ? (
+                                      <div className="w-4 h-4 rounded bg-slate-200 flex items-center justify-center">
+                                        <Check size={10} className="text-slate-400" />
+                                      </div>
+                                    ) : (
+                                      <input
+                                        type="checkbox"
+                                        checked={isSelected}
+                                        readOnly
+                                        className="w-4 h-4 accent-green-600 rounded"
+                                      />
+                                    )}
                                   </div>
-                                  <div className="flex items-center gap-1">
+
+                                  {/* Main content */}
+                                  <div className="flex-1 min-w-0">
+                                    <div className="flex items-center gap-1.5">
+                                      <span className={`text-sm font-medium truncate ${alreadyAdded ? 'text-slate-500' : 'text-slate-800'}`}>
+                                        {prod.name}
+                                      </span>
+                                      {alreadyAdded && (
+                                        <span className="flex-shrink-0 text-[10px] font-semibold px-1.5 py-0.5 bg-slate-200 text-slate-500 rounded-full">
+                                          In layer
+                                        </span>
+                                      )}
+                                    </div>
+                                    <div className="flex items-center gap-2 mt-0.5 flex-wrap">
+                                      {prod.stockCode && (
+                                        <span className="text-[10px] font-mono text-slate-400 bg-slate-100 px-1.5 py-0.5 rounded">
+                                          {prod.stockCode}
+                                        </span>
+                                      )}
+                                      {prod.supplier && (
+                                        <span className="text-[10px] text-slate-400 truncate">{prod.supplier}</span>
+                                      )}
+                                    </div>
+                                    {prod.description && (
+                                      <p className="text-[11px] text-slate-400 mt-0.5 line-clamp-1 italic">
+                                        {prod.description}
+                                      </p>
+                                    )}
+                                  </div>
+
+                                  {/* Actions */}
+                                  <div className="flex items-center gap-0.5 flex-shrink-0 mt-0.5">
                                     <button
                                       onClick={(e) => {
                                         e.stopPropagation();
                                         setDetailsProduct(prod);
                                       }}
-                                      className="p-1 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded transition-colors"
+                                      className="p-1 text-slate-300 hover:text-blue-500 hover:bg-blue-50 rounded transition-colors"
                                       title="View product details"
                                     >
-                                      <Info size={12} />
+                                      <Info size={13} />
                                     </button>
-                                    {alreadyAdded ? <span className="text-[10px] text-slate-500">Added</span> : <Plus size={12} className="text-green-600" />}
+                                    {!alreadyAdded && (
+                                      <div className={`p-1 rounded transition-colors ${isSelected ? 'text-green-600' : 'text-slate-300'}`}>
+                                        <Plus size={13} />
+                                      </div>
+                                    )}
                                   </div>
                                 </div>
                               );
                             })}
+                            {filteredProducts.length === 0 && (
+                              <div className="py-6 text-center text-sm text-slate-400">
+                                No products match your search
+                              </div>
+                            )}
                           </div>
                         </div>
                       )}
