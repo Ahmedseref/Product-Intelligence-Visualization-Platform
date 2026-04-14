@@ -640,10 +640,11 @@ const SystemBuilder: React.FC<SystemBuilderProps> = ({ products }) => {
                   {fullSystem.layers.map((layer, idx) => (
                     <div
                       key={layer.layerId}
-                      draggable
+                      draggable={showAddProduct !== layer.layerId}
                       onDragStart={() => handleLayerDragStart(idx)}
                       onDragOver={(e) => handleLayerDragOver(e, idx)}
                       onDrop={(e) => handleLayerDrop(e, idx)}
+                      onDragEnd={() => setDraggedLayerIdx(null)}
                       className={`border rounded-xl transition-all ${
                         draggedLayerIdx === idx ? 'opacity-50 border-blue-300 bg-blue-50' : 'border-slate-200 bg-white hover:border-slate-300'
                       }`}
