@@ -307,7 +307,8 @@ const SystemBuilder: React.FC<SystemBuilderProps> = ({ products }) => {
   const filteredProducts = products.filter((p) =>
     p.name.toLowerCase().includes(productSearch.toLowerCase()) ||
     (p.stockCode && p.stockCode.toLowerCase().includes(productSearch.toLowerCase())) ||
-    (p.supplier && p.supplier.toLowerCase().includes(productSearch.toLowerCase()))
+    (p.supplier && p.supplier.toLowerCase().includes(productSearch.toLowerCase())) ||
+    (p.description && p.description.toLowerCase().includes(productSearch.toLowerCase()))
   );
 
   const getStatusColor = (status: string) => {
