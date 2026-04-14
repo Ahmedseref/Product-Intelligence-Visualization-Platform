@@ -802,10 +802,10 @@ const SystemBuilder: React.FC<SystemBuilderProps> = ({ products }) => {
                                         e.stopPropagation();
                                         setDetailsProduct(prod);
                                       }}
-                                      className="p-1 text-slate-300 hover:text-blue-500 hover:bg-blue-50 rounded transition-colors"
+                                      className="p-1.5 text-slate-300 hover:text-blue-500 hover:bg-blue-50 rounded-md transition-colors"
                                       title="View product details"
                                     >
-                                      <Info size={13} />
+                                      <Info size={14} />
                                     </button>
                                     {!alreadyAdded && (
                                       <div className={`p-1 rounded transition-colors ${isSelected ? 'text-green-600' : 'text-slate-300'}`}>
@@ -844,6 +844,18 @@ const SystemBuilder: React.FC<SystemBuilderProps> = ({ products }) => {
                               <span className="text-xs text-slate-400">{opt.productSupplier}</span>
                             )}
                             <div className="flex-1" />
+                            <button
+                              onClick={() => setDetailsProduct({
+                                id: opt.productId,
+                                name: opt.productName || opt.productId,
+                                stockCode: opt.productStockCode || '',
+                                supplier: opt.productSupplier || '',
+                              } as Product)}
+                              className="p-1.5 text-slate-300 hover:text-blue-500 hover:bg-blue-50 rounded-md transition-colors"
+                              title="View product details"
+                            >
+                              <Info size={14} />
+                            </button>
                             {editingOption === opt.optionId ? (
                               <div className="flex items-center gap-1">
                                 <input
