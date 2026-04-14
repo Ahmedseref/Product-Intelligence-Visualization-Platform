@@ -2,8 +2,9 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { SystemData, SystemFull, SystemLayer, SystemProductOption, Product, Sector } from '../../types';
 import { systemsApi } from '../../client/api';
 import { useEscapeKey } from '../../hooks/useEscapeKey';
+import ProductDetailsModal from '../ProductDetailsModal';
 import { 
-  Plus, Search, ChevronRight, ChevronDown, GripVertical, Trash2, Edit, Save, X, 
+  Plus, Search, ChevronRight, ChevronDown, GripVertical, Trash2, Edit, Save, X, Info, 
   Download, Upload, Layers, Package, Star, StarOff, MoreVertical, Copy, 
   History, Eye, FileJson, FileSpreadsheet, ChevronUp, AlertCircle, Check,
   BarChart3, FileUp
@@ -41,8 +42,10 @@ const SystemBuilder: React.FC<SystemBuilderProps> = ({ products }) => {
   const [showHistory, setShowHistory] = useState(false);
   const [historyEntries, setHistoryEntries] = useState<any[]>([]);
   const [showExportMenu, setShowExportMenu] = useState(false);
+  const [detailsProduct, setDetailsProduct] = useState<Product | null>(null);
 
   useEscapeKey(showHistory ? () => setShowHistory(false) : null);
+  useEscapeKey(detailsProduct ? () => setDetailsProduct(null) : null);
 
   const loadSystems = useCallback(async () => {
     try {
@@ -752,7 +755,19 @@ const SystemBuilder: React.FC<SystemBuilderProps> = ({ products }) => {
                                     <span className="truncate">{prod.name}</span>
                                     {prod.stockCode && <span className="text-xs text-slate-400">{prod.stockCode}</span>}
                                   </div>
-                                  {alreadyAdded ? <span className="text-[10px] text-slate-500">Added</span> : <Plus size={12} className="text-green-600" />}
+                                  <div className="flex items-center gap-1">
+                                    <button
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        setDetailsProduct(prod);
+                                      }}
+                                      className="p-1 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded transition-colors"
+                                      title="View product details"
+                                    >
+                                      <Info size={12} />
+                                    </button>
+                                    {alreadyAdded ? <span className="text-[10px] text-slate-500">Added</span> : <Plus size={12} className="text-green-600" />}
+                                  </div>
                                 </div>
                               );
                             })}
@@ -945,6 +960,15 @@ const SystemBuilder: React.FC<SystemBuilderProps> = ({ products }) => {
             </div>
           </div>
         </div>
+      )}
+      {detailsProduct && (
+        <ProductDetailsModal
+          product={detailsProduct}
+          onClose={() => setDetailsProduct(null)}
+          onUpdate={() => {}}
+          onEdit={() => {}}
+          treeNodes={[]}
+        />
       )}
     </div>
   );
