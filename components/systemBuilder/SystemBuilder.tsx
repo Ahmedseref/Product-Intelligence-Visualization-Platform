@@ -825,75 +825,121 @@ const SystemBuilder: React.FC<SystemBuilderProps> = ({ products }) => {
                         </div>
                       )}
 
-                      <div className="divide-y divide-slate-50">
-                        {layer.productOptions.map((opt) => (
-                          <div key={opt.optionId} className="flex items-center gap-2 px-3 py-2 hover:bg-slate-50 group/opt transition-colors">
-                            <button
-                              onClick={() => handleToggleDefault(opt.optionId, opt.isDefault)}
-                              className={`flex-shrink-0 ${opt.isDefault ? 'text-amber-500' : 'text-slate-300 hover:text-amber-400'}`}
-                              title={opt.isDefault ? 'Default product' : 'Set as default'}
+                      <div className="divide-y divide-indigo-50/50 px-2 py-1.5 space-y-0.5">
+                        {layer.productOptions.map((opt) => {
+                          const fullProd = products.find(p => p.id === opt.productId);
+                          return (
+                            <div
+                              key={opt.optionId}
+                              className={`flex items-start gap-2.5 px-2.5 py-2 rounded-lg border transition-all group/opt ${
+                                opt.isDefault
+                                  ? 'bg-amber-50/40 border-amber-200'
+                                  : 'bg-indigo-50/20 border-transparent hover:bg-indigo-50/50 hover:border-indigo-100'
+                              }`}
                             >
-                              {opt.isDefault ? <Star size={14} fill="currentColor" /> : <StarOff size={14} />}
-                            </button>
-                            <Package size={13} className="text-slate-400 flex-shrink-0" />
-                            <span className="text-sm text-slate-700 font-medium truncate">{opt.productName || opt.productId}</span>
-                            {opt.productStockCode && (
-                              <span className="text-xs text-slate-400 bg-slate-100 px-1.5 py-0.5 rounded font-mono">{opt.productStockCode}</span>
-                            )}
-                            {opt.productSupplier && (
-                              <span className="text-xs text-slate-400">{opt.productSupplier}</span>
-                            )}
-                            <div className="flex-1" />
-                            <button
-                              onClick={() => setDetailsProduct({
-                                id: opt.productId,
-                                name: opt.productName || opt.productId,
-                                stockCode: opt.productStockCode || '',
-                                supplier: opt.productSupplier || '',
-                              } as Product)}
-                              className="p-1.5 text-slate-300 hover:text-blue-500 hover:bg-blue-50 rounded-md transition-colors"
-                              title="View product details"
-                            >
-                              <Info size={14} />
-                            </button>
-                            {editingOption === opt.optionId ? (
-                              <div className="flex items-center gap-1">
-                                <input
-                                  type="text"
-                                  value={editBenefit}
-                                  onChange={(e) => setEditBenefit(e.target.value)}
-                                  placeholder="Product benefit..."
-                                  className="px-2 py-0.5 text-xs border border-slate-200 rounded focus:ring-1 focus:ring-blue-500 outline-none w-48"
-                                />
-                                <button onClick={() => handleUpdateBenefit(opt.optionId)} className="p-0.5 text-green-600 hover:bg-green-50 rounded">
-                                  <Check size={12} />
-                                </button>
-                                <button onClick={() => setEditingOption(null)} className="p-0.5 text-slate-400 hover:bg-slate-100 rounded">
-                                  <X size={12} />
-                                </button>
+                              {/* Star toggle */}
+                              <button
+                                onClick={() => handleToggleDefault(opt.optionId, opt.isDefault)}
+                                className={`flex-shrink-0 mt-0.5 p-0.5 rounded transition-colors ${
+                                  opt.isDefault ? 'text-amber-500 hover:text-amber-600' : 'text-slate-300 hover:text-amber-400 hover:bg-amber-50'
+                                }`}
+                                title={opt.isDefault ? 'Default product — click to unset' : 'Set as default'}
+                              >
+                                {opt.isDefault ? <Star size={14} fill="currentColor" /> : <StarOff size={14} />}
+                              </button>
+
+                              {/* Main content */}
+                              <div className="flex-1 min-w-0">
+                                <div className="flex items-center gap-1.5">
+                                  <span className="text-sm font-medium text-slate-800 truncate">
+                                    {opt.productName || opt.productId}
+                                  </span>
+                                  {opt.isDefault && (
+                                    <span className="flex-shrink-0 text-[10px] font-semibold px-1.5 py-0.5 bg-amber-100 text-amber-600 rounded-full">
+                                      Default
+                                    </span>
+                                  )}
+                                </div>
+                                <div className="flex items-center gap-2 mt-0.5 flex-wrap">
+                                  {opt.productStockCode && (
+                                    <span className="text-[10px] font-mono text-indigo-400 bg-indigo-50 px-1.5 py-0.5 rounded">
+                                      {opt.productStockCode}
+                                    </span>
+                                  )}
+                                  {opt.productSupplier && (
+                                    <span className="text-[10px] text-slate-400 truncate">{opt.productSupplier}</span>
+                                  )}
+                                </div>
+                                {(fullProd?.description || opt.benefit) && (
+                                  <div className="flex items-center gap-2 mt-0.5 flex-wrap">
+                                    {fullProd?.description && (
+                                      <p className="text-[11px] text-slate-400 line-clamp-1 italic">{fullProd.description}</p>
+                                    )}
+                                  </div>
+                                )}
+                                {/* Benefit editor */}
+                                {editingOption === opt.optionId ? (
+                                  <div className="flex items-center gap-1 mt-1">
+                                    <input
+                                      type="text"
+                                      value={editBenefit}
+                                      onChange={(e) => setEditBenefit(e.target.value)}
+                                      placeholder="Product benefit..."
+                                      className="flex-1 px-2 py-0.5 text-xs border border-indigo-200 rounded focus:ring-1 focus:ring-indigo-400 outline-none"
+                                      autoFocus
+                                    />
+                                    <button onClick={() => handleUpdateBenefit(opt.optionId)} className="p-0.5 text-green-600 hover:bg-green-50 rounded">
+                                      <Check size={12} />
+                                    </button>
+                                    <button onClick={() => setEditingOption(null)} className="p-0.5 text-slate-400 hover:bg-slate-100 rounded">
+                                      <X size={12} />
+                                    </button>
+                                  </div>
+                                ) : opt.benefit ? (
+                                  <div className="mt-1 flex items-center gap-1">
+                                    <span className="text-[11px] text-emerald-600 bg-emerald-50 px-1.5 py-0.5 rounded border border-emerald-100">
+                                      {opt.benefit}
+                                    </span>
+                                  </div>
+                                ) : null}
                               </div>
-                            ) : (
-                              <>
-                                {opt.benefit && <span className="text-xs text-emerald-600 bg-emerald-50 px-1.5 py-0.5 rounded">{opt.benefit}</span>}
+
+                              {/* Action buttons */}
+                              <div className="flex items-center gap-0.5 flex-shrink-0 mt-0.5">
                                 <button
-                                  onClick={() => { setEditingOption(opt.optionId); setEditBenefit(opt.benefit || ''); }}
-                                  className="opacity-0 group-hover/opt:opacity-100 p-1 text-slate-400 hover:text-blue-500 rounded transition-all"
-                                  title="Edit benefit"
+                                  onClick={() => setDetailsProduct(fullProd ?? {
+                                    id: opt.productId,
+                                    name: opt.productName || opt.productId,
+                                    stockCode: opt.productStockCode || '',
+                                    supplier: opt.productSupplier || '',
+                                  } as Product)}
+                                  className="p-1.5 text-slate-300 hover:text-blue-500 hover:bg-blue-50 rounded-md transition-colors"
+                                  title="View product details"
                                 >
-                                  <Edit size={12} />
+                                  <Info size={14} />
                                 </button>
+                                {editingOption !== opt.optionId && (
+                                  <button
+                                    onClick={() => { setEditingOption(opt.optionId); setEditBenefit(opt.benefit || ''); }}
+                                    className="opacity-0 group-hover/opt:opacity-100 p-1.5 text-slate-300 hover:text-blue-500 hover:bg-blue-50 rounded-md transition-all"
+                                    title="Edit benefit"
+                                  >
+                                    <Edit size={13} />
+                                  </button>
+                                )}
                                 <button
                                   onClick={() => handleRemoveProduct(opt.optionId)}
-                                  className="opacity-0 group-hover/opt:opacity-100 p-1 text-slate-400 hover:text-red-500 rounded transition-all"
+                                  className="opacity-0 group-hover/opt:opacity-100 p-1.5 text-slate-300 hover:text-red-500 hover:bg-red-50 rounded-md transition-all"
+                                  title="Remove from layer"
                                 >
-                                  <Trash2 size={12} />
+                                  <Trash2 size={13} />
                                 </button>
-                              </>
-                            )}
-                          </div>
-                        ))}
+                              </div>
+                            </div>
+                          );
+                        })}
                         {layer.productOptions.length === 0 && (
-                          <div className="px-3 py-3 text-center text-xs text-slate-400">
+                          <div className="py-4 text-center text-xs text-slate-400">
                             No products assigned to this layer yet
                           </div>
                         )}
