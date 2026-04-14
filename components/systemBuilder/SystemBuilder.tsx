@@ -702,7 +702,7 @@ const SystemBuilder: React.FC<SystemBuilderProps> = ({ products }) => {
                       </div>
 
                       {showAddProduct === layer.layerId && (
-                        <div className="px-3 py-2 bg-green-50 border-b border-green-100">
+                        <div className="px-3 py-2 bg-white border-b border-slate-100 border-l-4 border-l-green-400">
                           <div className="relative mb-2">
                             <Search size={14} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-400" />
                             <input
