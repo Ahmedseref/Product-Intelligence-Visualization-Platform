@@ -28,6 +28,7 @@ const SystemBuilder: React.FC<SystemBuilderProps> = ({ products }) => {
   const [showCreateSystem, setShowCreateSystem] = useState(false);
   const [showAddLayer, setShowAddLayer] = useState(false);
   const [showAddProduct, setShowAddProduct] = useState<string | null>(null);
+  const [selectedProductIds, setSelectedProductIds] = useState<string[]>([]);
   const [editingLayer, setEditingLayer] = useState<string | null>(null);
   const [editingOption, setEditingOption] = useState<string | null>(null);
   const [newSystemForm, setNewSystemForm] = useState({ name: '', description: '', typicalUses: '', sectorMapping: [] as string[] });
@@ -169,6 +170,19 @@ const SystemBuilder: React.FC<SystemBuilderProps> = ({ products }) => {
       if (selectedSystemId) await loadFullSystem(selectedSystemId);
     } catch (err) {
       console.error('Failed to add product:', err);
+    }
+  };
+
+  const handleAddSelectedProductsToLayer = async (layerId: string) => {
+    if (selectedProductIds.length === 0) return;
+    try {
+      for (const productId of selectedProductIds) {
+        await systemsApi.addProductOption({ layerId, productId, benefit: '', isDefault: false });
+      }
+      setSelectedProductIds([]);
+      if (selectedSystemId) await loadFullSystem(selectedSystemId);
+    } catch (err) {
+      console.error('Failed to add selected products:', err);
     }
   };
 
@@ -696,27 +710,49 @@ const SystemBuilder: React.FC<SystemBuilderProps> = ({ products }) => {
                               autoFocus
                             />
                           </div>
+                          <div className="flex items-center justify-between mb-2">
+                            <div className="text-xs text-slate-500">
+                              {selectedProductIds.length > 0 ? `${selectedProductIds.length} selected` : 'Select one or more products'}
+                            </div>
+                            <button
+                              onClick={() => handleAddSelectedProductsToLayer(layer.layerId)}
+                              disabled={selectedProductIds.length === 0}
+                              className="px-2 py-1 text-xs bg-green-600 text-white rounded-lg hover:bg-green-700 disabled:opacity-40 disabled:cursor-not-allowed"
+                            >
+                              Add Selected
+                            </button>
+                          </div>
                           <div className="max-h-48 overflow-y-auto space-y-0.5">
                             {filteredProducts.slice(0, 20).map((prod) => {
                               const alreadyAdded = layer.productOptions.some((o) => o.productId === prod.id);
+                              const isSelected = selectedProductIds.includes(prod.id);
                               return (
                                 <div
                                   key={prod.id}
-                                  className={`flex items-center justify-between px-2 py-1.5 rounded text-sm ${
-                                    alreadyAdded ? 'bg-slate-100 text-slate-400' : 'hover:bg-green-100 cursor-pointer'
+                                  className={`flex items-center justify-between px-2 py-1.5 rounded text-sm border ${
+                                    isSelected ? 'bg-green-50 border-green-300' : 'bg-white border-transparent hover:bg-green-50 hover:border-green-200'
                                   }`}
-                                  onClick={() => !alreadyAdded && handleAddProductToLayer(layer.layerId, prod.id)}
+                                  onClick={() => {
+                                    if (alreadyAdded) return;
+                                    setSelectedProductIds(prev =>
+                                      prev.includes(prod.id)
+                                        ? prev.filter(id => id !== prod.id)
+                                        : [...prev, prod.id]
+                                    );
+                                  }}
                                 >
                                   <div className="flex items-center gap-2">
-                                    <Package size={12} className="flex-shrink-0" />
+                                    <input
+                                      type="checkbox"
+                                      checked={isSelected}
+                                      readOnly
+                                      className="w-3.5 h-3.5 accent-green-600"
+                                    />
+                                    <Package size={12} className="flex-shrink-0 text-slate-500" />
                                     <span className="truncate">{prod.name}</span>
                                     {prod.stockCode && <span className="text-xs text-slate-400">{prod.stockCode}</span>}
                                   </div>
-                                  {alreadyAdded ? (
-                                    <span className="text-[10px] text-slate-400">Added</span>
-                                  ) : (
-                                    <Plus size={12} className="text-green-600" />
-                                  )}
+                                  {alreadyAdded ? <span className="text-[10px] text-slate-500">Added</span> : <Plus size={12} className="text-green-600" />}
                                 </div>
                               );
                             })}
