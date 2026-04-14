@@ -1,8 +1,9 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { SystemData, SystemFull, SystemLayer, SystemProductOption, Product, Sector } from '../../types';
+import { SystemData, SystemFull, SystemLayer, SystemProductOption, Product, Sector, CustomField, TreeNode, Supplier, User } from '../../types';
 import { systemsApi } from '../../client/api';
 import { useEscapeKey } from '../../hooks/useEscapeKey';
 import ProductDetailsModal from '../ProductDetailsModal';
+import ProductForm from '../ProductForm';
 import { 
   Plus, Search, ChevronRight, ChevronDown, GripVertical, Trash2, Edit, Save, X, Info, 
   Download, Upload, Layers, Package, Star, StarOff, MoreVertical, Copy, 
@@ -14,11 +15,21 @@ import SystemImport from './SystemImport';
 
 interface SystemBuilderProps {
   products: Product[];
+  onProductUpdate: (p: Product) => void;
+  customFields: CustomField[];
+  treeNodes: TreeNode[];
+  suppliers: Supplier[];
+  usageAreas: string[];
+  units: string[];
+  colors: any[];
+  currentUser: User;
+  onAddFieldDefinition: (field: CustomField) => void;
+  onAddTreeNode: (node: TreeNode) => void;
 }
 
 type TabMode = 'builder' | 'analytics' | 'import';
 
-const SystemBuilder: React.FC<SystemBuilderProps> = ({ products }) => {
+const SystemBuilder: React.FC<SystemBuilderProps> = ({ products, onProductUpdate, customFields, treeNodes, suppliers, usageAreas, units, colors, currentUser, onAddFieldDefinition, onAddTreeNode }) => {
   const [activeTab, setActiveTab] = useState<TabMode>('builder');
   const [systems, setSystems] = useState<SystemData[]>([]);
   const [selectedSystemId, setSelectedSystemId] = useState<string | null>(null);
@@ -43,6 +54,7 @@ const SystemBuilder: React.FC<SystemBuilderProps> = ({ products }) => {
   const [historyEntries, setHistoryEntries] = useState<any[]>([]);
   const [showExportMenu, setShowExportMenu] = useState(false);
   const [detailsProduct, setDetailsProduct] = useState<Product | null>(null);
+  const [editingProduct, setEditingProduct] = useState<Product | null>(null);
 
   useEscapeKey(showHistory ? () => setShowHistory(false) : null);
   useEscapeKey(detailsProduct ? () => setDetailsProduct(null) : null);
@@ -1073,10 +1085,41 @@ const SystemBuilder: React.FC<SystemBuilderProps> = ({ products }) => {
         <ProductDetailsModal
           product={detailsProduct}
           onClose={() => setDetailsProduct(null)}
-          onUpdate={() => {}}
-          onEdit={() => {}}
-          treeNodes={[]}
+          onUpdate={(updatedProduct) => {
+            onProductUpdate(updatedProduct);
+            setDetailsProduct(updatedProduct);
+          }}
+          onEdit={(p) => {
+            setDetailsProduct(null);
+            setEditingProduct(p);
+          }}
+          treeNodes={treeNodes}
         />
+      )}
+
+      {editingProduct && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 overflow-y-auto p-4">
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-5xl max-h-[90vh] overflow-y-auto">
+            <ProductForm
+              initialProduct={editingProduct}
+              mode="edit"
+              onSubmit={(updatedProduct) => {
+                onProductUpdate(updatedProduct);
+                setEditingProduct(null);
+              }}
+              onCancel={() => setEditingProduct(null)}
+              currentUser={currentUser}
+              customFields={customFields}
+              treeNodes={treeNodes}
+              suppliers={suppliers}
+              usageAreas={usageAreas}
+              units={units}
+              colors={colors}
+              onAddFieldDefinition={onAddFieldDefinition}
+              onAddTreeNode={onAddTreeNode}
+            />
+          </div>
+        </div>
       )}
     </div>
   );

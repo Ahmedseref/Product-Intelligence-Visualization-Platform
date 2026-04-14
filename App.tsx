@@ -954,7 +954,19 @@ const App: React.FC = () => {
               />
             )}
             {viewMode === 'system-builder' && (
-              <SystemBuilder products={products} />
+              <SystemBuilder
+                products={products}
+                onProductUpdate={updateProduct}
+                customFields={customFieldConfigs}
+                treeNodes={treeNodes}
+                suppliers={suppliers}
+                usageAreas={usageAreas}
+                units={units}
+                colors={colorsList}
+                currentUser={currentUser}
+                onAddFieldDefinition={addCustomFieldDefinition}
+                onAddTreeNode={addTreeNode}
+              />
             )}
             {viewMode === 'document-memory' && (
               <DocumentMemory
