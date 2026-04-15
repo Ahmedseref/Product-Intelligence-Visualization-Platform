@@ -6,6 +6,7 @@ import ProductForm from './ProductForm';
 import TaxonomyNodeSelector from './TaxonomyNodeSelector';
 import { Check, X, Download, Filter, FileText, ChevronDown, ChevronRight, Copy, Trash2, Columns, Eye, EyeOff, FolderTree, Search, ChevronsUpDown, RefreshCw } from 'lucide-react';
 import { useEscapeKey } from '../hooks/useEscapeKey';
+import { parseSearchQuery, matchesAdvancedSearch } from '../shared/searchUtils';
 
 interface InventoryColumnSetting {
   key: string;
@@ -590,17 +591,20 @@ const ProductList: React.FC<ProductListProps> = ({
     return getNodeDescendants(filters.taxonomyNodeId);
   }, [filters.taxonomyNodeId, getNodeDescendants]);
 
-  const searchFiltered = searchQuery ? products.filter(p => {
-    const q = searchQuery.toLowerCase();
-    const hierarchy = getHierarchyLevels(p.nodeId);
-    return (
-      p.name?.toLowerCase().includes(q) ||
-      (p.stockCode || '').toLowerCase().includes(q) ||
-      (p.description || '').toLowerCase().includes(q) ||
-      p.supplier?.toLowerCase().includes(q) ||
-      hierarchy.fullPath.toLowerCase().includes(q)
-    );
-  }) : products;
+  const searchFiltered = searchQuery ? (() => {
+    const parsed = parseSearchQuery(searchQuery);
+    return products.filter(p => {
+      const hierarchy = getHierarchyLevels(p.nodeId);
+      const searchableText = [
+        p.name || '',
+        p.stockCode || '',
+        p.description || '',
+        p.supplier || '',
+        hierarchy.fullPath || ''
+      ].join(' ');
+      return matchesAdvancedSearch(searchableText, parsed);
+    });
+  })() : products;
 
   const filteredProducts = searchFiltered.filter(p => {
     const hierarchy = getHierarchyLevels(p.nodeId);
@@ -1033,7 +1037,7 @@ const ProductList: React.FC<ProductListProps> = ({
               type="text"
               value={searchQuery}
               onChange={e => setSearchQuery(e.target.value)}
-              placeholder="Search products..."
+              placeholder="Search products... (use +include -exclude)"
               className="w-full pl-10 pr-4 py-2 bg-white border border-slate-200 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none"
             />
             {searchQuery && (

@@ -4,6 +4,7 @@ import { systemsApi } from '../../client/api';
 import { useEscapeKey } from '../../hooks/useEscapeKey';
 import ProductDetailsModal from '../ProductDetailsModal';
 import ProductForm from '../ProductForm';
+import { parseSearchQuery, matchesAdvancedSearch } from '../../shared/searchUtils';
 import { 
   Plus, Search, ChevronRight, ChevronDown, GripVertical, Trash2, Edit, Save, X, Info, 
   Download, Upload, Layers, Package, Star, StarOff, MoreVertical, Copy, 
@@ -316,12 +317,18 @@ const SystemBuilder: React.FC<SystemBuilderProps> = ({ products, onProductUpdate
     s.name.toLowerCase().includes(searchTerm.toLowerCase())
   );
 
-  const filteredProducts = products.filter((p) =>
-    p.name.toLowerCase().includes(productSearch.toLowerCase()) ||
-    (p.stockCode && p.stockCode.toLowerCase().includes(productSearch.toLowerCase())) ||
-    (p.supplier && p.supplier.toLowerCase().includes(productSearch.toLowerCase())) ||
-    (p.description && p.description.toLowerCase().includes(productSearch.toLowerCase()))
-  );
+  const filteredProducts = productSearch ? (() => {
+    const parsed = parseSearchQuery(productSearch);
+    return products.filter((p) => {
+      const searchableText = [
+        p.name || '',
+        p.stockCode || '',
+        p.supplier || '',
+        p.description || ''
+      ].join(' ');
+      return matchesAdvancedSearch(searchableText, parsed);
+    });
+  })() : products;
 
   const getStatusColor = (status: string) => {
     switch (status) {
@@ -731,7 +738,7 @@ const SystemBuilder: React.FC<SystemBuilderProps> = ({ products, onProductUpdate
                             <Search size={14} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-400" />
                             <input
                               type="text"
-                              placeholder="Search products by name, stock code, or supplier..."
+                              placeholder="Search products... (use +include -exclude)"
                               value={productSearch}
                               onChange={(e) => setProductSearch(e.target.value)}
                               className="w-full pl-8 pr-3 py-1.5 text-sm border border-slate-200 rounded-lg focus:ring-2 focus:ring-green-500 outline-none"
