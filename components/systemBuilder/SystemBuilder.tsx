@@ -649,7 +649,19 @@ const SystemBuilder: React.FC<SystemBuilderProps> = ({ products, onProductUpdate
                 </div>
               ) : (
                 <div className="space-y-3">
-                  {fullSystem.layers.map((layer, idx) => (
+                  {fullSystem.layers.map((layer, idx) => {
+                    const layerColors = [
+                      { border: 'border-blue-200', borderHover: 'hover:border-blue-300', bg: 'bg-blue-50/60', headerBg: 'bg-blue-50', badgeBg: 'bg-blue-100', badgeText: 'text-blue-700', accent: 'border-blue-100', countBg: 'bg-blue-100/60', countText: 'text-blue-600', leftBar: 'bg-blue-400' },
+                      { border: 'border-emerald-200', borderHover: 'hover:border-emerald-300', bg: 'bg-emerald-50/60', headerBg: 'bg-emerald-50', badgeBg: 'bg-emerald-100', badgeText: 'text-emerald-700', accent: 'border-emerald-100', countBg: 'bg-emerald-100/60', countText: 'text-emerald-600', leftBar: 'bg-emerald-400' },
+                      { border: 'border-violet-200', borderHover: 'hover:border-violet-300', bg: 'bg-violet-50/60', headerBg: 'bg-violet-50', badgeBg: 'bg-violet-100', badgeText: 'text-violet-700', accent: 'border-violet-100', countBg: 'bg-violet-100/60', countText: 'text-violet-600', leftBar: 'bg-violet-400' },
+                      { border: 'border-amber-200', borderHover: 'hover:border-amber-300', bg: 'bg-amber-50/60', headerBg: 'bg-amber-50', badgeBg: 'bg-amber-100', badgeText: 'text-amber-700', accent: 'border-amber-100', countBg: 'bg-amber-100/60', countText: 'text-amber-600', leftBar: 'bg-amber-400' },
+                      { border: 'border-rose-200', borderHover: 'hover:border-rose-300', bg: 'bg-rose-50/60', headerBg: 'bg-rose-50', badgeBg: 'bg-rose-100', badgeText: 'text-rose-700', accent: 'border-rose-100', countBg: 'bg-rose-100/60', countText: 'text-rose-600', leftBar: 'bg-rose-400' },
+                      { border: 'border-cyan-200', borderHover: 'hover:border-cyan-300', bg: 'bg-cyan-50/60', headerBg: 'bg-cyan-50', badgeBg: 'bg-cyan-100', badgeText: 'text-cyan-700', accent: 'border-cyan-100', countBg: 'bg-cyan-100/60', countText: 'text-cyan-600', leftBar: 'bg-cyan-400' },
+                      { border: 'border-orange-200', borderHover: 'hover:border-orange-300', bg: 'bg-orange-50/60', headerBg: 'bg-orange-50', badgeBg: 'bg-orange-100', badgeText: 'text-orange-700', accent: 'border-orange-100', countBg: 'bg-orange-100/60', countText: 'text-orange-600', leftBar: 'bg-orange-400' },
+                      { border: 'border-indigo-200', borderHover: 'hover:border-indigo-300', bg: 'bg-indigo-50/60', headerBg: 'bg-indigo-50', badgeBg: 'bg-indigo-100', badgeText: 'text-indigo-700', accent: 'border-indigo-100', countBg: 'bg-indigo-100/60', countText: 'text-indigo-600', leftBar: 'bg-indigo-400' },
+                    ];
+                    const lc = layerColors[idx % layerColors.length];
+                    return (
                     <div
                       key={layer.layerId}
                       draggable={showAddProduct !== layer.layerId}
@@ -657,13 +669,14 @@ const SystemBuilder: React.FC<SystemBuilderProps> = ({ products, onProductUpdate
                       onDragOver={(e) => handleLayerDragOver(e, idx)}
                       onDrop={(e) => handleLayerDrop(e, idx)}
                       onDragEnd={() => setDraggedLayerIdx(null)}
-                      className={`border rounded-xl transition-all ${
-                        draggedLayerIdx === idx ? 'opacity-50 border-blue-300 bg-blue-50' : 'border-slate-200 bg-white hover:border-slate-300'
+                      className={`border rounded-xl transition-all overflow-hidden ${
+                        draggedLayerIdx === idx ? 'opacity-50 border-blue-300 bg-blue-50' : `${lc.border} ${lc.bg} ${lc.borderHover}`
                       }`}
                     >
-                      <div className="flex items-center gap-2 px-3 py-2 bg-slate-50 rounded-t-xl border-b border-slate-100">
-                        <GripVertical size={14} className="text-slate-300 cursor-grab flex-shrink-0" />
-                        <div className="w-6 h-6 rounded-full bg-blue-100 text-blue-600 flex items-center justify-center text-xs font-bold flex-shrink-0">
+                      <div className={`flex items-center gap-2 px-3 py-2 ${lc.headerBg} rounded-t-xl border-b ${lc.accent} relative`}>
+                        <div className={`absolute left-0 top-0 bottom-0 w-1 ${lc.leftBar} rounded-tl-xl`} />
+                        <GripVertical size={14} className="text-slate-300 cursor-grab flex-shrink-0 ml-1" />
+                        <div className={`w-6 h-6 rounded-full ${lc.badgeBg} ${lc.badgeText} flex items-center justify-center text-xs font-bold flex-shrink-0`}>
                           {idx + 1}
                         </div>
                         {editingLayer === layer.layerId ? (
@@ -685,7 +698,7 @@ const SystemBuilder: React.FC<SystemBuilderProps> = ({ products, onProductUpdate
                           <>
                             <span className="flex-1 text-sm font-semibold text-slate-700">{layer.layerName}</span>
                             {layer.notes && <span className="text-xs text-slate-400 truncate max-w-[200px]">{layer.notes}</span>}
-                            <span className="text-xs text-slate-400 bg-slate-100 px-2 py-0.5 rounded-full">
+                            <span className={`text-xs ${lc.countText} ${lc.countBg} px-2 py-0.5 rounded-full font-medium`}>
                               {layer.productOptions.length} product{layer.productOptions.length !== 1 ? 's' : ''}
                             </span>
                             <button
@@ -957,7 +970,8 @@ const SystemBuilder: React.FC<SystemBuilderProps> = ({ products, onProductUpdate
                         )}
                       </div>
                     </div>
-                  ))}
+                    );
+                  })}
                 </div>
               )}
             </div>
