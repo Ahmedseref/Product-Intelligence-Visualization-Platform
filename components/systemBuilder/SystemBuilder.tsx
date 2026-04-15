@@ -651,14 +651,12 @@ const SystemBuilder: React.FC<SystemBuilderProps> = ({ products, onProductUpdate
                 <div className="space-y-3">
                   {fullSystem.layers.map((layer, idx) => {
                     const layerColors = [
-                      { border: 'border-blue-200', borderHover: 'hover:border-blue-300', bg: 'bg-blue-50/60', headerBg: 'bg-blue-50', badgeBg: 'bg-blue-100', badgeText: 'text-blue-700', accent: 'border-blue-100', countBg: 'bg-blue-100/60', countText: 'text-blue-600', leftBar: 'bg-blue-400' },
-                      { border: 'border-emerald-200', borderHover: 'hover:border-emerald-300', bg: 'bg-emerald-50/60', headerBg: 'bg-emerald-50', badgeBg: 'bg-emerald-100', badgeText: 'text-emerald-700', accent: 'border-emerald-100', countBg: 'bg-emerald-100/60', countText: 'text-emerald-600', leftBar: 'bg-emerald-400' },
-                      { border: 'border-violet-200', borderHover: 'hover:border-violet-300', bg: 'bg-violet-50/60', headerBg: 'bg-violet-50', badgeBg: 'bg-violet-100', badgeText: 'text-violet-700', accent: 'border-violet-100', countBg: 'bg-violet-100/60', countText: 'text-violet-600', leftBar: 'bg-violet-400' },
-                      { border: 'border-amber-200', borderHover: 'hover:border-amber-300', bg: 'bg-amber-50/60', headerBg: 'bg-amber-50', badgeBg: 'bg-amber-100', badgeText: 'text-amber-700', accent: 'border-amber-100', countBg: 'bg-amber-100/60', countText: 'text-amber-600', leftBar: 'bg-amber-400' },
-                      { border: 'border-rose-200', borderHover: 'hover:border-rose-300', bg: 'bg-rose-50/60', headerBg: 'bg-rose-50', badgeBg: 'bg-rose-100', badgeText: 'text-rose-700', accent: 'border-rose-100', countBg: 'bg-rose-100/60', countText: 'text-rose-600', leftBar: 'bg-rose-400' },
-                      { border: 'border-cyan-200', borderHover: 'hover:border-cyan-300', bg: 'bg-cyan-50/60', headerBg: 'bg-cyan-50', badgeBg: 'bg-cyan-100', badgeText: 'text-cyan-700', accent: 'border-cyan-100', countBg: 'bg-cyan-100/60', countText: 'text-cyan-600', leftBar: 'bg-cyan-400' },
-                      { border: 'border-orange-200', borderHover: 'hover:border-orange-300', bg: 'bg-orange-50/60', headerBg: 'bg-orange-50', badgeBg: 'bg-orange-100', badgeText: 'text-orange-700', accent: 'border-orange-100', countBg: 'bg-orange-100/60', countText: 'text-orange-600', leftBar: 'bg-orange-400' },
-                      { border: 'border-indigo-200', borderHover: 'hover:border-indigo-300', bg: 'bg-indigo-50/60', headerBg: 'bg-indigo-50', badgeBg: 'bg-indigo-100', badgeText: 'text-indigo-700', accent: 'border-indigo-100', countBg: 'bg-indigo-100/60', countText: 'text-indigo-600', leftBar: 'bg-indigo-400' },
+                      { border: 'border-blue-200', borderHover: 'hover:border-blue-300', bg: 'bg-blue-50/40', headerBg: 'bg-blue-50', badgeBg: 'bg-blue-500', badgeText: 'text-white', accent: 'border-blue-100', countBg: 'bg-blue-100/60', countText: 'text-blue-600', leftBar: 'bg-blue-500' },
+                      { border: 'border-amber-200', borderHover: 'hover:border-amber-300', bg: 'bg-amber-50/40', headerBg: 'bg-amber-50', badgeBg: 'bg-amber-500', badgeText: 'text-white', accent: 'border-amber-100', countBg: 'bg-amber-100/60', countText: 'text-amber-600', leftBar: 'bg-amber-500' },
+                      { border: 'border-emerald-200', borderHover: 'hover:border-emerald-300', bg: 'bg-emerald-50/40', headerBg: 'bg-emerald-50', badgeBg: 'bg-emerald-500', badgeText: 'text-white', accent: 'border-emerald-100', countBg: 'bg-emerald-100/60', countText: 'text-emerald-600', leftBar: 'bg-emerald-500' },
+                      { border: 'border-purple-200', borderHover: 'hover:border-purple-300', bg: 'bg-purple-50/40', headerBg: 'bg-purple-50', badgeBg: 'bg-purple-500', badgeText: 'text-white', accent: 'border-purple-100', countBg: 'bg-purple-100/60', countText: 'text-purple-600', leftBar: 'bg-purple-500' },
+                      { border: 'border-pink-200', borderHover: 'hover:border-pink-300', bg: 'bg-pink-50/40', headerBg: 'bg-pink-50', badgeBg: 'bg-pink-500', badgeText: 'text-white', accent: 'border-pink-100', countBg: 'bg-pink-100/60', countText: 'text-pink-600', leftBar: 'bg-pink-500' },
+                      { border: 'border-cyan-200', borderHover: 'hover:border-cyan-300', bg: 'bg-cyan-50/40', headerBg: 'bg-cyan-50', badgeBg: 'bg-cyan-500', badgeText: 'text-white', accent: 'border-cyan-100', countBg: 'bg-cyan-100/60', countText: 'text-cyan-600', leftBar: 'bg-cyan-500' },
                     ];
                     const lc = layerColors[idx % layerColors.length];
                     return (
@@ -1015,7 +1013,7 @@ const SystemBuilder: React.FC<SystemBuilderProps> = ({ products, onProductUpdate
                   <div className="divide-y divide-slate-100">
                     {fullSystem.layers.map((layer, idx) => {
                       const defaultProducts = layer.productOptions.filter((o) => o.isDefault);
-                      const colorScale = ['bg-blue-500', 'bg-emerald-500', 'bg-amber-500', 'bg-purple-500', 'bg-pink-500', 'bg-cyan-500'];
+                      const colorScale = ['bg-blue-500', 'bg-amber-500', 'bg-emerald-500', 'bg-purple-500', 'bg-pink-500', 'bg-cyan-500'];
                       const layerColor = colorScale[idx % colorScale.length];
                       return (
                         <div key={layer.layerId} className="relative">
