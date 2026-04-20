@@ -56,6 +56,7 @@ const SystemBuilder: React.FC<SystemBuilderProps> = ({ products, onProductUpdate
   const [showExportMenu, setShowExportMenu] = useState(false);
   const [detailsProduct, setDetailsProduct] = useState<Product | null>(null);
   const [editingProduct, setEditingProduct] = useState<Product | null>(null);
+  const [duplicatingSystemId, setDuplicatingSystemId] = useState<string | null>(null);
 
   useEscapeKey(showHistory ? () => setShowHistory(false) : null);
   useEscapeKey(detailsProduct ? () => setDetailsProduct(null) : null);
@@ -139,6 +140,67 @@ const SystemBuilder: React.FC<SystemBuilderProps> = ({ products, onProductUpdate
       await loadSystems();
     } catch (err) {
       console.error('Failed to delete system:', err);
+    }
+  };
+
+  const handleDuplicateSystem = async (systemId: string, originalName: string) => {
+    // Guard against repeated clicks creating multiple copies
+    if (duplicatingSystemId) return;
+    setDuplicatingSystemId(systemId);
+
+    let newSystemId: string | null = null;
+    try {
+      // Fetch the full source system (with layers and product options)
+      const source = await systemsApi.getSystemFull(systemId);
+
+      // Create the new system with " (Copy)" suffix
+      const newSystem = await systemsApi.createSystem({
+        name: `${originalName} (Copy)`,
+        description: source.description || '',
+        typicalUses: source.typicalUses || '',
+        sectorMapping: source.sectorMapping || [],
+      });
+      newSystemId = newSystem.systemId;
+
+      // Recreate every layer and its product options preserving order.
+      // We pass orderSequence explicitly so the duplicate keeps the same
+      // visual order as the source (server defaults this to 0, which would
+      // collapse all layers into the same position otherwise).
+      const layers = source.layers || [];
+      for (let i = 0; i < layers.length; i++) {
+        const layer = layers[i];
+        const newLayer = await systemsApi.createLayer({
+          systemId: newSystem.systemId,
+          layerName: layer.layerName,
+          notes: layer.notes || '',
+          orderSequence: layer.orderSequence ?? i,
+        });
+
+        for (const opt of layer.productOptions || []) {
+          await systemsApi.addProductOption({
+            layerId: newLayer.layerId,
+            productId: opt.productId,
+            benefit: opt.benefit || '',
+            isDefault: opt.isDefault || false,
+          });
+        }
+      }
+
+      await loadSystems();
+      setSelectedSystemId(newSystem.systemId);
+    } catch (err) {
+      console.error('Failed to duplicate system:', err);
+      // Best-effort cleanup so we don't leave a half-built duplicate behind
+      if (newSystemId) {
+        try {
+          await systemsApi.deleteSystem(newSystemId);
+        } catch (cleanupErr) {
+          console.error('Failed to clean up partial duplicate:', cleanupErr);
+        }
+      }
+      alert('Failed to duplicate the system. Please try again.');
+    } finally {
+      setDuplicatingSystemId(null);
     }
   };
 
@@ -533,12 +595,31 @@ const SystemBuilder: React.FC<SystemBuilderProps> = ({ products, onProductUpdate
                       <span className="text-[10px] text-slate-400">v{sys.version}</span>
                     </div>
                   </div>
-                  <button
-                    onClick={(e) => { e.stopPropagation(); handleDeleteSystem(sys.systemId); }}
-                    className="opacity-0 group-hover:opacity-100 p-1 text-slate-400 hover:text-red-500 transition-all"
-                  >
-                    <Trash2 size={13} />
-                  </button>
+                  <div className="flex items-center gap-0.5">
+                    <button
+                      onClick={(e) => { e.stopPropagation(); handleDuplicateSystem(sys.systemId, sys.name); }}
+                      disabled={duplicatingSystemId !== null}
+                      className={`p-1 rounded transition-all ${
+                        duplicatingSystemId === sys.systemId
+                          ? 'opacity-100 text-blue-500'
+                          : 'opacity-0 group-hover:opacity-100 text-slate-400 hover:text-blue-500 hover:bg-blue-50'
+                      } ${duplicatingSystemId && duplicatingSystemId !== sys.systemId ? 'cursor-not-allowed' : ''}`}
+                      title={duplicatingSystemId === sys.systemId ? 'Duplicating…' : 'Duplicate this system'}
+                    >
+                      {duplicatingSystemId === sys.systemId ? (
+                        <div className="w-[13px] h-[13px] border-2 border-blue-500 border-t-transparent rounded-full animate-spin" />
+                      ) : (
+                        <Copy size={13} />
+                      )}
+                    </button>
+                    <button
+                      onClick={(e) => { e.stopPropagation(); handleDeleteSystem(sys.systemId); }}
+                      className="opacity-0 group-hover:opacity-100 p-1 text-slate-400 hover:text-red-500 hover:bg-red-50 rounded transition-all"
+                      title="Delete this system"
+                    >
+                      <Trash2 size={13} />
+                    </button>
+                  </div>
                 </div>
               </div>
             ))}
