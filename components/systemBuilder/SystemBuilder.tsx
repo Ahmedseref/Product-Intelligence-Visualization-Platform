@@ -57,6 +57,9 @@ const SystemBuilder: React.FC<SystemBuilderProps> = ({ products, onProductUpdate
   const [detailsProduct, setDetailsProduct] = useState<Product | null>(null);
   const [editingProduct, setEditingProduct] = useState<Product | null>(null);
   const [duplicatingSystemId, setDuplicatingSystemId] = useState<string | null>(null);
+  const [editingSystemId, setEditingSystemId] = useState<string | null>(null);
+  const [editSystemForm, setEditSystemForm] = useState({ name: '', description: '', typicalUses: '', sectorMapping: [] as string[] });
+  const [editSectorInput, setEditSectorInput] = useState('');
 
   useEscapeKey(showHistory ? () => setShowHistory(false) : null);
   useEscapeKey(detailsProduct ? () => setDetailsProduct(null) : null);
@@ -140,6 +143,52 @@ const SystemBuilder: React.FC<SystemBuilderProps> = ({ products, onProductUpdate
       await loadSystems();
     } catch (err) {
       console.error('Failed to delete system:', err);
+    }
+  };
+
+  const handleStartEditSystem = (sys: SystemData) => {
+    setEditingSystemId(sys.systemId);
+    setEditSystemForm({
+      name: sys.name,
+      description: sys.description || '',
+      typicalUses: (sys as any).typicalUses || '',
+      sectorMapping: sys.sectorMapping || [],
+    });
+    setEditSectorInput('');
+    // Cancel create form if open
+    setShowCreateSystem(false);
+  };
+
+  const handleAddEditSector = () => {
+    const trimmed = editSectorInput.trim();
+    if (trimmed && !editSystemForm.sectorMapping.includes(trimmed)) {
+      setEditSystemForm({ ...editSystemForm, sectorMapping: [...editSystemForm.sectorMapping, trimmed] });
+    }
+    setEditSectorInput('');
+  };
+
+  const handleRemoveEditSector = (sector: string) => {
+    setEditSystemForm({ ...editSystemForm, sectorMapping: editSystemForm.sectorMapping.filter(s => s !== sector) });
+  };
+
+  const handleSaveSystemEdit = async () => {
+    if (!editingSystemId || !editSystemForm.name.trim()) return;
+    try {
+      await systemsApi.updateSystem(editingSystemId, {
+        name: editSystemForm.name.trim(),
+        description: editSystemForm.description,
+        typicalUses: editSystemForm.typicalUses,
+        sectorMapping: editSystemForm.sectorMapping,
+      });
+      setEditingSystemId(null);
+      await loadSystems();
+      // Refresh full system data if the edited system is currently open
+      if (selectedSystemId === editingSystemId) {
+        await loadFullSystem(editingSystemId);
+      }
+    } catch (err) {
+      console.error('Failed to update system:', err);
+      alert('Failed to update the system. Please try again.');
     }
   };
 
@@ -509,6 +558,63 @@ const SystemBuilder: React.FC<SystemBuilderProps> = ({ products, onProductUpdate
             </div>
           </div>
 
+          {editingSystemId && (
+            <div className="p-3 border-b border-slate-200 bg-amber-50">
+              <div className="text-[11px] font-semibold text-amber-700 uppercase tracking-wide mb-2">Edit System</div>
+              <input
+                type="text"
+                placeholder="System name"
+                value={editSystemForm.name}
+                onChange={(e) => setEditSystemForm({ ...editSystemForm, name: e.target.value })}
+                className="w-full px-3 py-1.5 text-sm border border-slate-200 rounded-lg mb-2 focus:ring-2 focus:ring-amber-500 outline-none"
+                autoFocus
+              />
+              <textarea
+                placeholder="Description (optional)"
+                value={editSystemForm.description}
+                onChange={(e) => setEditSystemForm({ ...editSystemForm, description: e.target.value })}
+                className="w-full px-3 py-1.5 text-sm border border-slate-200 rounded-lg mb-2 focus:ring-2 focus:ring-amber-500 outline-none resize-none"
+                rows={2}
+              />
+              <input
+                type="text"
+                placeholder="Typical uses (optional)"
+                value={editSystemForm.typicalUses}
+                onChange={(e) => setEditSystemForm({ ...editSystemForm, typicalUses: e.target.value })}
+                className="w-full px-3 py-1.5 text-sm border border-slate-200 rounded-lg mb-2 focus:ring-2 focus:ring-amber-500 outline-none"
+              />
+              <div className="mb-2">
+                <div className="flex items-center gap-1 mb-1">
+                  <input
+                    type="text"
+                    placeholder="Add sector (e.g. Flooring, Roofing)"
+                    value={editSectorInput}
+                    onChange={(e) => setEditSectorInput(e.target.value)}
+                    onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); handleAddEditSector(); } }}
+                    className="flex-1 px-3 py-1.5 text-sm border border-slate-200 rounded-lg focus:ring-2 focus:ring-amber-500 outline-none"
+                  />
+                  <button type="button" onClick={handleAddEditSector} className="px-2 py-1.5 text-sm bg-slate-200 text-slate-600 rounded-lg hover:bg-slate-300">
+                    <Plus size={14} />
+                  </button>
+                </div>
+                {editSystemForm.sectorMapping.length > 0 && (
+                  <div className="flex flex-wrap gap-1">
+                    {editSystemForm.sectorMapping.map(sec => (
+                      <span key={sec} className="inline-flex items-center gap-1 px-2 py-0.5 text-xs bg-amber-100 text-amber-700 rounded-full">
+                        {sec}
+                        <button onClick={() => handleRemoveEditSector(sec)} className="hover:text-red-500"><X size={10} /></button>
+                      </span>
+                    ))}
+                  </div>
+                )}
+              </div>
+              <div className="flex gap-2">
+                <button onClick={handleSaveSystemEdit} className="flex-1 px-3 py-1.5 text-sm bg-amber-600 text-white rounded-lg hover:bg-amber-700">Save</button>
+                <button onClick={() => setEditingSystemId(null)} className="px-3 py-1.5 text-sm bg-slate-200 text-slate-600 rounded-lg hover:bg-slate-300">Cancel</button>
+              </div>
+            </div>
+          )}
+
           {showCreateSystem && (
             <div className="p-3 border-b border-slate-200 bg-blue-50">
               <input
@@ -596,6 +702,13 @@ const SystemBuilder: React.FC<SystemBuilderProps> = ({ products, onProductUpdate
                     </div>
                   </div>
                   <div className="flex items-center gap-0.5">
+                    <button
+                      onClick={(e) => { e.stopPropagation(); handleStartEditSystem(sys); }}
+                      className="opacity-0 group-hover:opacity-100 p-1 text-slate-400 hover:text-amber-500 hover:bg-amber-50 rounded transition-all"
+                      title="Edit system details"
+                    >
+                      <Edit size={13} />
+                    </button>
                     <button
                       onClick={(e) => { e.stopPropagation(); handleDuplicateSystem(sys.systemId, sys.name); }}
                       disabled={duplicatingSystemId !== null}
