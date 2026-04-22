@@ -33,6 +33,7 @@ interface ProductListProps {
   onRefresh?: () => Promise<void>;
   pendingEditProductId?: string | null;
   onPendingEditConsumed?: () => void;
+  onPendingEditClosed?: () => void;
 }
 
 interface EditingCell {
@@ -178,25 +179,39 @@ const UsageAreasEditor: React.FC<UsageAreasEditorProps> = ({ product, usageAreas
 const ProductList: React.FC<ProductListProps> = ({ 
   products, onUpdate, onDelete, onCreate, customFields, treeNodes,
   suppliers = [], currentUser, onAddFieldDefinition, onAddTreeNode, usageAreas = [], units: unitsProp, colors = [],
-  inventoryColumnsConfig, onRefresh, pendingEditProductId, onPendingEditConsumed
+  inventoryColumnsConfig, onRefresh, pendingEditProductId, onPendingEditConsumed, onPendingEditClosed
 }) => {
   const dynamicUnits = unitsProp && unitsProp.length > 0 ? unitsProp : UNITS;
   const [selectedProduct, setSelectedProduct] = useState<Product | null>(null);
   const [editingProduct, setEditingProduct] = useState<Product | null>(null);
+  // Tracks whether the currently-open editor was triggered externally (e.g.
+  // from the SystemBuilder Qualification "Manage Full Record" button). When
+  // true, closing the editor should fire onPendingEditClosed so the host can
+  // restore the originating view.
+  const [isExternallyTriggeredEdit, setIsExternallyTriggeredEdit] = useState(false);
 
-  // Open the full editor when an external caller (e.g. SystemBuilder Qualification's
-  // "Manage Full Record") asks us to edit a specific product. Looks the product up
-  // in the current `products` array, opens it, then notifies the parent so the
-  // pending id is cleared and we don't reopen on every render.
+  // Open the full editor when an external caller asks us to edit a specific
+  // product. Looks the product up in the current `products` array, opens it,
+  // then notifies the parent so the pending id is cleared and we don't
+  // reopen on every render.
   useEffect(() => {
     if (!pendingEditProductId) return;
     const target = products.find(p => p.id === pendingEditProductId);
     if (target) {
       setSelectedProduct(null);
       setEditingProduct(target);
+      setIsExternallyTriggeredEdit(true);
     }
     onPendingEditConsumed?.();
   }, [pendingEditProductId, products, onPendingEditConsumed]);
+
+  const closeExternalEdit = () => {
+    setEditingProduct(null);
+    if (isExternallyTriggeredEdit) {
+      setIsExternallyTriggeredEdit(false);
+      onPendingEditClosed?.();
+    }
+  };
   const [sortField, setSortField] = useState<ColumnKey>('name');
   const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('asc');
   const [editingCell, setEditingCell] = useState<EditingCell | null>(null);
@@ -1982,9 +1997,9 @@ const ProductList: React.FC<ProductListProps> = ({
               mode="edit"
               onSubmit={(updatedProduct) => {
                 onUpdate(updatedProduct);
-                setEditingProduct(null);
+                closeExternalEdit();
               }}
-              onCancel={() => setEditingProduct(null)}
+              onCancel={closeExternalEdit}
               currentUser={currentUser}
               customFields={customFields}
               treeNodes={treeNodes}

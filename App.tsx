@@ -51,13 +51,27 @@ const App: React.FC = () => {
 
   const [viewMode, setViewModeState] = useState<ViewMode>(getViewFromHash);
   const [pendingEditProductId, setPendingEditProductId] = useState<string | null>(null);
+  // Remembers which view the user was on when they triggered an external
+  // "edit product" action, so we can return them there once the editor closes.
+  const [editReturnView, setEditReturnView] = useState<ViewMode | null>(null);
 
   const editProductFully = useCallback((p: Product) => {
+    setEditReturnView(prev => prev ?? viewMode);
     setPendingEditProductId(p.id);
     setViewModeState('inventory');
     const hash = viewToHash['inventory'] || '#inventory';
     if (window.location.hash !== hash) window.location.hash = hash;
-  }, []);
+  }, [viewMode]);
+
+  const handleEditReturn = useCallback(() => {
+    setPendingEditProductId(null);
+    if (editReturnView && editReturnView !== 'inventory') {
+      setViewModeState(editReturnView);
+      const hash = viewToHash[editReturnView] || '#intelligence';
+      if (window.location.hash !== hash) window.location.hash = hash;
+    }
+    setEditReturnView(null);
+  }, [editReturnView]);
 
   const setViewMode = useCallback((view: ViewMode) => {
     setViewModeState(view);
@@ -873,6 +887,7 @@ const App: React.FC = () => {
                 suppliers={suppliers}
                 pendingEditProductId={pendingEditProductId}
                 onPendingEditConsumed={() => setPendingEditProductId(null)}
+                onPendingEditClosed={handleEditReturn}
                 currentUser={currentUser}
                 onAddFieldDefinition={addCustomFieldDefinition}
                 onAddTreeNode={addTreeNode}
