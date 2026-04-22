@@ -83,11 +83,15 @@ const SystemBuilder: React.FC<SystemBuilderProps> = ({ products, onProductUpdate
   useEscapeKey(showHistory ? () => setShowHistory(false) : null);
   useEscapeKey(detailsProduct ? () => setDetailsProduct(null) : null);
 
-  // Load qualification vocabularies (substrate / humidity / duty) once on mount
-  // so the parameter header dropdowns can render their options. Failures are
-  // logged but never block the builder from working.
+  // Load qualification vocabularies (substrate / humidity / duty). We re-fetch
+  // whenever the selected system changes so we always run in an authenticated
+  // context — the initial mount can fire before the user has logged in, and a
+  // single failed fetch must not leave the dropdowns permanently empty.
   useEffect(() => {
     let cancelled = false;
+    // Skip the no-auth pre-login mount so we don't pollute logs; the effect
+    // will re-run as soon as a system is opened.
+    if (!localStorage.getItem('auth_token') && !selectedSystemId) return;
     (async () => {
       try {
         const token = localStorage.getItem('auth_token');
@@ -111,7 +115,7 @@ const SystemBuilder: React.FC<SystemBuilderProps> = ({ products, onProductUpdate
       }
     })();
     return () => { cancelled = true; };
-  }, []);
+  }, [selectedSystemId]);
 
   // Load qualification tags for all system-ready products so the smart filter
   // can run client-side. Re-fetched whenever the selected system changes (so a
