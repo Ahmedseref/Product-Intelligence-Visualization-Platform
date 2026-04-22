@@ -14,7 +14,8 @@
     "start": "PORT=5000 node dist-server/index.cjs",
     "preview": "vite preview",
     "db:push": "drizzle-kit push",
-    "server": "tsx server/index.ts"
+    "server": "tsx server/index.ts",
+    "test": "node --import tsx --test server/qualificationEngine.test.ts"
   },
   "dependencies": {
     "@google-cloud/storage": "^7.18.0",
