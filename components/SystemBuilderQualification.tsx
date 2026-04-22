@@ -17,7 +17,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import {
   ShieldCheck, Search, CheckCircle2, AlertCircle, Loader2,
-  Save, X, ChevronDown, Filter, Info,
+  Save, X, ChevronDown, Filter, Info, Sparkles, Wand2,
 } from 'lucide-react';
 import { Product, TreeNode } from '../types';
 import ProductDetailsModal from './ProductDetailsModal';
@@ -68,6 +68,61 @@ interface RowState {
 }
 
 type StatusFilter = 'all' | 'ready' | 'unqualified';
+
+// ---------- Auto-Qualification types ----------
+type Confidence = 'high' | 'medium' | 'low' | 'none';
+
+interface AutoInferRow {
+  product_id: string;
+  product_name: string;
+  taxonomy_path: string;
+  suggested: {
+    substrate_types: string[];
+    humidity_tolerance: string | null;
+    duty_rating: string | null;
+    finish_type: string | null;
+  };
+  confidence: { substrate: Confidence; humidity: Confidence; duty: Confidence; finish: Confidence; overall: Confidence };
+  sources: { substrate: string; humidity: string; duty: string; finish: string };
+  already_qualified: boolean;
+  // UI-only state — editable values + selection checkbox
+  edited: {
+    substrate_types: string[];
+    humidity_tolerance: string;
+    duty_rating: string;
+    finish_type: string;
+  };
+  included: boolean;
+}
+
+type ReviewTab = 'high' | 'review' | 'none';
+
+// Map an InferenceResult.confidence per-row → row's RowState confidence dot.
+const overallToTone = (c: Confidence): { dot: string; label: string; pill: string } => {
+  switch (c) {
+    case 'high':   return { dot: 'bg-emerald-500', label: 'High',   pill: 'bg-emerald-100 text-emerald-700 border-emerald-200' };
+    case 'medium': return { dot: 'bg-amber-500',   label: 'Medium', pill: 'bg-amber-100 text-amber-700 border-amber-200' };
+    case 'low':    return { dot: 'bg-rose-500',    label: 'Low',    pill: 'bg-rose-100 text-rose-700 border-rose-200' };
+    default:       return { dot: 'bg-slate-300',   label: '—',      pill: 'bg-slate-100 text-slate-500 border-slate-200' };
+  }
+};
+
+// Pretty-format a `source` string ("taxonomy:PW" / "name:steel" / …) into a
+// small coloured badge so users can see WHY a value was suggested.
+const SourceBadge: React.FC<{ source: string }> = ({ source }) => {
+  if (!source) return null;
+  const [kind, value] = source.split(':');
+  const tone =
+    kind === 'taxonomy'    ? 'bg-blue-50 text-blue-700 border-blue-200'   :
+    kind === 'name'        ? 'bg-amber-50 text-amber-700 border-amber-200' :
+    kind === 'description' ? 'bg-slate-100 text-slate-600 border-slate-200' :
+                             'bg-slate-50 text-slate-500 border-slate-200';
+  return (
+    <span className={`inline-block mt-1 px-1.5 py-0.5 text-[10px] uppercase tracking-wide border rounded ${tone}`} title={source}>
+      {kind}{value ? `: ${value.slice(0, 18)}` : ''}
+    </span>
+  );
+};
 
 interface Props {
   products: Product[];
@@ -266,6 +321,18 @@ const SystemBuilderQualification: React.FC<Props> = ({ products, treeNodes, onPr
 
   // Selected product IDs (for bulk actions)
   const [selected, setSelected] = useState<Set<string>>(new Set());
+
+  // -------- Auto-Qualification Engine state --------
+  const [autoInferring, setAutoInferring] = useState(false);
+  const [autoInferError, setAutoInferError] = useState<string | null>(null);
+  const [reviewModal, setReviewModal] = useState<{ rows: AutoInferRow[]; tab: ReviewTab } | null>(null);
+  const [batchSaving, setBatchSaving] = useState(false);
+  // Per-row inference confidence captured when an Auto-fill is applied — used
+  // to colour the table's "Confidence" column. Persists in component state
+  // until the row is saved or the page reloads.
+  const [rowConfidence, setRowConfidence] = useState<Record<string, Confidence>>({});
+  // New-product toast (driven by `pending_qualification_suggestion` storage key)
+  const [newProductToast, setNewProductToast] = useState<{ productId: string; productName: string } | null>(null);
 
   // -------------------------------------------------------------------------
   // Initial load: vocabulary + all product tags (in parallel batches).
@@ -501,6 +568,167 @@ const SystemBuilderQualification: React.FC<Props> = ({ products, treeNodes, onPr
     setBulkSaving(false);
   };
 
+  // -------------------------------------------------------------------------
+  // Auto-Qualification Engine — bulk inference handlers
+  // -------------------------------------------------------------------------
+  const buildEditedFromSuggestion = (s: AutoInferRow['suggested']): AutoInferRow['edited'] => ({
+    substrate_types: s.substrate_types || [],
+    humidity_tolerance: s.humidity_tolerance || '',
+    duty_rating: s.duty_rating || '',
+    finish_type: s.finish_type || '',
+  });
+
+  const runAutoInfer = async (productIds: string[]) => {
+    if (autoInferring) return;
+    setAutoInferring(true);
+    setAutoInferError(null);
+    try {
+      const res = await fetch(`${API_BASE}/qualification-tags/auto-infer`, {
+        method: 'POST',
+        headers: authHeaders(),
+        body: JSON.stringify({ productIds }),
+      });
+      if (!res.ok) throw new Error(`Auto-infer failed (${res.status})`);
+      const data: { results: Omit<AutoInferRow, 'edited' | 'included'>[] } = await res.json();
+      const rowsOut: AutoInferRow[] = data.results.map(r => ({
+        ...r,
+        edited: buildEditedFromSuggestion(r.suggested),
+        // Default selection: include unless already qualified.
+        included: !r.already_qualified,
+      }));
+      setReviewModal({ rows: rowsOut, tab: 'high' });
+    } catch (err) {
+      console.error(err);
+      setAutoInferError(err instanceof Error ? err.message : 'Auto-infer failed');
+    } finally {
+      setAutoInferring(false);
+    }
+  };
+
+  // Apply suggested values for a SINGLE product into its row in the table.
+  const autoFillRow = async (productId: string) => {
+    setRows(prev => prev[productId] ? { ...prev, [productId]: { ...prev[productId], saving: true, error: null } } : prev);
+    try {
+      const res = await fetch(`${API_BASE}/qualification-tags/auto-infer`, {
+        method: 'POST',
+        headers: authHeaders(),
+        body: JSON.stringify({ productIds: [productId] }),
+      });
+      if (!res.ok) throw new Error(`Auto-fill failed (${res.status})`);
+      const data: { results: AutoInferRow[] } = await res.json();
+      const r = data.results[0];
+      if (!r) throw new Error('No result returned');
+      setRows(prev => ({
+        ...prev,
+        [productId]: {
+          ...(prev[productId] || emptyRow()),
+          substrateTypes: r.suggested.substrate_types || [],
+          humidityTolerance: r.suggested.humidity_tolerance || '',
+          dutyRating: r.suggested.duty_rating || '',
+          finishType: r.suggested.finish_type || '',
+          dirty: true,
+          saving: false,
+          savedFlash: false,
+          error: null,
+        },
+      }));
+      setRowConfidence(prev => ({ ...prev, [productId]: r.confidence.overall }));
+    } catch (err) {
+      console.error(err);
+      setRows(prev => prev[productId]
+        ? { ...prev, [productId]: { ...prev[productId], saving: false, error: err instanceof Error ? err.message : 'Auto-fill failed' } }
+        : prev);
+    }
+  };
+
+  // Save a subset of the modal rows via the batch endpoint, then reflect the
+  // result back into the table's local row state.
+  const saveBatch = async (rowsToSave: AutoInferRow[], markReady: boolean) => {
+    if (rowsToSave.length === 0 || batchSaving) return;
+    setBatchSaving(true);
+    try {
+      const payload = rowsToSave.map(r => ({
+        product_id: r.product_id,
+        substrate_types: r.edited.substrate_types,
+        humidity_tolerance: r.edited.humidity_tolerance || null,
+        duty_rating: r.edited.duty_rating || null,
+        finish_type: r.edited.finish_type || null,
+        is_system_ready: markReady,
+      }));
+      const res = await fetch(`${API_BASE}/qualification-tags/auto-save-batch`, {
+        method: 'POST',
+        headers: authHeaders(),
+        body: JSON.stringify({ tags: payload }),
+      });
+      if (!res.ok) throw new Error(`Batch save failed (${res.status})`);
+      // Reflect saved values into the table immediately.
+      setRows(prev => {
+        const next = { ...prev };
+        const conf: Record<string, Confidence> = { ...rowConfidence };
+        rowsToSave.forEach((r, idx) => {
+          next[r.product_id] = {
+            substrateTypes: r.edited.substrate_types,
+            humidityTolerance: r.edited.humidity_tolerance,
+            dutyRating: r.edited.duty_rating,
+            finishType: r.edited.finish_type,
+            isSystemReady: markReady,
+            exists: true,
+            dirty: false,
+            saving: false,
+            savedFlash: true,
+            error: null,
+          };
+          conf[r.product_id] = rowsToSave[idx].confidence.overall;
+        });
+        setRowConfidence(conf);
+        return next;
+      });
+      setReviewModal(null);
+    } catch (err) {
+      console.error(err);
+      setAutoInferError(err instanceof Error ? err.message : 'Batch save failed');
+    } finally {
+      setBatchSaving(false);
+    }
+  };
+
+  // -------------------------------------------------------------------------
+  // New-product toast: any other component can stash a suggestion under
+  // localStorage['pending_qualification_suggestion'] when POST /api/products
+  // returns `qualification_suggestions`. This effect picks it up.
+  // -------------------------------------------------------------------------
+  useEffect(() => {
+    const check = () => {
+      try {
+        const raw = localStorage.getItem('pending_qualification_suggestion');
+        if (!raw) return;
+        const parsed = JSON.parse(raw) as { productId: string; productName: string };
+        if (parsed?.productId) setNewProductToast(parsed);
+      } catch {
+        // ignore
+      }
+    };
+    check();
+    const onStorage = (e: StorageEvent) => {
+      if (e.key === 'pending_qualification_suggestion') check();
+    };
+    const onFocus = () => check();
+    window.addEventListener('storage', onStorage);
+    window.addEventListener('focus', onFocus);
+    return () => {
+      window.removeEventListener('storage', onStorage);
+      window.removeEventListener('focus', onFocus);
+    };
+  }, []);
+
+  const handleToastReview = () => {
+    if (!newProductToast) return;
+    setSearchTerm(newProductToast.productId);
+    autoFillRow(newProductToast.productId);
+    localStorage.removeItem('pending_qualification_suggestion');
+    setNewProductToast(null);
+  };
+
   const handleBulkMarkReady = () => {
     setRows(prev => {
       const next = { ...prev };
@@ -557,6 +785,61 @@ const SystemBuilderQualification: React.FC<Props> = ({ products, treeNodes, onPr
           tone="rose"
           icon={<X size={14} />}
         />
+      </div>
+
+      {/* New-product toast — surfaced when another component stashes a
+          `pending_qualification_suggestion` payload in localStorage. */}
+      {newProductToast && (
+        <div className="flex items-center gap-3 p-3 bg-indigo-50 border border-indigo-200 rounded-lg">
+          <Sparkles size={16} className="text-indigo-600 flex-shrink-0" />
+          <div className="text-sm text-indigo-800 flex-1">
+            <span className="font-semibold">New product added</span> — qualification suggestions ready for{' '}
+            <span className="font-medium">{newProductToast.productName || newProductToast.productId}</span>.
+          </div>
+          <button
+            onClick={handleToastReview}
+            className="px-3 py-1.5 text-sm bg-indigo-600 text-white rounded-md hover:bg-indigo-700"
+          >
+            Review now →
+          </button>
+          <button
+            onClick={() => { localStorage.removeItem('pending_qualification_suggestion'); setNewProductToast(null); }}
+            className="p-1 text-indigo-500 hover:bg-indigo-100 rounded"
+            aria-label="Dismiss"
+          >
+            <X size={14} />
+          </button>
+        </div>
+      )}
+
+      {/* Auto-Qualification Engine bar */}
+      <div className="flex flex-wrap items-center gap-3 p-3 bg-gradient-to-r from-indigo-50 via-blue-50 to-emerald-50 border border-indigo-200 rounded-lg">
+        <Sparkles size={16} className="text-indigo-600 flex-shrink-0" />
+        <button
+          onClick={() => runAutoInfer([])}
+          disabled={autoInferring}
+          className="flex items-center gap-1.5 px-3 py-1.5 text-sm bg-indigo-600 text-white rounded-md hover:bg-indigo-700 disabled:opacity-50"
+        >
+          {autoInferring ? <Loader2 size={14} className="animate-spin" /> : <Wand2 size={14} />}
+          Auto-qualify all products
+        </button>
+        <button
+          onClick={() => runAutoInfer(filteredProducts.map(p => p.id))}
+          disabled={autoInferring || filteredProducts.length === 0}
+          className="flex items-center gap-1.5 px-3 py-1.5 text-sm bg-white border border-indigo-300 text-indigo-700 rounded-md hover:bg-indigo-100 disabled:opacity-50"
+        >
+          <Wand2 size={14} />
+          Auto-qualify filtered ({filteredProducts.length})
+        </button>
+        <div className="text-xs text-slate-600 flex items-center gap-1.5 ml-auto">
+          <Info size={12} />
+          Engine uses product name, description, and taxonomy path — review suggestions before saving
+        </div>
+        {autoInferError && (
+          <div className="w-full text-xs text-rose-700 bg-rose-50 border border-rose-200 rounded px-2 py-1">
+            {autoInferError}
+          </div>
+        )}
       </div>
 
       {/* Section A — Search & filter bar */}
@@ -661,8 +944,9 @@ const SystemBuilderQualification: React.FC<Props> = ({ products, treeNodes, onPr
                 <th className="px-3 py-2 text-left w-[140px]">Humidity</th>
                 <th className="px-3 py-2 text-left w-[130px]">Duty</th>
                 <th className="px-3 py-2 text-left w-[130px]">Finish</th>
+                <th className="px-3 py-2 text-center w-[90px]" title="Auto-inference confidence (grey = manually set)">Confidence</th>
                 <th className="px-3 py-2 text-center w-[80px]">Ready</th>
-                <th className="px-3 py-2 text-right w-[110px]">Save</th>
+                <th className="px-3 py-2 text-right w-[150px]">Actions</th>
               </tr>
             </thead>
             <tbody>
@@ -769,6 +1053,37 @@ const SystemBuilderQualification: React.FC<Props> = ({ products, treeNodes, onPr
                         disabled={r.saving}
                       />
                     </td>
+                    {/* Confidence — auto-inference confidence dot. Grey = manually set
+                        (we never recorded an inference for this row). */}
+                    <td className="px-3 py-2 align-top text-center">
+                      {(() => {
+                        // Confidence dot decision tree:
+                        //  - No inference recorded for this row → grey (manually set or empty)
+                        //  - Inference recorded with overall='none' → red (engine couldn't resolve)
+                        //  - Otherwise → green/amber/red per overallToTone
+                        const c = rowConfidence[p.id];
+                        if (!c) {
+                          const dot = hasAnyTagData(r) ? 'bg-slate-400' : 'bg-slate-200';
+                          const label = hasAnyTagData(r) ? 'Manual' : '—';
+                          return (
+                            <div className="flex items-center justify-center gap-1.5" title={label}>
+                              <span className={`inline-block w-2.5 h-2.5 rounded-full ${dot}`} />
+                              <span className="text-[11px] text-slate-500">{label}</span>
+                            </div>
+                          );
+                        }
+                        // Engine produced a verdict — red dot for 'none' so review queues stand out.
+                        const tone = c === 'none'
+                          ? { dot: 'bg-rose-500', label: 'None' }
+                          : { dot: overallToTone(c).dot, label: overallToTone(c).label };
+                        return (
+                          <div className="flex items-center justify-center gap-1.5" title={tone.label}>
+                            <span className={`inline-block w-2.5 h-2.5 rounded-full ${tone.dot}`} />
+                            <span className="text-[11px] text-slate-500">{tone.label}</span>
+                          </div>
+                        );
+                      })()}
+                    </td>
                     <td className="px-3 py-2 align-top text-center">
                       <div className="flex justify-center pt-0.5">
                         <Toggle
@@ -779,22 +1094,33 @@ const SystemBuilderQualification: React.FC<Props> = ({ products, treeNodes, onPr
                       </div>
                     </td>
                     <td className="px-3 py-2 align-top text-right">
-                      <button
-                        onClick={() => saveRow(p.id)}
-                        disabled={r.saving || !r.dirty}
-                        className={`inline-flex items-center gap-1 px-2.5 py-1 text-xs rounded-md ${
-                          r.dirty && !r.saving
-                            ? 'bg-blue-600 text-white hover:bg-blue-700'
-                            : 'bg-slate-100 text-slate-400 cursor-not-allowed'
-                        }`}
-                      >
-                        {r.saving ? (
-                          <Loader2 size={12} className="animate-spin" />
-                        ) : (
-                          <Save size={12} />
-                        )}
-                        Save
-                      </button>
+                      <div className="inline-flex items-center gap-1 justify-end">
+                        <button
+                          onClick={() => autoFillRow(p.id)}
+                          disabled={r.saving}
+                          title="Auto-fill from product name, description and taxonomy"
+                          className="inline-flex items-center gap-1 px-2 py-1 text-xs rounded-md bg-indigo-50 border border-indigo-200 text-indigo-700 hover:bg-indigo-100 disabled:opacity-50"
+                        >
+                          <Sparkles size={12} />
+                          Auto
+                        </button>
+                        <button
+                          onClick={() => saveRow(p.id)}
+                          disabled={r.saving || !r.dirty}
+                          className={`inline-flex items-center gap-1 px-2.5 py-1 text-xs rounded-md ${
+                            r.dirty && !r.saving
+                              ? 'bg-blue-600 text-white hover:bg-blue-700'
+                              : 'bg-slate-100 text-slate-400 cursor-not-allowed'
+                          }`}
+                        >
+                          {r.saving ? (
+                            <Loader2 size={12} className="animate-spin" />
+                          ) : (
+                            <Save size={12} />
+                          )}
+                          Save
+                        </button>
+                      </div>
                     </td>
                   </tr>
                 );
@@ -803,6 +1129,200 @@ const SystemBuilderQualification: React.FC<Props> = ({ products, treeNodes, onPr
           </table>
         </div>
       </div>
+
+      {/* Auto-Qualification Review Modal — uses min-height wrapper instead of
+          position:fixed (per design rules). Backdrop covers viewport. */}
+      {reviewModal && (() => {
+        const all = reviewModal.rows;
+        const skipped = all.filter(r => r.already_qualified);
+        const eligible = all.filter(r => !r.already_qualified);
+        const high = eligible.filter(r => r.confidence.overall === 'high');
+        const review = eligible.filter(r => r.confidence.overall === 'medium' || r.confidence.overall === 'low');
+        const none = eligible.filter(r => r.confidence.overall === 'none');
+        const tabs: Array<{ key: ReviewTab; label: string; rows: AutoInferRow[] }> = [
+          { key: 'high',   label: `High confidence (${high.length})`, rows: high },
+          { key: 'review', label: `Needs review (${review.length})`, rows: review },
+          { key: 'none',   label: `Could not infer (${none.length})`, rows: none },
+        ];
+        const visible = tabs.find(t => t.key === reviewModal.tab)!.rows;
+
+        const updateModalRow = (productId: string, patch: Partial<AutoInferRow['edited']> & { included?: boolean }) => {
+          setReviewModal(prev => prev ? {
+            ...prev,
+            rows: prev.rows.map(r => r.product_id !== productId ? r : ({
+              ...r,
+              edited: { ...r.edited, ...('substrate_types' in patch ? { substrate_types: patch.substrate_types! } : {}),
+                                     ...('humidity_tolerance' in patch ? { humidity_tolerance: patch.humidity_tolerance! } : {}),
+                                     ...('duty_rating' in patch ? { duty_rating: patch.duty_rating! } : {}),
+                                     ...('finish_type' in patch ? { finish_type: patch.finish_type! } : {}) },
+              included: patch.included ?? r.included,
+            })),
+          } : prev);
+        };
+
+        return (
+          <div className="absolute inset-0 z-50 bg-slate-900/50 flex items-start justify-center overflow-y-auto"
+               style={{ minHeight: '100vh' }}>
+            <div className="bg-white rounded-lg shadow-2xl my-8 mx-4 w-[min(1200px,95vw)] max-h-[90vh] flex flex-col">
+              {/* Header */}
+              <div className="flex items-center gap-3 px-5 py-4 border-b border-slate-200">
+                <Sparkles size={18} className="text-indigo-600" />
+                <div className="flex-1">
+                  <div className="text-base font-semibold text-slate-800">Auto-Qualification Review</div>
+                  <div className="text-xs text-slate-500 mt-0.5">
+                    {all.length} analysed · {high.length} high confidence · {review.length + none.length} need review · {skipped.length} already qualified (skipped)
+                  </div>
+                </div>
+                <button onClick={() => setReviewModal(null)} className="p-1.5 text-slate-400 hover:bg-slate-100 rounded">
+                  <X size={16} />
+                </button>
+              </div>
+
+              {/* Tabs */}
+              <div className="flex border-b border-slate-200 px-5">
+                {tabs.map(t => (
+                  <button
+                    key={t.key}
+                    onClick={() => setReviewModal(prev => prev ? { ...prev, tab: t.key } : prev)}
+                    className={`px-4 py-2.5 text-sm border-b-2 transition-colors ${
+                      reviewModal.tab === t.key
+                        ? 'border-indigo-600 text-indigo-700 font-semibold'
+                        : 'border-transparent text-slate-500 hover:text-slate-700'
+                    }`}
+                  >
+                    {t.label}
+                  </button>
+                ))}
+              </div>
+
+              {/* Body — table */}
+              <div className="flex-1 overflow-auto">
+                {visible.length === 0 ? (
+                  <div className="p-12 text-center text-slate-400 text-sm">No products in this group.</div>
+                ) : (
+                  <table className="min-w-full text-sm">
+                    <thead className="bg-slate-50 border-b border-slate-200 text-xs uppercase text-slate-500 sticky top-0">
+                      <tr>
+                        <th className="px-3 py-2 text-left w-8">
+                          <input
+                            type="checkbox"
+                            checked={visible.every(r => r.included)}
+                            onChange={(e) => {
+                              const checked = e.target.checked;
+                              setReviewModal(prev => prev ? {
+                                ...prev,
+                                rows: prev.rows.map(r => visible.some(v => v.product_id === r.product_id) ? { ...r, included: checked } : r),
+                              } : prev);
+                            }}
+                          />
+                        </th>
+                        <th className="px-3 py-2 text-left">Product</th>
+                        <th className="px-3 py-2 text-left">Taxonomy</th>
+                        <th className="px-3 py-2 text-left w-[200px]">Substrate</th>
+                        <th className="px-3 py-2 text-left w-[160px]">Humidity</th>
+                        <th className="px-3 py-2 text-left w-[160px]">Duty</th>
+                        <th className="px-3 py-2 text-left w-[160px]">Finish</th>
+                        <th className="px-3 py-2 text-center w-[90px]">Overall</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {visible.map(r => {
+                        const overall = overallToTone(r.confidence.overall);
+                        return (
+                          <tr key={r.product_id} className="border-b border-slate-100 align-top">
+                            <td className="px-3 py-2">
+                              <input
+                                type="checkbox"
+                                checked={r.included}
+                                onChange={(e) => updateModalRow(r.product_id, { included: e.target.checked })}
+                              />
+                            </td>
+                            <td className="px-3 py-2">
+                              <div className="font-medium text-slate-700 text-xs">{r.product_name}</div>
+                              <div className="text-[11px] text-slate-400">{r.product_id}</div>
+                            </td>
+                            <td className="px-3 py-2 text-xs text-slate-500 max-w-[260px]">
+                              <div className="whitespace-normal break-words leading-snug">{r.taxonomy_path || '—'}</div>
+                            </td>
+                            <td className="px-3 py-2">
+                              <MultiSelect
+                                options={vocab?.substrate || []}
+                                value={r.edited.substrate_types}
+                                onChange={v => updateModalRow(r.product_id, { substrate_types: v })}
+                              />
+                              <SourceBadge source={r.sources.substrate} />
+                            </td>
+                            <td className="px-3 py-2">
+                              <SingleSelect
+                                options={vocab?.humidity || []}
+                                value={r.edited.humidity_tolerance}
+                                onChange={v => updateModalRow(r.product_id, { humidity_tolerance: v })}
+                              />
+                              <SourceBadge source={r.sources.humidity} />
+                            </td>
+                            <td className="px-3 py-2">
+                              <SingleSelect
+                                options={vocab?.duty || []}
+                                value={r.edited.duty_rating}
+                                onChange={v => updateModalRow(r.product_id, { duty_rating: v })}
+                              />
+                              <SourceBadge source={r.sources.duty} />
+                            </td>
+                            <td className="px-3 py-2">
+                              <SingleSelect
+                                options={vocab?.finish || []}
+                                value={r.edited.finish_type}
+                                onChange={v => updateModalRow(r.product_id, { finish_type: v })}
+                              />
+                              <SourceBadge source={r.sources.finish} />
+                            </td>
+                            <td className="px-3 py-2 text-center">
+                              <span className={`inline-block px-2 py-0.5 text-[11px] font-medium border rounded-full ${overall.pill}`}>
+                                {overall.label}
+                              </span>
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                )}
+              </div>
+
+              {/* Footer actions */}
+              <div className="flex items-center gap-2 px-5 py-3 border-t border-slate-200 bg-slate-50">
+                <div className="text-xs text-slate-500">
+                  Save High confidence will mark {high.filter(r => r.included).length} products as System-Ready.
+                </div>
+                <div className="ml-auto flex items-center gap-2">
+                  <button
+                    onClick={() => setReviewModal(null)}
+                    className="px-3 py-1.5 text-sm text-slate-600 hover:bg-slate-100 rounded-md"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    onClick={() => saveBatch(high.filter(r => r.included), true)}
+                    disabled={batchSaving || high.filter(r => r.included).length === 0}
+                    className="flex items-center gap-1.5 px-3 py-1.5 text-sm bg-emerald-600 text-white rounded-md hover:bg-emerald-700 disabled:opacity-50"
+                  >
+                    {batchSaving ? <Loader2 size={14} className="animate-spin" /> : <CheckCircle2 size={14} />}
+                    Save high confidence ({high.filter(r => r.included).length})
+                  </button>
+                  <button
+                    onClick={() => saveBatch(all.filter(r => r.included && !r.already_qualified), false)}
+                    disabled={batchSaving || all.filter(r => r.included && !r.already_qualified).length === 0}
+                    className="flex items-center gap-1.5 px-3 py-1.5 text-sm bg-indigo-600 text-white rounded-md hover:bg-indigo-700 disabled:opacity-50"
+                  >
+                    {batchSaving ? <Loader2 size={14} className="animate-spin" /> : <Save size={14} />}
+                    Save selected ({all.filter(r => r.included && !r.already_qualified).length})
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        );
+      })()}
 
       {detailProduct && (
         <ProductDetailsModal

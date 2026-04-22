@@ -1,0 +1,240 @@
+I need to build an Auto-Qualification Engine that automatically assigns Substrate, Humidity, Duty, and Finish tags to products using keyword inference from product name, description, and taxonomy path. This replaces the need for manual entry in most cases. The engine runs on demand (bulk) and automatically when a new product is saved.
+
+## Context
+This app uses React/TypeScript, Tailwind CSS, Express.js, Drizzle ORM, PostgreSQL. The Product Qualification tab already exists inside System Builder. The qualification_tags and qualification_vocabularies tables already exist with these fields:
+- product_qualification_tags: product_id, substrate_types (jsonb array), humidity_tolerance, duty_rating, finish_type, is_system_ready, qualified_at
+- qualification_vocabularies: vocab_type, value, label
+
+Before writing any code, read the full existing Product Qualification tab component, server/routes.ts, and shared/schema.ts.
+
+---
+
+## Part 1 — Inference engine (server-side utility)
+
+Create a new file: server/qualificationEngine.ts
+
+This file exports a single function:
+inferQualificationTags(product: { name: string, description: string, nodeId: string }, taxonomyPath: string[])
+
+It returns:
+{
+  substrate_types: string[],
+  humidity_tolerance: string,
+  duty_rating: string,
+  finish_type: string,
+  confidence: {
+    substrate: 'high' | 'medium' | 'low' | 'none',
+    humidity: 'high' | 'medium' | 'low' | 'none',
+    duty: 'high' | 'medium' | 'low' | 'none',
+    finish: 'high' | 'medium' | 'low' | 'none',
+    overall: 'high' | 'medium' | 'low' | 'none'
+  },
+  sources: {
+    substrate: string,  // e.g. "taxonomy:PW" or "name:steel" or "description:cementitious"
+    humidity: string,
+    duty: string,
+    finish: string
+  }
+}
+
+The function uses ONLY string matching — no external AI API calls. All inference is deterministic keyword + taxonomy rules.
+
+### SUBSTRATE inference rules (check in this order, stop at first match):
+
+Taxonomy path rules (confidence: 'high'):
+- Path includes 'Polyurea Waterproofing' or node code 'PW' → ['Concrete', 'Steel']
+- Path includes 'Epoxy Waterproofing' or code 'EPC' → ['Concrete', 'Steel']
+- Path includes 'Epoxy Primer' or code 'EPP' → ['Concrete', 'Steel']
+- Path includes 'PU Primer' or code 'PUP' → ['Concrete', 'Steel']
+- Path includes 'Silane Primer' or code 'SP' → ['Concrete']
+- Path includes 'Primers' or code 'PR' → ['Concrete', 'Steel']
+- Path includes 'Polyurethane Waterproofing' or code 'PW&B' → ['Concrete', 'Steel']
+- Path includes 'Bitumen Based Waterproofing' or code 'BBW' → ['Concrete']
+- Path includes 'Cement Based Waterproofing' or code 'CBW' → ['Concrete']
+- Path includes 'Acrylic Waterproofing' or code 'AWM' → ['Concrete']
+- Path includes 'Sports Flooring' or code 'SF' → ['Concrete']
+- Path includes 'Acrylic System' or code 'AS' → ['Concrete']
+- Path includes 'Industrial Flooring' or code 'IF' → ['Concrete', 'Steel']
+- Path includes 'Floor Adhesives' or code 'FA' → ['Concrete', 'Wood']
+- Path includes 'Epoxy Paints' or code 'EP' → ['Concrete', 'Steel']
+- Path includes 'Polyurethane Paints' or code 'PP' → ['Concrete', 'Steel']
+- Path includes 'Floor Paints' or code 'FP&SC' → ['Concrete']
+- Path includes 'Repair Mortars' or code 'RM' → ['Concrete']
+- Path includes 'Injection Systems' or code 'IS' → ['Concrete']
+- Path includes 'Fire rated' or code 'FR' → ['Concrete', 'Steel']
+- Path includes 'Polyurethane Bitumen' or code 'PB' → ['Concrete', 'Steel']
+- Path includes 'MS Polymer' or code 'MPW' → ['Concrete', 'Steel', 'Wood']
+
+Name keyword rules (confidence: 'medium') — check product name (case-insensitive):
+- Contains 'steel' or 'metal' or 'galvanized' or 'galvanised' → add 'Steel'
+- Contains 'concrete' or 'cementitious' or 'screed' → add 'Concrete'
+- Contains 'wood' or 'timber' or 'parquet' → add 'Wood'
+- Contains 'ceramic' or 'tile' or 'porcelain' → add 'Ceramic'
+- Contains 'asphalt' or 'bitumen' or 'tarmac' → add 'Asphalt'
+
+Description keyword rules (confidence: 'low') — same keywords, check description text.
+
+If no match at all: return [], confidence 'none'
+
+### HUMIDITY inference rules:
+
+Name + Description keywords (confidence: 'high' if in name, 'medium' if description only):
+- 'moisture tolerant' or 'moisture-tolerant' or 'damp surface' or 'damp-surface' or 'wet substrate' or 'green concrete' or 'high humidity' or 'RH >' or 'rising damp' → 'Moisture-Tolerant'
+- 'underwater' or 'submerged' or 'immersion' or 'potable water' or 'food contact' or 'water tank' or 'swimming pool' → 'Underwater'
+- 'damp' or 'humid' or 'moisture' (without more specific terms above) → 'Moisture-Tolerant'
+
+Default fallback (confidence: 'low'): 'Standard'
+
+### DUTY RATING inference rules:
+
+Taxonomy path rules (confidence: 'high'):
+- Path includes 'Industrial Flooring' or code 'IF' or 'EPC' → 'Industrial'
+- Path includes 'Sports Flooring' or code 'SF' → 'Medium'
+- Path includes 'Acrylic System' or code 'AS' → 'Light'
+- Path includes 'Floor Paints' or code 'FP&SC' → 'Light'
+- Path includes 'Epoxy Paints' or code 'EP' → 'Medium'
+- Path includes 'Polyurethane Paints' or code 'PP' → 'Medium'
+- Path includes 'Polyurea Waterproofing' or code 'PW' → 'Heavy'
+- Path includes 'Polyurethane Waterproofing' or code 'PW&B' → 'Heavy'
+- Path includes 'Bitumen' or code 'BBW' or 'PB' → 'Heavy'
+- Path includes 'Primer' → 'Medium' (primers inherit duty of system)
+- Path includes 'Repair Mortars' or code 'RM' → 'Heavy'
+- Path includes 'Fire rated' or code 'FR' → 'Heavy'
+
+Name keyword rules (confidence: 'medium'):
+- 'industrial' or 'heavy duty' or 'heavy-duty' or 'forklift' or 'vehicular' → 'Industrial'
+- 'abrasion resistant' or 'abrasion-resistant' or 'impact resistant' or 'high traffic' or 'car park' → 'Heavy'
+- 'light duty' or 'light-duty' or 'decorative' → 'Light'
+- 'medium duty' or 'medium-duty' or 'pedestrian' → 'Medium'
+
+Description keyword rules (confidence: 'low'): same keywords as name.
+
+If no match: return null, confidence 'none'
+
+### FINISH inference rules:
+
+Name keyword rules (confidence: 'high') — check product name:
+- ' SL ' or ' SL,' or starts with 'SL ' or ends with ' SL' or 'self level' or 'self-level' or 'self levell' → 'Smooth'
+- 'anti-slip' or 'anti slip' or 'non-slip' or 'non slip' or 'skid' → 'Anti-Slip'
+- 'textured' or 'texture' or 'broadcast' or 'aggregate' or 'quartz' → 'Textured'
+- 'matt' or 'matte' or 'flat finish' → 'Matt'
+- 'gloss' or 'high gloss' or 'shiny' → 'Gloss'
+- 'satin' or 'semi-gloss' or 'semi gloss' → 'Satin'
+
+Description keyword rules (confidence: 'medium'): same keywords as name.
+
+Taxonomy default fallback (confidence: 'low'):
+- Path includes waterproofing → 'Smooth'
+- Path includes primer → 'Smooth'
+- Path includes floor paint → 'Smooth'
+
+If no match: return null, confidence 'none'
+
+### OVERALL confidence:
+- 'high': all 4 tags have 'high' or 'medium' confidence, at least 2 are 'high'
+- 'medium': at least 2 tags resolved, at least 1 is 'high' or 'medium'
+- 'low': fewer than 2 tags resolved, or all are 'low'
+- 'none': nothing resolved at all
+
+---
+
+## Part 2 — Bulk inference API endpoint
+
+Add to server/routes.ts (do not modify existing routes):
+
+POST /api/qualification-tags/auto-infer
+Body: { productIds: string[] } — if empty array, run on ALL products
+
+For each product:
+1. Fetch product name, description, node_id from products table
+2. Fetch taxonomy path (walk tree_nodes from that node_id up to root, collect names and codes)
+3. Run inferQualificationTags()
+4. Return results — do NOT auto-save. Return suggestions only.
+
+Response shape:
+{
+  results: Array<{
+    product_id: string,
+    product_name: string,
+    taxonomy_path: string,
+    suggested: { substrate_types, humidity_tolerance, duty_rating, finish_type },
+    confidence: { substrate, humidity, duty, finish, overall },
+    sources: { substrate, humidity, duty, finish },
+    already_qualified: boolean  // true if product_qualification_tags record exists with is_system_ready=true
+  }>
+}
+
+POST /api/qualification-tags/auto-save-batch
+Body: { tags: Array<{ product_id, substrate_types, humidity_tolerance, duty_rating, finish_type, is_system_ready }> }
+Saves all provided records using upsert. Returns count of saved records.
+
+Also add a trigger on the existing POST /api/products endpoint:
+After a new product is successfully saved, call inferQualificationTags() for that product and store the result in a new table column or return it in the product creation response so the frontend can prompt the user. Do not auto-save the tags — just return the suggestions in the POST /api/products response under a key called "qualification_suggestions".
+
+---
+
+## Part 3 — UI upgrades to the Product Qualification tab
+
+Read the existing Product Qualification tab component carefully before modifying.
+
+### New element 1: "Auto-qualify" button bar (above the search, below the stats cards)
+
+Add a bar with:
+- A primary button: "Auto-qualify all products" — runs POST /api/qualification-tags/auto-infer with empty productIds (all products), then shows results in a review modal
+- A secondary button: "Auto-qualify filtered results" — runs same endpoint with only the currently visible product IDs from the search results
+- A small info note: "Engine uses product name, description, and taxonomy path — review suggestions before saving"
+
+### New element 2: Auto-qualify review modal
+
+When auto-infer results come back, show a full-screen modal (use the fixed-position workaround: wrap in a min-height div as per design rules):
+
+Modal contains:
+- Summary at top: "X products analysed · Y high confidence · Z need review · W already qualified (skipped)"
+- Tabs inside modal: "High confidence" / "Needs review" / "Could not infer"
+- Each tab shows a table:
+  - Product name + code
+  - Taxonomy path (truncated)
+  - Suggested substrate (with source badge: "taxonomy" in blue, "name" in amber, "description" in gray)
+  - Suggested humidity (with source badge)
+  - Suggested duty (with source badge)
+  - Suggested finish (with source badge)
+  - Overall confidence badge (green/amber/red)
+  - Editable: each suggested value should be an editable dropdown using the vocabulary lists — so the user can correct before saving
+  - Checkbox to include/exclude this product from the batch save
+
+- Action buttons at modal bottom:
+  - "Save high confidence" — saves only the High confidence tab products with is_system_ready = true
+  - "Save selected" — saves all checked rows across all tabs
+  - "Cancel" — closes without saving anything
+
+### New element 3: Inline "Auto-fill" button per row
+
+In the existing product table rows, add a small "Auto-fill" button (magic wand or sparkle icon) next to the Save button per row. Clicking it runs the inference engine for just that product and pre-fills the dropdowns on that row. The user still clicks Save manually to confirm.
+
+### New element 4: New product notification
+
+After a new product is added anywhere in the app and the POST /api/products response contains qualification_suggestions, show a toast notification in the Product Qualification tab:
+"New product added — qualification suggestions ready. Review now →"
+
+Clicking "Review now" opens the qualification tab with that product pre-filtered and its row pre-populated with the suggested values.
+
+### Existing confidence column in the table
+Add a "Confidence" column to the product qualification table (between Finish and Ready columns):
+- Green dot: high
+- Amber dot: medium  
+- Red dot: low or none
+- Grey dot: manually set (was not auto-inferred)
+
+---
+
+## Rules
+- The inference engine in server/qualificationEngine.ts must be pure TypeScript with no external dependencies — only string matching
+- Never auto-save tags without explicit user confirmation (button click)
+- Never modify existing product records — only write to product_qualification_tags table
+- Do not modify existing API routes — only add new ones
+- All new API endpoints must handle errors gracefully and return clear error messages
+- The modal must not use position:fixed — use the min-height wrapper pattern instead
+- Dropdowns in the modal must use vocabulary closed lists only
+- Add clear comments throughout the engine file explaining each rule and its source signal
+- After finishing, run npm run db:push if any schema changes were made
+- Test with a product from 'Polyurea Waterproofing' taxonomy — it should return substrate: ['Concrete','Steel'], duty: 'Heavy', humidity: 'Standard', confidence: 'high'

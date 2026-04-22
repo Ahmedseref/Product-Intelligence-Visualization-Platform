@@ -1,12 +1,37 @@
 import type { Express } from "express";
 import { storage } from "./storage";
 import { db } from "./db";
-import { stockCodeHistory, products as productsTable, suppliers as suppliersTable, documents as documentsTable, productQualificationTags, qualificationVocabularies } from "@shared/schema";
-import { eq, and, asc } from "drizzle-orm";
+import { stockCodeHistory, products as productsTable, suppliers as suppliersTable, documents as documentsTable, productQualificationTags, qualificationVocabularies, treeNodes as treeNodesTable } from "@shared/schema";
+import { eq, and, asc, inArray } from "drizzle-orm";
+import { inferQualificationTags, type InferenceResult } from "./qualificationEngine";
 import * as backupService from "./backupService";
 import * as stockCodeService from "./stockCodeService";
 import { authMiddleware, requirePasswordChange } from "./authRoutes";
 import { refreshState } from "./refreshState";
+
+// Walk tree_nodes from a leaf nodeId up to the root, returning the names AND
+// branch codes encountered. The qualification engine matches against either,
+// so we mix both into the same array.
+async function buildTaxonomyPath(leafNodeId: string): Promise<string[]> {
+  const path: string[] = [];
+  const seen = new Set<string>();
+  let cursor: string | null = leafNodeId;
+  // Hard cap to avoid pathological loops in malformed trees.
+  for (let i = 0; i < 32 && cursor && !seen.has(cursor); i++) {
+    seen.add(cursor);
+    const rows = await db
+      .select()
+      .from(treeNodesTable)
+      .where(eq(treeNodesTable.nodeId, cursor))
+      .limit(1);
+    if (rows.length === 0) break;
+    const node = rows[0];
+    if (node.name) path.unshift(node.name);
+    if (node.branchCode) path.unshift(node.branchCode);
+    cursor = node.parentId || null;
+  }
+  return path;
+}
 
 export function registerRoutes(app: Express): void {
   app.use("/api/tree-nodes", authMiddleware, requirePasswordChange);
@@ -202,8 +227,24 @@ export function registerRoutes(app: Express): void {
           console.error("Stock code generation failed (non-critical):", e);
         }
       }
+      // Auto-Qualification: run the inference engine post-create and attach
+      // the suggestions to the response (NEVER auto-saved). The frontend uses
+      // this payload to surface a toast/CTA in the Product Qualification tab.
+      let qualification_suggestions: InferenceResult | null = null;
+      try {
+        if (product.nodeId) {
+          const path = await buildTaxonomyPath(product.nodeId);
+          qualification_suggestions = inferQualificationTags(
+            { name: product.name || '', description: product.description || '', nodeId: product.nodeId },
+            path,
+          );
+        }
+      } catch (e) {
+        console.error("Qualification inference failed (non-critical):", e);
+      }
+
       refreshState.trigger();
-      res.status(201).json(product);
+      res.status(201).json({ ...product, qualification_suggestions });
     } catch (error) {
       console.error("Error creating product:", error);
       res.status(500).json({ error: "Failed to create product" });
@@ -1429,6 +1470,120 @@ export function registerRoutes(app: Express): void {
     } catch (error) {
       console.error("Error updating qualification tag:", error);
       res.status(500).json({ error: "Failed to update qualification tag" });
+    }
+  });
+
+  // ---------------------------------------------------------------------------
+  // POST /api/qualification-tags/auto-infer
+  // Body: { productIds: string[] }  — empty array means "all products"
+  // Returns: per-product suggestions with confidence + sources. Never saves.
+  // ---------------------------------------------------------------------------
+  app.post("/api/qualification-tags/auto-infer", async (req, res) => {
+    try {
+      const requestedIds: string[] = Array.isArray(req.body?.productIds) ? req.body.productIds : [];
+
+      // Fetch the product slice we need to infer for.
+      const products = requestedIds.length === 0
+        ? await db.select().from(productsTable)
+        : await db.select().from(productsTable).where(inArray(productsTable.productId, requestedIds));
+
+      // Pre-fetch every existing qualification tag in one round-trip so we
+      // can mark already_qualified for each product.
+      const existingTags = await db
+        .select({ productId: productQualificationTags.productId, isSystemReady: productQualificationTags.isSystemReady })
+        .from(productQualificationTags);
+      const readyMap = new Map<string, boolean>(existingTags.map(t => [t.productId, !!t.isSystemReady]));
+
+      // Cache taxonomy paths per nodeId so we don't walk the tree N times.
+      const pathCache = new Map<string, string[]>();
+      const getPath = async (nodeId: string): Promise<string[]> => {
+        if (pathCache.has(nodeId)) return pathCache.get(nodeId)!;
+        const p = await buildTaxonomyPath(nodeId);
+        pathCache.set(nodeId, p);
+        return p;
+      };
+
+      const results = [] as Array<{
+        product_id: string;
+        product_name: string;
+        taxonomy_path: string;
+        suggested: { substrate_types: string[]; humidity_tolerance: string | null; duty_rating: string | null; finish_type: string | null };
+        confidence: InferenceResult['confidence'];
+        sources: InferenceResult['sources'];
+        already_qualified: boolean;
+      }>;
+
+      for (const p of products) {
+        const path = p.nodeId ? await getPath(p.nodeId) : [];
+        const inf = inferQualificationTags(
+          { name: p.name || '', description: p.description || '', nodeId: p.nodeId || '' },
+          path,
+        );
+        results.push({
+          product_id: p.productId,
+          product_name: p.name || '',
+          taxonomy_path: path.join(' › '),
+          suggested: {
+            substrate_types: inf.substrate_types,
+            humidity_tolerance: inf.humidity_tolerance,
+            duty_rating: inf.duty_rating,
+            finish_type: inf.finish_type,
+          },
+          confidence: inf.confidence,
+          sources: inf.sources,
+          already_qualified: readyMap.get(p.productId) === true,
+        });
+      }
+
+      res.json({ results });
+    } catch (error) {
+      console.error("Error running auto-infer:", error);
+      res.status(500).json({ error: "Failed to run auto-inference" });
+    }
+  });
+
+  // ---------------------------------------------------------------------------
+  // POST /api/qualification-tags/auto-save-batch
+  // Body: { tags: Array<{ product_id, substrate_types, humidity_tolerance,
+  //                       duty_rating, finish_type, is_system_ready }> }
+  // Upserts all rows. Returns { saved: number }.
+  // ---------------------------------------------------------------------------
+  app.post("/api/qualification-tags/auto-save-batch", async (req, res) => {
+    try {
+      const tags: any[] = Array.isArray(req.body?.tags) ? req.body.tags : [];
+      if (tags.length === 0) return res.json({ saved: 0 });
+
+      let saved = 0;
+      for (const t of tags) {
+        if (!t?.product_id) continue;
+        const payload = {
+          productId: String(t.product_id),
+          substrateTypes: Array.isArray(t.substrate_types) && t.substrate_types.length > 0 ? t.substrate_types : null,
+          humidityTolerance: t.humidity_tolerance || null,
+          dutyRating: t.duty_rating || null,
+          finishType: t.finish_type || null,
+          isSystemReady: !!t.is_system_ready,
+          qualifiedAt: new Date(),
+        };
+        const existing = await db
+          .select()
+          .from(productQualificationTags)
+          .where(eq(productQualificationTags.productId, payload.productId))
+          .limit(1);
+        if (existing.length > 0) {
+          await db
+            .update(productQualificationTags)
+            .set(payload)
+            .where(eq(productQualificationTags.productId, payload.productId));
+        } else {
+          await db.insert(productQualificationTags).values(payload);
+        }
+        saved++;
+      }
+      res.json({ saved });
+    } catch (error) {
+      console.error("Error in auto-save-batch:", error);
+      res.status(500).json({ error: "Failed to save batch" });
     }
   });
 }
