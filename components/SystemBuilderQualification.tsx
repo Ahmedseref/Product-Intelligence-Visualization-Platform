@@ -19,7 +19,7 @@ import {
   ShieldCheck, Search, CheckCircle2, AlertCircle, Loader2,
   Save, X, ChevronDown, Filter,
 } from 'lucide-react';
-import { ProductData, TreeNodeData } from '../client/api';
+import { Product, TreeNode } from '../types';
 
 const API_BASE = '/api';
 
@@ -69,8 +69,8 @@ interface RowState {
 type StatusFilter = 'all' | 'ready' | 'unqualified';
 
 interface Props {
-  products: ProductData[];
-  treeNodes: TreeNodeData[];
+  products: Product[];
+  treeNodes: TreeNode[];
 }
 
 // ---------- Helpers ----------
@@ -298,7 +298,7 @@ const SystemBuilderQualification: React.FC<Props> = ({ products, treeNodes }) =>
           const slice = products.slice(i, i + batchSize);
           const results = await Promise.all(
             slice.map(p =>
-              fetch(`${API_BASE}/qualification-tags/${encodeURIComponent(p.productId)}`, {
+              fetch(`${API_BASE}/qualification-tags/${encodeURIComponent(p.id)}`, {
                 headers: authHeaders(),
               })
                 .then(r => (r.ok ? r.json() : null))
@@ -307,7 +307,7 @@ const SystemBuilderQualification: React.FC<Props> = ({ products, treeNodes }) =>
           );
           slice.forEach((p, idx) => {
             const tag = results[idx] as QualificationTag | null;
-            next[p.productId] = tag ? rowFromTag(tag) : emptyRow();
+            next[p.id] = tag ? rowFromTag(tag) : emptyRow();
           });
         }
         if (cancelled) return;
@@ -337,7 +337,7 @@ const SystemBuilderQualification: React.FC<Props> = ({ products, treeNodes }) =>
 
   // Build a quick lookup of nodeId -> path string for display
   const nodePath = useMemo(() => {
-    const byId = new Map(treeNodes.map(n => [n.nodeId, n]));
+    const byId = new Map(treeNodes.map(n => [n.id, n]));
     const cache = new Map<string, string>();
     const compute = (id: string | undefined): string => {
       if (!id) return '—';
@@ -366,12 +366,12 @@ const SystemBuilderQualification: React.FC<Props> = ({ products, treeNodes }) =>
       if (term) {
         const matches =
           p.name.toLowerCase().includes(term) ||
-          p.productId.toLowerCase().includes(term);
+          p.id.toLowerCase().includes(term);
         if (!matches) return false;
       }
       if (nodeFilter && p.nodeId !== nodeFilter) return false;
       if (statusFilter !== 'all') {
-        const r = rows[p.productId];
+        const r = rows[p.id];
         if (statusFilter === 'ready' && !(r && r.isSystemReady)) return false;
         if (statusFilter === 'unqualified' && hasAnyTagData(r)) return false;
       }
@@ -385,7 +385,7 @@ const SystemBuilderQualification: React.FC<Props> = ({ products, treeNodes }) =>
   const stats = useMemo(() => {
     let ready = 0, incomplete = 0, unqualified = 0;
     for (const p of products) {
-      const r = rows[p.productId];
+      const r = rows[p.id];
       if (!r || !hasAnyTagData(r)) unqualified++;
       else if (r.isSystemReady) ready++;
       else incomplete++;
@@ -466,7 +466,7 @@ const SystemBuilderQualification: React.FC<Props> = ({ products, treeNodes }) =>
   };
 
   const toggleSelectAllVisible = () => {
-    const visibleIds = filteredProducts.map(p => p.productId);
+    const visibleIds = filteredProducts.map(p => p.id);
     const allSelected = visibleIds.every(id => selected.has(id));
     setSelected(prev => {
       const next = new Set(prev);
@@ -577,7 +577,7 @@ const SystemBuilderQualification: React.FC<Props> = ({ products, treeNodes }) =>
           >
             <option value="">All taxonomy nodes</option>
             {systemRelevantNodes.map(n => (
-              <option key={n.nodeId} value={n.nodeId}>{n.name}</option>
+              <option key={n.id} value={n.id}>{n.name}</option>
             ))}
           </select>
         </div>
@@ -645,7 +645,7 @@ const SystemBuilderQualification: React.FC<Props> = ({ products, treeNodes }) =>
                     type="checkbox"
                     checked={
                       filteredProducts.length > 0 &&
-                      filteredProducts.every(p => selected.has(p.productId))
+                      filteredProducts.every(p => selected.has(p.id))
                     }
                     onChange={toggleSelectAllVisible}
                     className="rounded text-blue-600"
@@ -670,11 +670,11 @@ const SystemBuilderQualification: React.FC<Props> = ({ products, treeNodes }) =>
                 </tr>
               )}
               {filteredProducts.map(p => {
-                const r = rows[p.productId] || emptyRow();
-                const isSelected = selected.has(p.productId);
+                const r = rows[p.id] || emptyRow();
+                const isSelected = selected.has(p.id);
                 return (
                   <tr
-                    key={p.productId}
+                    key={p.id}
                     className={`border-b border-slate-100 hover:bg-slate-50/50 ${
                       isSelected ? 'bg-blue-50/40' : ''
                     }`}
@@ -683,7 +683,7 @@ const SystemBuilderQualification: React.FC<Props> = ({ products, treeNodes }) =>
                       <input
                         type="checkbox"
                         checked={isSelected}
-                        onChange={() => toggleSelect(p.productId)}
+                        onChange={() => toggleSelect(p.id)}
                         className="rounded text-blue-600 mt-1"
                       />
                     </td>
@@ -705,7 +705,7 @@ const SystemBuilderQualification: React.FC<Props> = ({ products, treeNodes }) =>
                         <div className="min-w-0">
                           <div className="font-medium text-slate-700 truncate">{p.name}</div>
                           <div className="text-xs text-slate-400 truncate">
-                            {p.productId}
+                            {p.id}
                             {p.supplier ? ` · ${p.supplier}` : ''}
                           </div>
                           {r.error && (
@@ -721,7 +721,7 @@ const SystemBuilderQualification: React.FC<Props> = ({ products, treeNodes }) =>
                       <MultiSelect
                         options={vocab?.substrate || []}
                         value={r.substrateTypes}
-                        onChange={v => updateRow(p.productId, { substrateTypes: v })}
+                        onChange={v => updateRow(p.id, { substrateTypes: v })}
                         disabled={r.saving}
                       />
                     </td>
@@ -729,7 +729,7 @@ const SystemBuilderQualification: React.FC<Props> = ({ products, treeNodes }) =>
                       <SingleSelect
                         options={vocab?.humidity || []}
                         value={r.humidityTolerance}
-                        onChange={v => updateRow(p.productId, { humidityTolerance: v })}
+                        onChange={v => updateRow(p.id, { humidityTolerance: v })}
                         disabled={r.saving}
                       />
                     </td>
@@ -737,7 +737,7 @@ const SystemBuilderQualification: React.FC<Props> = ({ products, treeNodes }) =>
                       <SingleSelect
                         options={vocab?.duty || []}
                         value={r.dutyRating}
-                        onChange={v => updateRow(p.productId, { dutyRating: v })}
+                        onChange={v => updateRow(p.id, { dutyRating: v })}
                         disabled={r.saving}
                       />
                     </td>
@@ -745,7 +745,7 @@ const SystemBuilderQualification: React.FC<Props> = ({ products, treeNodes }) =>
                       <SingleSelect
                         options={vocab?.finish || []}
                         value={r.finishType}
-                        onChange={v => updateRow(p.productId, { finishType: v })}
+                        onChange={v => updateRow(p.id, { finishType: v })}
                         disabled={r.saving}
                       />
                     </td>
@@ -753,14 +753,14 @@ const SystemBuilderQualification: React.FC<Props> = ({ products, treeNodes }) =>
                       <div className="flex justify-center pt-0.5">
                         <Toggle
                           checked={r.isSystemReady}
-                          onChange={v => updateRow(p.productId, { isSystemReady: v })}
+                          onChange={v => updateRow(p.id, { isSystemReady: v })}
                           disabled={r.saving}
                         />
                       </div>
                     </td>
                     <td className="px-3 py-2 align-top text-right">
                       <button
-                        onClick={() => saveRow(p.productId)}
+                        onClick={() => saveRow(p.id)}
                         disabled={r.saving || !r.dirty}
                         className={`inline-flex items-center gap-1 px-2.5 py-1 text-xs rounded-md ${
                           r.dirty && !r.saving
