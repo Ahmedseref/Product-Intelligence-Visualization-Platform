@@ -732,8 +732,10 @@ const SystemBuilderQualification: React.FC<Props> = ({ products, treeNodes, onPr
                         </div>
                       </div>
                     </td>
-                    <td className="px-3 py-2 align-top text-xs text-slate-500 max-w-[220px] truncate">
-                      {nodePath(p.nodeId)}
+                    <td className="px-3 py-2 align-top text-xs text-slate-500 min-w-[260px]" title={nodePath(p.nodeId)}>
+                      <div className="whitespace-normal break-words leading-snug">
+                        {nodePath(p.nodeId)}
+                      </div>
                     </td>
                     <td className="px-3 py-2 align-top">
                       <MultiSelect
