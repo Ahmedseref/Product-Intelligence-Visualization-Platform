@@ -907,7 +907,7 @@ export const systemsApi = {
     if (!response.ok) throw new Error('Failed to fetch full system');
     return response.json();
   },
-  createSystem: async (data: { name: string; description?: string; typicalUses?: string; sectorMapping?: string[] }) => {
+  createSystem: async (data: { name: string; description?: string; typicalUses?: string; sectorMapping?: string[]; systemSubstrate?: string | null; systemHumidity?: string | null; systemDuty?: string | null }) => {
     const response = await fetch(`${API_BASE}/systems`, {
       method: 'POST', headers: { ...getAuthHeaders(), 'Content-Type': 'application/json' },
       body: JSON.stringify(data),

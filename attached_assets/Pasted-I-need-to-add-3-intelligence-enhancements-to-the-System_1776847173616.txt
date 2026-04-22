@@ -1,0 +1,85 @@
+I need to add 3 intelligence enhancements to the System Builder: conflict detection warnings, a richer build-up preview panel, and parameter-based system generation. These are display and workflow enhancements only — they must not modify any data without explicit user confirmation.
+
+## Context
+This app uses React/TypeScript, Tailwind CSS, Lucide React, Express.js, Drizzle ORM, PostgreSQL. Phases 1, 2, and 3 are complete:
+- product_qualification_tags table with substrate, humidity, duty, finish tags per product
+- Systems have system_substrate, system_humidity, system_duty fields
+- Sectors have substrate_override fields
+- Layers have default_product_id fields
+- Product Qualification tab exists in System Builder
+- Smart slot filtering exists in layer search
+
+Before writing any code, read the full System Builder component, the qualification tags API, and the systems schema carefully.
+
+## What to build
+
+### Enhancement 1 — Conflict detection warnings (display only, never blocks saving)
+
+After a product is added to a layer, check its qualification tags against the system's parameters:
+
+Conflict conditions (check all that apply):
+- Product's substrate_types does not include the system's system_substrate (or the sector's substrate_override if set)
+- Product's humidity_tolerance does not match system_humidity
+- Product's duty_rating does not match system_duty
+- Product is_system_ready = false (not yet qualified)
+
+If any conflict is detected, show a small amber warning icon (Lucide AlertTriangle) next to the product name inside the layer. On hover, show a tooltip listing the specific conflicts: e.g. "Substrate mismatch: product is for Steel, system is configured for Concrete".
+
+Rules:
+- This is a visual warning only — users can still save and keep the product
+- If the system has no parameters set (all null), show no warnings — nothing to conflict with
+- If a product has no qualification tags at all, show a grey "Unqualified" badge instead of a conflict warning
+- Do not call any new API for this — compute conflicts client-side using already-loaded qualification tags data and system parameter values
+- Add a small legend note below the layer list explaining the warning icons (shown only if any warnings exist in that system)
+
+### Enhancement 2 — Richer build-up preview panel
+
+The existing System Summary / Build-Up Preview panel on the right side currently shows layer names, product counts, and version. Extend it to show technical detail when available.
+
+For each layer in the preview panel, if any product in that layer has qualification tags, show:
+- Substrate compatibility: list unique substrate_types across all products in that layer
+- Duty rating: show if all products agree on duty, or "Mixed" if they differ
+- System-ready count: "3/4 products qualified" style indicator
+
+At the bottom of the preview panel add a "System health" section with:
+- Overall system-ready status: green if all products in all layers are system-ready, amber if some are unqualified, red if any conflicts exist
+- Conflict count: "2 conflicts detected" with a link that scrolls to the first conflicting layer
+- Default coverage: "3 of 4 layers have a default set" (using the default_product_id data from Phase 3)
+
+All data for this section is computed client-side from already-loaded data — no new API calls needed.
+
+### Enhancement 3 — Parameter-based system generation (new system workflow only)
+
+When creating a NEW system (the + button or "Add System" flow), add an optional "Quick Setup" step before the user lands on the empty layer editor.
+
+The Quick Setup is a small modal or inline panel with:
+- Step 1: Set system parameters — Substrate, Humidity, Duty dropdowns (same vocabulary lists)
+- Step 2: The system suggests a layer skeleton based on the material type selected. For now, hardcode sensible layer skeletons per material type:
+  - Epoxy systems: Primer → Base Coat → Topcoat
+  - PU systems: Primer → Body Coat → Topcoat  
+  - Polyurea systems: Primer → Polyurea Coat
+  - Acrylic systems: Primer → Acrylic Coat → Sealer
+  - Generic/other: Primer → Main Coat
+- Step 3: Show matching system-ready products per layer slot, filtered by the parameters set in Step 1. The user can select a product for each slot or skip.
+- Step 4: "Create System" button — creates the system with the parameter header pre-filled and the selected products pre-added to their respective layers. Unselected slots are created empty.
+
+The user can also skip Quick Setup entirely and go straight to the empty editor as today.
+
+Rules:
+- Quick Setup only appears for new systems — never for editing existing systems
+- Skipping Quick Setup creates the system exactly as today — no regression
+- All product selections in Quick Setup are suggestions — user confirms before anything is saved
+- The system is not created until the user clicks "Create System" in Step 4 (or skips and uses the existing creation flow)
+- Use the existing POST /api/systems endpoint to create the system — do not add a new endpoint unless the existing one cannot support pre-populated layers in a single call. If it cannot, add a POST /api/systems/with-layers endpoint that creates system + layers + product assignments atomically, with a transaction.
+- No data is written during Steps 1–3 of Quick Setup — only Step 4 writes to the database
+- Add clear comments explaining the Quick Setup flow and each API call made
+
+## Rules across all enhancements
+- Do not remove or rename any existing API endpoints or components
+- Do not modify the Product Qualification tab (Phase 2)
+- Do not modify the vocabulary or tag schema
+- All warnings and health indicators are read-only computed views — they never auto-modify data
+- Use Tailwind CSS and Lucide React matching existing System Builder style
+- Handle edge cases: products with no tags, systems with no parameters, layers with no products
+- Write clear TypeScript types for all new computed state
+- Test that all existing system CRUD operations still work after changes

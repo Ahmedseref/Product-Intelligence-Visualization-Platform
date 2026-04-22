@@ -9,7 +9,7 @@ import {
   Plus, Search, ChevronRight, ChevronDown, GripVertical, Trash2, Edit, Save, X, Info, 
   Download, Upload, Layers, Package, Star, StarOff, MoreVertical, Copy, 
   History, Eye, FileJson, FileSpreadsheet, ChevronUp, AlertCircle, Check,
-  BarChart3, FileUp, ShieldCheck
+  BarChart3, FileUp, ShieldCheck, AlertTriangle, Sparkles, ArrowRight, ArrowLeft
 } from 'lucide-react';
 import SystemDashboard from './SystemDashboard';
 import SystemBuilderQualification from '../SystemBuilderQualification';
@@ -40,6 +40,35 @@ const SystemBuilder: React.FC<SystemBuilderProps> = ({ products, onProductUpdate
   const [searchTerm, setSearchTerm] = useState('');
   const [loading, setLoading] = useState(false);
   const [showCreateSystem, setShowCreateSystem] = useState(false);
+  // Phase 4: Quick Setup wizard state. Only used for the NEW system flow —
+  // never opened when editing an existing system.
+  const [quickSetupOpen, setQuickSetupOpen] = useState(false);
+  const [quickStep, setQuickStep] = useState<1 | 2 | 3>(1);
+  const [quickBusy, setQuickBusy] = useState(false);
+  type QuickLayerSlot = { name: string; productId: string | null };
+  type QuickSetup = {
+    name: string;
+    materialType: 'epoxy' | 'pu' | 'polyurea' | 'acrylic' | 'generic';
+    substrate: string;
+    humidity: string;
+    duty: string;
+    layers: QuickLayerSlot[];
+  };
+  const QUICK_SKELETONS: Record<QuickSetup['materialType'], string[]> = {
+    epoxy: ['Primer', 'Base Coat', 'Topcoat'],
+    pu: ['Primer', 'Body Coat', 'Topcoat'],
+    polyurea: ['Primer', 'Polyurea Coat'],
+    acrylic: ['Primer', 'Acrylic Coat', 'Sealer'],
+    generic: ['Primer', 'Main Coat'],
+  };
+  const [quickSetup, setQuickSetup] = useState<QuickSetup>({
+    name: '',
+    materialType: 'epoxy',
+    substrate: '',
+    humidity: '',
+    duty: '',
+    layers: QUICK_SKELETONS.epoxy.map(n => ({ name: n, productId: null })),
+  });
   const [showAddLayer, setShowAddLayer] = useState(false);
   const [showAddProduct, setShowAddProduct] = useState<string | null>(null);
   const [selectedProductIds, setSelectedProductIds] = useState<string[]>([]);
@@ -452,6 +481,88 @@ const SystemBuilder: React.FC<SystemBuilderProps> = ({ products, onProductUpdate
     }
   };
 
+  // ---------- Phase 4: conflict detection (display-only) ----------
+  // Compute the list of qualification conflicts for a given product against
+  // the active system parameters. Returns one of:
+  //   { kind: 'unqualified' }                  → product has no qualification tag
+  //   { kind: 'conflicts', messages: string[] }→ one or more parameter mismatches
+  //   { kind: 'ok' }                           → product is qualified and matches
+  // When the system has zero parameters configured, every product is treated as
+  // 'ok' (nothing to conflict against) so legacy systems show no warning chrome.
+  type ConflictReport = { kind: 'unqualified' } | { kind: 'conflicts'; messages: string[] } | { kind: 'ok' };
+  const getProductConflicts = useCallback((productId: string, layer?: { layerSubstrateOverride?: string | null }): ConflictReport => {
+    // Inline computation of "any param set" — avoids forward reference to the
+    // memoized systemHasAnyParams which is declared later in the component.
+    const hasParams = !!(fullSystem && (
+      fullSystem.systemSubstrate || fullSystem.systemHumidity || fullSystem.systemDuty ||
+      Object.values((fullSystem.sectorOverrides || {}) as Record<string, { substrateOverride?: string | null }>).some(o => o?.substrateOverride) ||
+      fullSystem.layers.some(l => l.layerSubstrateOverride)
+    ));
+    if (!fullSystem || !hasParams) return { kind: 'ok' };
+    const tag = tagsByProduct[productId];
+    if (!tag) return { kind: 'unqualified' };
+    if (!tag.isSystemReady) return { kind: 'unqualified' };
+    const messages: string[] = [];
+    const expectedSubstrate = getEffectiveSubstrate(layer?.layerSubstrateOverride);
+    if (expectedSubstrate) {
+      const subs = tag.substrateTypes || [];
+      if (!subs.includes(expectedSubstrate)) {
+        const have = subs.length ? subs.join(', ') : '—';
+        messages.push(`Substrate mismatch: product is for ${have}, system is configured for ${expectedSubstrate}`);
+      }
+    }
+    // Humidity / duty: a system-required parameter that the product does not
+    // declare (or declares differently) is treated as a mismatch — a missing
+    // tag value is just as suspect as a wrong one.
+    if (fullSystem.systemHumidity && tag.humidityTolerance !== fullSystem.systemHumidity) {
+      messages.push(`Humidity mismatch: product rated for ${tag.humidityTolerance || '—'}, system requires ${fullSystem.systemHumidity}`);
+    }
+    if (fullSystem.systemDuty && tag.dutyRating !== fullSystem.systemDuty) {
+      messages.push(`Duty mismatch: product rated ${tag.dutyRating || '—'}, system requires ${fullSystem.systemDuty}`);
+    }
+    return messages.length ? { kind: 'conflicts', messages } : { kind: 'ok' };
+  }, [fullSystem, tagsByProduct, getEffectiveSubstrate]);
+
+  // ---------- Phase 4: system health summary ----------
+  // Aggregate conflict and qualification stats across every layer and product.
+  // Used by the right-side preview panel and the legend below the layer list.
+  // All computation is purely client-side — no API calls.
+  const systemHealth = React.useMemo(() => {
+    if (!fullSystem) return { conflictCount: 0, unqualifiedCount: 0, totalProducts: 0, defaultCoverage: 0, totalLayers: 0, firstConflictLayerId: null as string | null, status: 'green' as 'green' | 'amber' | 'red' };
+    let conflictCount = 0;
+    let unqualifiedCount = 0;
+    let totalProducts = 0;
+    let firstConflictLayerId: string | null = null;
+    for (const layer of fullSystem.layers) {
+      for (const opt of layer.productOptions) {
+        totalProducts++;
+        const c = getProductConflicts(opt.productId, layer);
+        if (c.kind === 'conflicts') {
+          conflictCount++;
+          if (!firstConflictLayerId) firstConflictLayerId = layer.layerId;
+        } else if (c.kind === 'unqualified') {
+          unqualifiedCount++;
+        }
+      }
+    }
+    const defaultCoverage = fullSystem.layers.filter(l => l.productOptions.some(o => o.isDefault)).length;
+    const status: 'green' | 'amber' | 'red' = conflictCount > 0 ? 'red' : (unqualifiedCount > 0 ? 'amber' : 'green');
+    return { conflictCount, unqualifiedCount, totalProducts, defaultCoverage, totalLayers: fullSystem.layers.length, firstConflictLayerId, status };
+  }, [fullSystem, getProductConflicts]);
+
+  // For the build-up preview: per-layer aggregates of substrate compatibility,
+  // duty agreement, and system-ready ratio. Returns null when no qualification
+  // data exists for any product in the layer (so the panel stays clean).
+  const getLayerTechnicalSummary = useCallback((layer: { productOptions: Array<{ productId: string }> }) => {
+    const tagged = layer.productOptions.map(o => tagsByProduct[o.productId]).filter(Boolean) as Array<NonNullable<typeof tagsByProduct[string]>>;
+    if (tagged.length === 0) return null;
+    const substrates = Array.from(new Set(tagged.flatMap(t => t.substrateTypes || []))).filter(Boolean);
+    const duties = Array.from(new Set(tagged.map(t => t.dutyRating).filter(Boolean) as string[]));
+    const dutyDisplay = duties.length === 0 ? null : (duties.length === 1 ? duties[0] : 'Mixed');
+    const ready = tagged.filter(t => t.isSystemReady).length;
+    return { substrates, dutyDisplay, ready, total: layer.productOptions.length };
+  }, [tagsByProduct]);
+
   // Save / clear an individual sector's substrate override on the system's
   // sectorOverrides JSONB map. Passing null removes the entry entirely.
   const handleSaveSectorOverride = async (sectorName: string, substrate: string | null) => {
@@ -744,6 +855,19 @@ const SystemBuilder: React.FC<SystemBuilderProps> = ({ products, onProductUpdate
                   className="w-full pl-8 pr-3 py-1.5 text-sm border border-slate-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none"
                 />
               </div>
+              <button
+                onClick={() => {
+                  // Phase 4: open Quick Setup wizard. Reset to a fresh state so
+                  // it always starts on Step 1 with the default skeleton.
+                  setQuickSetup({ name: '', materialType: 'epoxy', substrate: '', humidity: '', duty: '', layers: QUICK_SKELETONS.epoxy.map(n => ({ name: n, productId: null })) });
+                  setQuickStep(1);
+                  setQuickSetupOpen(true);
+                }}
+                className="p-1.5 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition-colors"
+                title="Quick Setup wizard (parameter-based new system)"
+              >
+                <Sparkles size={16} />
+              </button>
               <button
                 onClick={() => setShowCreateSystem(true)}
                 className="p-1.5 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
@@ -1178,6 +1302,7 @@ const SystemBuilder: React.FC<SystemBuilderProps> = ({ products, onProductUpdate
                     return (
                     <div
                       key={layer.layerId}
+                      data-layer-id={layer.layerId}
                       draggable={showAddProduct !== layer.layerId}
                       onDragStart={() => handleLayerDragStart(idx)}
                       onDragOver={(e) => handleLayerDragOver(e, idx)}
@@ -1439,6 +1564,21 @@ const SystemBuilder: React.FC<SystemBuilderProps> = ({ products, onProductUpdate
                                       Default
                                     </span>
                                   )}
+                                  {/* Phase 4: conflict / unqualified indicators (display only). */}
+                                  {(() => {
+                                    const c = getProductConflicts(opt.productId, layer);
+                                    if (c.kind === 'unqualified') {
+                                      return <span className="flex-shrink-0 text-[10px] font-semibold px-1.5 py-0.5 bg-slate-100 text-slate-500 rounded-full" title="Product has not been qualified yet (no system-ready tag).">Unqualified</span>;
+                                    }
+                                    if (c.kind === 'conflicts') {
+                                      return (
+                                        <span className="flex-shrink-0 inline-flex items-center" title={c.messages.join('\n')} data-testid={`conflict-${opt.optionId}`}>
+                                          <AlertTriangle size={13} className="text-amber-500" />
+                                        </span>
+                                      );
+                                    }
+                                    return null;
+                                  })()}
                                 </div>
                                 <div className="flex items-center gap-2 mt-0.5 flex-wrap">
                                   {opt.productStockCode && (
@@ -1527,6 +1667,24 @@ const SystemBuilder: React.FC<SystemBuilderProps> = ({ products, onProductUpdate
                     </div>
                     );
                   })}
+                  {/* Phase 4: warning legend — only shown when at least one warning exists in this system. */}
+                  {(systemHealth.conflictCount > 0 || systemHealth.unqualifiedCount > 0) && (
+                    <div className="mt-3 px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg flex flex-wrap items-center gap-3 text-[11px] text-slate-600">
+                      <span className="font-semibold text-slate-500">Legend:</span>
+                      {systemHealth.conflictCount > 0 && (
+                        <span className="inline-flex items-center gap-1">
+                          <AlertTriangle size={12} className="text-amber-500" />
+                          Parameter mismatch — hover the icon for details
+                        </span>
+                      )}
+                      {systemHealth.unqualifiedCount > 0 && (
+                        <span className="inline-flex items-center gap-1">
+                          <span className="px-1.5 py-0.5 bg-slate-100 text-slate-500 rounded-full text-[10px] font-semibold">Unqualified</span>
+                          Product has no system-ready qualification tag
+                        </span>
+                      )}
+                    </div>
+                  )}
                 </div>
               )}
             </div>
@@ -1572,8 +1730,12 @@ const SystemBuilder: React.FC<SystemBuilderProps> = ({ products, onProductUpdate
                       const defaultProducts = layer.productOptions.filter((o) => o.isDefault);
                       const colorScale = ['bg-blue-500', 'bg-amber-500', 'bg-emerald-500', 'bg-purple-500', 'bg-pink-500', 'bg-cyan-500'];
                       const layerColor = colorScale[idx % colorScale.length];
+                      // Phase 4: per-layer technical summary derived from
+                      // qualification tags (substrate compat, duty agreement,
+                      // system-ready ratio). Null when no products are tagged.
+                      const tech = getLayerTechnicalSummary(layer);
                       return (
-                        <div key={layer.layerId} className="relative">
+                        <div key={layer.layerId} className="relative" data-layer-id={layer.layerId}>
                           <div className={`absolute left-0 top-0 bottom-0 w-1 ${layerColor}`} />
                           <div className="pl-4 pr-3 py-2">
                             <div className="flex items-center gap-2">
@@ -1596,6 +1758,24 @@ const SystemBuilder: React.FC<SystemBuilderProps> = ({ products, onProductUpdate
                                 {layer.productOptions.length > 0 ? `${layer.productOptions.length} option(s), no default set` : 'No products assigned'}
                               </div>
                             )}
+                            {/* Phase 4: technical detail block — only shown when at least one product in the layer is tagged */}
+                            {tech && (
+                              <div className="ml-7 mt-1.5 flex flex-wrap gap-1">
+                                {tech.substrates.length > 0 && (
+                                  <span className="text-[10px] px-1.5 py-0.5 rounded bg-indigo-50 text-indigo-600" title="Combined substrate compatibility across all tagged products in this layer">
+                                    Substrate: {tech.substrates.slice(0, 3).join(', ')}{tech.substrates.length > 3 ? '…' : ''}
+                                  </span>
+                                )}
+                                {tech.dutyDisplay && (
+                                  <span className={`text-[10px] px-1.5 py-0.5 rounded ${tech.dutyDisplay === 'Mixed' ? 'bg-amber-50 text-amber-700' : 'bg-slate-100 text-slate-600'}`} title={tech.dutyDisplay === 'Mixed' ? 'Products in this layer disagree on duty rating' : `All products agree on ${tech.dutyDisplay} duty`}>
+                                    Duty: {tech.dutyDisplay}
+                                  </span>
+                                )}
+                                <span className={`text-[10px] px-1.5 py-0.5 rounded ${tech.ready === tech.total ? 'bg-emerald-50 text-emerald-700' : 'bg-slate-100 text-slate-500'}`}>
+                                  {tech.ready}/{tech.total} qualified
+                                </span>
+                              </div>
+                            )}
                           </div>
                         </div>
                       );
@@ -1603,6 +1783,43 @@ const SystemBuilder: React.FC<SystemBuilderProps> = ({ products, onProductUpdate
                   </div>
                 )}
               </div>
+
+              {/* Phase 4: System Health summary card */}
+              {fullSystem.layers.length > 0 && (
+                <div className="mt-4">
+                  <h3 className="text-sm font-bold text-slate-700 uppercase tracking-wider mb-2">System Health</h3>
+                  <div className={`rounded-xl border p-3 ${systemHealth.status === 'red' ? 'bg-red-50 border-red-200' : systemHealth.status === 'amber' ? 'bg-amber-50 border-amber-200' : 'bg-emerald-50 border-emerald-200'}`}>
+                    <div className="flex items-center gap-2 mb-2">
+                      {systemHealth.status === 'green' ? <Check size={14} className="text-emerald-600" /> : systemHealth.status === 'amber' ? <AlertCircle size={14} className="text-amber-600" /> : <AlertTriangle size={14} className="text-red-600" />}
+                      <span className={`text-xs font-semibold ${systemHealth.status === 'red' ? 'text-red-700' : systemHealth.status === 'amber' ? 'text-amber-700' : 'text-emerald-700'}`}>
+                        {systemHealth.status === 'green' ? 'All products qualified & matching' : systemHealth.status === 'amber' ? 'Some unqualified products' : 'Conflicts detected'}
+                      </span>
+                    </div>
+                    {systemHealth.conflictCount > 0 && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          if (!systemHealth.firstConflictLayerId) return;
+                          // Scroll the originating layer in the centre panel into view
+                          const el = document.querySelector(`[data-layer-id="${systemHealth.firstConflictLayerId}"]`);
+                          if (el && 'scrollIntoView' in el) (el as HTMLElement).scrollIntoView({ behavior: 'smooth', block: 'center' });
+                        }}
+                        className="text-[11px] text-red-700 hover:underline block mb-1"
+                      >
+                        {systemHealth.conflictCount} conflict{systemHealth.conflictCount === 1 ? '' : 's'} detected — jump to first
+                      </button>
+                    )}
+                    {systemHealth.unqualifiedCount > 0 && (
+                      <div className="text-[11px] text-amber-700 mb-1">
+                        {systemHealth.unqualifiedCount} unqualified product{systemHealth.unqualifiedCount === 1 ? '' : 's'}
+                      </div>
+                    )}
+                    <div className="text-[11px] text-slate-600">
+                      {systemHealth.defaultCoverage} of {systemHealth.totalLayers} layer{systemHealth.totalLayers === 1 ? '' : 's'} have a default set
+                    </div>
+                  </div>
+                </div>
+              )}
 
               {fullSystem.typicalUses && (
                 <div className="mt-4">
@@ -1664,6 +1881,203 @@ const SystemBuilder: React.FC<SystemBuilderProps> = ({ products, onProductUpdate
           }}
           treeNodes={treeNodes}
         />
+      )}
+
+      {/* Phase 4: Quick Setup wizard modal — only ever opened via the Sparkles button (new systems only). */}
+      {quickSetupOpen && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-2xl max-h-[90vh] overflow-hidden flex flex-col">
+            <div className="flex items-center justify-between px-5 py-3 border-b border-slate-200 bg-gradient-to-r from-indigo-50 to-blue-50">
+              <div className="flex items-center gap-2">
+                <Sparkles size={18} className="text-indigo-600" />
+                <h3 className="text-lg font-bold text-slate-800">Quick Setup — New System</h3>
+              </div>
+              <button onClick={() => setQuickSetupOpen(false)} className="p-1 hover:bg-white/60 rounded-lg" disabled={quickBusy}>
+                <X size={18} />
+              </button>
+            </div>
+            {/* Step pills */}
+            <div className="px-5 py-2 flex items-center gap-2 border-b border-slate-100 bg-slate-50">
+              {[1, 2, 3].map(s => (
+                <div key={s} className={`flex items-center gap-1.5 text-xs font-medium ${quickStep >= s ? 'text-indigo-700' : 'text-slate-400'}`}>
+                  <span className={`w-5 h-5 rounded-full flex items-center justify-center text-[10px] font-bold ${quickStep >= s ? 'bg-indigo-600 text-white' : 'bg-slate-200 text-slate-500'}`}>{s}</span>
+                  {s === 1 ? 'Parameters' : s === 2 ? 'Layer Skeleton' : 'Pick Products'}
+                  {s < 3 && <ChevronRight size={12} className="text-slate-300" />}
+                </div>
+              ))}
+            </div>
+
+            <div className="flex-1 overflow-y-auto p-5">
+              {/* STEP 1 — system parameters. No data is written here. */}
+              {quickStep === 1 && (
+                <div className="space-y-3">
+                  <div>
+                    <label className="block text-xs font-semibold text-slate-600 mb-1">System name *</label>
+                    <input type="text" value={quickSetup.name} onChange={(e) => setQuickSetup({ ...quickSetup, name: e.target.value })} placeholder="e.g. Concrete Floor Heavy-Duty Epoxy" className="w-full px-3 py-2 text-sm border border-slate-200 rounded-lg focus:ring-2 focus:ring-indigo-500 outline-none" autoFocus />
+                  </div>
+                  <div className="grid grid-cols-3 gap-2">
+                    <div>
+                      <label className="block text-xs font-semibold text-slate-600 mb-1">Substrate</label>
+                      <select value={quickSetup.substrate} onChange={(e) => setQuickSetup({ ...quickSetup, substrate: e.target.value })} className="w-full px-2 py-1.5 text-sm border border-slate-200 rounded-lg">
+                        <option value="">— any —</option>
+                        {vocab.substrate.map(v => <option key={v.value} value={v.value}>{v.label}</option>)}
+                      </select>
+                    </div>
+                    <div>
+                      <label className="block text-xs font-semibold text-slate-600 mb-1">Humidity</label>
+                      <select value={quickSetup.humidity} onChange={(e) => setQuickSetup({ ...quickSetup, humidity: e.target.value })} className="w-full px-2 py-1.5 text-sm border border-slate-200 rounded-lg">
+                        <option value="">— any —</option>
+                        {vocab.humidity.map(v => <option key={v.value} value={v.value}>{v.label}</option>)}
+                      </select>
+                    </div>
+                    <div>
+                      <label className="block text-xs font-semibold text-slate-600 mb-1">Duty</label>
+                      <select value={quickSetup.duty} onChange={(e) => setQuickSetup({ ...quickSetup, duty: e.target.value })} className="w-full px-2 py-1.5 text-sm border border-slate-200 rounded-lg">
+                        <option value="">— any —</option>
+                        {vocab.duty.map(v => <option key={v.value} value={v.value}>{v.label}</option>)}
+                      </select>
+                    </div>
+                  </div>
+                  <p className="text-[11px] text-slate-500">These parameters power the smart product suggestions in Step 3 and the conflict detection after creation.</p>
+                </div>
+              )}
+
+              {/* STEP 2 — pick a material type → suggested layer skeleton (editable). */}
+              {quickStep === 2 && (
+                <div className="space-y-3">
+                  <div>
+                    <label className="block text-xs font-semibold text-slate-600 mb-2">Material type — sets the suggested layer skeleton</label>
+                    <div className="grid grid-cols-5 gap-2">
+                      {(Object.keys(QUICK_SKELETONS) as Array<QuickSetup['materialType']>).map(mt => (
+                        <button key={mt} type="button" onClick={() => setQuickSetup({ ...quickSetup, materialType: mt, layers: QUICK_SKELETONS[mt].map(n => ({ name: n, productId: null })) })} className={`px-3 py-2 text-xs font-medium rounded-lg border ${quickSetup.materialType === mt ? 'border-indigo-500 bg-indigo-50 text-indigo-700' : 'border-slate-200 bg-white text-slate-600 hover:border-slate-300'}`}>
+                          {mt === 'pu' ? 'PU' : mt[0].toUpperCase() + mt.slice(1)}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                  <div>
+                    <div className="flex items-center justify-between mb-2">
+                      <label className="text-xs font-semibold text-slate-600">Suggested layers (rename or remove as needed)</label>
+                      <button type="button" onClick={() => setQuickSetup({ ...quickSetup, layers: [...quickSetup.layers, { name: 'New Layer', productId: null }] })} className="text-xs text-indigo-600 hover:text-indigo-700 inline-flex items-center gap-1">
+                        <Plus size={12} /> Add layer
+                      </button>
+                    </div>
+                    <div className="space-y-1.5">
+                      {quickSetup.layers.map((slot, i) => (
+                        <div key={i} className="flex items-center gap-2">
+                          <span className="w-5 h-5 rounded-full bg-indigo-100 text-indigo-700 flex items-center justify-center text-[10px] font-bold">{i + 1}</span>
+                          <input type="text" value={slot.name} onChange={(e) => { const ls = [...quickSetup.layers]; ls[i] = { ...ls[i], name: e.target.value }; setQuickSetup({ ...quickSetup, layers: ls }); }} className="flex-1 px-2 py-1 text-sm border border-slate-200 rounded" />
+                          <button type="button" onClick={() => setQuickSetup({ ...quickSetup, layers: quickSetup.layers.filter((_, j) => j !== i) })} className="p-1 text-slate-400 hover:text-red-500"><Trash2 size={13} /></button>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* STEP 3 — for each layer slot, list products that match the parameters from Step 1. */}
+              {quickStep === 3 && (
+                <div className="space-y-4">
+                  <p className="text-xs text-slate-500">Pick a default product for each layer (optional). Products are filtered by the parameters from Step 1; "All system-ready" products are shown when a parameter is left blank.</p>
+                  {quickSetup.layers.map((slot, i) => {
+                    // Filter products that are system-ready and match the chosen parameters.
+                    const matches = products.filter(p => {
+                      const t = tagsByProduct[p.id];
+                      if (!t || !t.isSystemReady) return false;
+                      if (quickSetup.substrate && !(t.substrateTypes || []).includes(quickSetup.substrate)) return false;
+                      if (quickSetup.humidity && t.humidityTolerance && t.humidityTolerance !== quickSetup.humidity) return false;
+                      if (quickSetup.duty && t.dutyRating && t.dutyRating !== quickSetup.duty) return false;
+                      return true;
+                    });
+                    return (
+                      <div key={i} className="border border-slate-200 rounded-lg p-3">
+                        <div className="flex items-center justify-between mb-2">
+                          <div className="flex items-center gap-2">
+                            <span className="w-5 h-5 rounded-full bg-indigo-100 text-indigo-700 flex items-center justify-center text-[10px] font-bold">{i + 1}</span>
+                            <span className="text-sm font-semibold text-slate-700">{slot.name}</span>
+                          </div>
+                          <span className="text-[11px] text-slate-400">{matches.length} match{matches.length === 1 ? '' : 'es'}</span>
+                        </div>
+                        {matches.length === 0 ? (
+                          <p className="text-xs text-slate-400 italic">No system-ready products match these parameters. The layer will be created empty.</p>
+                        ) : (
+                          <select value={slot.productId || ''} onChange={(e) => { const ls = [...quickSetup.layers]; ls[i] = { ...ls[i], productId: e.target.value || null }; setQuickSetup({ ...quickSetup, layers: ls }); }} className="w-full px-2 py-1.5 text-sm border border-slate-200 rounded">
+                            <option value="">— skip (leave layer empty) —</option>
+                            {matches.slice(0, 50).map(p => <option key={p.id} value={p.id}>{p.name}{p.stockCode ? ` · ${p.stockCode}` : ''}</option>)}
+                          </select>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+
+            {/* Footer — Back / Next / Create. Only Step 4 (the Create button at Step 3) writes to the DB. */}
+            <div className="px-5 py-3 border-t border-slate-200 flex items-center justify-between bg-slate-50">
+              <button onClick={() => setQuickSetupOpen(false)} className="text-xs text-slate-500 hover:text-slate-700" disabled={quickBusy}>Cancel & use empty editor</button>
+              <div className="flex items-center gap-2">
+                {quickStep > 1 && (
+                  <button onClick={() => setQuickStep((s) => (s === 3 ? 2 : 1))} className="px-3 py-1.5 text-sm bg-white border border-slate-200 text-slate-600 rounded-lg hover:bg-slate-100 inline-flex items-center gap-1" disabled={quickBusy}>
+                    <ArrowLeft size={14} /> Back
+                  </button>
+                )}
+                {quickStep < 3 ? (
+                  <button
+                    onClick={() => setQuickStep((s) => (s === 1 ? 2 : 3))}
+                    disabled={quickStep === 1 && !quickSetup.name.trim()}
+                    className="px-3 py-1.5 text-sm bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 disabled:opacity-40 inline-flex items-center gap-1"
+                  >
+                    Next <ArrowRight size={14} />
+                  </button>
+                ) : (
+                  <button
+                    onClick={async () => {
+                      // Step 4 — actually persist. Sequence:
+                      //   1. POST /api/systems          (with parameter header pre-filled)
+                      //   2. POST /api/system-layers    (one call per layer slot)
+                      //   3. POST /api/system-product-options (only for slots with a chosen productId)
+                      // Each call is independent; on partial failure the user
+                      // can edit the resulting (partial) system in the regular editor.
+                      if (quickBusy) return;
+                      setQuickBusy(true);
+                      try {
+                        const created = await systemsApi.createSystem({
+                          name: quickSetup.name.trim(),
+                          systemSubstrate: quickSetup.substrate || null,
+                          systemHumidity: quickSetup.humidity || null,
+                          systemDuty: quickSetup.duty || null,
+                        } as any);
+                        const newId = (created as any).systemId || (created as any).id;
+                        for (let i = 0; i < quickSetup.layers.length; i++) {
+                          const slot = quickSetup.layers[i];
+                          const layer = await systemsApi.createLayer({ systemId: newId, layerName: slot.name, orderSequence: i + 1 });
+                          const layerId = (layer as any).layerId || (layer as any).id;
+                          if (slot.productId) {
+                            // Mark the chosen product as the layer's default.
+                            await systemsApi.addProductOption({ layerId, productId: slot.productId, isDefault: true });
+                          }
+                        }
+                        await loadSystems();
+                        setSelectedSystemId(newId);
+                        setQuickSetupOpen(false);
+                      } catch (err) {
+                        console.error('Quick Setup creation failed:', err);
+                        alert('Quick Setup failed — see console for details. Any layers already created will be available in the system list.');
+                      } finally {
+                        setQuickBusy(false);
+                      }
+                    }}
+                    disabled={quickBusy || !quickSetup.name.trim()}
+                    className="px-4 py-1.5 text-sm bg-emerald-600 text-white rounded-lg hover:bg-emerald-700 disabled:opacity-40 inline-flex items-center gap-1"
+                  >
+                    {quickBusy ? 'Creating…' : <>Create System <Check size={14} /></>}
+                  </button>
+                )}
+              </div>
+            </div>
+          </div>
+        </div>
       )}
 
       {editingProduct && (
