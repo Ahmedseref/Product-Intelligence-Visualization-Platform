@@ -17,9 +17,10 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import {
   ShieldCheck, Search, CheckCircle2, AlertCircle, Loader2,
-  Save, X, ChevronDown, Filter,
+  Save, X, ChevronDown, Filter, Info,
 } from 'lucide-react';
 import { Product, TreeNode } from '../types';
+import ProductDetailsModal from './ProductDetailsModal';
 
 const API_BASE = '/api';
 
@@ -71,6 +72,8 @@ type StatusFilter = 'all' | 'ready' | 'unqualified';
 interface Props {
   products: Product[];
   treeNodes: TreeNode[];
+  onProductUpdate?: (p: Product) => void;
+  onProductEdit?: (p: Product) => void;
 }
 
 // ---------- Helpers ----------
@@ -247,7 +250,8 @@ const StatCard: React.FC<{
 };
 
 // ---------- Main component ----------
-const SystemBuilderQualification: React.FC<Props> = ({ products, treeNodes }) => {
+const SystemBuilderQualification: React.FC<Props> = ({ products, treeNodes, onProductUpdate, onProductEdit }) => {
+  const [detailProduct, setDetailProduct] = useState<Product | null>(null);
   const [vocab, setVocab] = useState<VocabMap | null>(null);
   // Map of productId -> RowState. Includes both fetched and locally-edited rows.
   const [rows, setRows] = useState<Record<string, RowState>>({});
@@ -702,8 +706,22 @@ const SystemBuilderQualification: React.FC<Props> = ({ products, treeNodes }) =>
                             className="mt-0.5 text-emerald-500 flex-shrink-0"
                           />
                         )}
-                        <div className="min-w-0">
-                          <div className="font-medium text-slate-700 truncate">{p.name}</div>
+                        <div className="min-w-0 flex-1">
+                          <div
+                            className="flex items-center gap-1.5"
+                            title={p.description || 'No description available'}
+                          >
+                            <span className="font-medium text-slate-700 truncate">{p.name}</span>
+                            <button
+                              type="button"
+                              onClick={(e) => { e.stopPropagation(); setDetailProduct(p); }}
+                              className="flex-shrink-0 text-slate-400 hover:text-blue-600 transition-colors"
+                              title="View product details"
+                              aria-label={`View details for ${p.name}`}
+                            >
+                              <Info size={14} />
+                            </button>
+                          </div>
                           <div className="text-xs text-slate-400 truncate">
                             {p.id}
                             {p.supplier ? ` · ${p.supplier}` : ''}
@@ -783,6 +801,22 @@ const SystemBuilderQualification: React.FC<Props> = ({ products, treeNodes }) =>
           </table>
         </div>
       </div>
+
+      {detailProduct && (
+        <ProductDetailsModal
+          product={detailProduct}
+          onClose={() => setDetailProduct(null)}
+          onUpdate={(updated) => {
+            onProductUpdate?.(updated);
+            setDetailProduct(updated);
+          }}
+          onEdit={(p) => {
+            setDetailProduct(null);
+            onProductEdit?.(p);
+          }}
+          treeNodes={treeNodes}
+        />
+      )}
     </div>
   );
 };

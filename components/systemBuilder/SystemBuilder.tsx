@@ -484,7 +484,7 @@ const SystemBuilder: React.FC<SystemBuilderProps> = ({ products, onProductUpdate
           </div>
         </div>
         <div className="flex-1 overflow-y-auto bg-slate-50">
-          <SystemBuilderQualification products={products} treeNodes={treeNodes} />
+          <SystemBuilderQualification products={products} treeNodes={treeNodes} onProductUpdate={onProductUpdate} />
         </div>
       </div>
     );
