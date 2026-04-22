@@ -13,7 +13,6 @@ import {
 } from 'lucide-react';
 import SystemDashboard from './SystemDashboard';
 import SystemBuilderQualification from '../SystemBuilderQualification';
-import SystemImport from './SystemImport';
 
 interface SystemBuilderProps {
   products: Product[];
@@ -29,7 +28,7 @@ interface SystemBuilderProps {
   onAddTreeNode: (node: TreeNode) => void;
 }
 
-type TabMode = 'builder' | 'analytics' | 'import' | 'qualification';
+type TabMode = 'builder' | 'analytics' | 'qualification';
 
 const SystemBuilder: React.FC<SystemBuilderProps> = ({ products, onProductUpdate, customFields, treeNodes, suppliers, usageAreas, units, colors, currentUser, onAddFieldDefinition, onAddTreeNode }) => {
   const [activeTab, setActiveTab] = useState<TabMode>('builder');
@@ -458,10 +457,9 @@ const SystemBuilder: React.FC<SystemBuilderProps> = ({ products, onProductUpdate
           <div>
             <h1 className="text-xl font-bold text-slate-800">System Builder</h1>
             <div className="flex items-center gap-1 mt-2">
+              <button onClick={() => setActiveTab('qualification')} className="px-3 py-1 text-sm rounded-lg hover:bg-slate-100 text-slate-500 inline-flex items-center gap-1.5"><ShieldCheck size={14} />Product Qualification</button>
               <button onClick={() => setActiveTab('builder')} className="px-3 py-1 text-sm rounded-lg hover:bg-slate-100 text-slate-500">Builder</button>
               <button className="px-3 py-1 text-sm rounded-lg bg-blue-100 text-blue-700 font-medium">Analytics</button>
-              <button onClick={() => setActiveTab('import')} className="px-3 py-1 text-sm rounded-lg hover:bg-slate-100 text-slate-500">Import</button>
-              <button onClick={() => setActiveTab('qualification')} className="px-3 py-1 text-sm rounded-lg hover:bg-slate-100 text-slate-500 inline-flex items-center gap-1.5"><ShieldCheck size={14} />Product Qualification</button>
             </div>
           </div>
         </div>
@@ -479,36 +477,14 @@ const SystemBuilder: React.FC<SystemBuilderProps> = ({ products, onProductUpdate
           <div>
             <h1 className="text-xl font-bold text-slate-800">System Builder</h1>
             <div className="flex items-center gap-1 mt-2">
+              <button className="px-3 py-1 text-sm rounded-lg bg-blue-100 text-blue-700 font-medium inline-flex items-center gap-1.5"><ShieldCheck size={14} />Product Qualification</button>
               <button onClick={() => setActiveTab('builder')} className="px-3 py-1 text-sm rounded-lg hover:bg-slate-100 text-slate-500">Builder</button>
               <button onClick={() => setActiveTab('analytics')} className="px-3 py-1 text-sm rounded-lg hover:bg-slate-100 text-slate-500">Analytics</button>
-              <button onClick={() => setActiveTab('import')} className="px-3 py-1 text-sm rounded-lg hover:bg-slate-100 text-slate-500">Import</button>
-              <button className="px-3 py-1 text-sm rounded-lg bg-blue-100 text-blue-700 font-medium inline-flex items-center gap-1.5"><ShieldCheck size={14} />Product Qualification</button>
             </div>
           </div>
         </div>
         <div className="flex-1 overflow-y-auto bg-slate-50">
           <SystemBuilderQualification products={products} treeNodes={treeNodes} />
-        </div>
-      </div>
-    );
-  }
-
-  if (activeTab === 'import') {
-    return (
-      <div className="h-full flex flex-col">
-        <div className="flex items-center justify-between px-6 py-4 border-b border-slate-200 bg-white">
-          <div>
-            <h1 className="text-xl font-bold text-slate-800">System Builder</h1>
-            <div className="flex items-center gap-1 mt-2">
-              <button onClick={() => setActiveTab('builder')} className="px-3 py-1 text-sm rounded-lg hover:bg-slate-100 text-slate-500">Builder</button>
-              <button onClick={() => setActiveTab('analytics')} className="px-3 py-1 text-sm rounded-lg hover:bg-slate-100 text-slate-500">Analytics</button>
-              <button className="px-3 py-1 text-sm rounded-lg bg-blue-100 text-blue-700 font-medium">Import</button>
-              <button onClick={() => setActiveTab('qualification')} className="px-3 py-1 text-sm rounded-lg hover:bg-slate-100 text-slate-500 inline-flex items-center gap-1.5"><ShieldCheck size={14} />Product Qualification</button>
-            </div>
-          </div>
-        </div>
-        <div className="flex-1 overflow-y-auto p-6">
-          <SystemImport products={products} onImportComplete={loadSystems} />
         </div>
       </div>
     );
@@ -520,10 +496,9 @@ const SystemBuilder: React.FC<SystemBuilderProps> = ({ products, onProductUpdate
         <div>
           <h1 className="text-xl font-bold text-slate-800">System Builder</h1>
           <div className="flex items-center gap-1 mt-2">
+            <button onClick={() => setActiveTab('qualification')} className="px-3 py-1 text-sm rounded-lg hover:bg-slate-100 text-slate-500 inline-flex items-center gap-1.5"><ShieldCheck size={14} />Product Qualification</button>
             <button className="px-3 py-1 text-sm rounded-lg bg-blue-100 text-blue-700 font-medium">Builder</button>
             <button onClick={() => setActiveTab('analytics')} className="px-3 py-1 text-sm rounded-lg hover:bg-slate-100 text-slate-500">Analytics</button>
-            <button onClick={() => setActiveTab('import')} className="px-3 py-1 text-sm rounded-lg hover:bg-slate-100 text-slate-500">Import</button>
-            <button onClick={() => setActiveTab('qualification')} className="px-3 py-1 text-sm rounded-lg hover:bg-slate-100 text-slate-500 inline-flex items-center gap-1.5"><ShieldCheck size={14} />Product Qualification</button>
           </div>
         </div>
         <div className="flex items-center gap-2">

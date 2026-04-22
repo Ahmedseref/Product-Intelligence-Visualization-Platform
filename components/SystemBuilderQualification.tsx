@@ -663,7 +663,7 @@ const SystemBuilderQualification: React.FC<Props> = ({ products, treeNodes }) =>
             </thead>
             <tbody>
               {filteredProducts.length === 0 && !loadingTags && (
-                <tr>
+                <tr key="__empty__">
                   <td colSpan={9} className="px-3 py-8 text-center text-slate-400 text-sm">
                     No products match the current filters.
                   </td>
