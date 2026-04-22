@@ -452,3 +452,42 @@ export type Customer = typeof customers.$inferSelect;
 export type InsertCustomer = typeof customers.$inferInsert;
 export type CustomerField = typeof customerFields.$inferSelect;
 export type InsertCustomerField = typeof customerFields.$inferInsert;
+
+// =============================================================================
+// Product Qualification System — Phase 1 (additive only)
+// =============================================================================
+// `product_qualification_tags` stores per-product qualification metadata that
+// the System Builder uses to filter products by substrate, humidity, duty
+// rating, and finish type. Each row is keyed by the existing products.product_id
+// (varchar) and is independent of the products table — no FK constraint is
+// added so this stays a purely additive change.
+export const productQualificationTags = pgTable("product_qualification_tags", {
+  id: serial("id").primaryKey(),
+  productId: varchar("product_id", { length: 100 }).notNull(),
+  // Array of substrate strings, e.g. ["Concrete", "Steel"]
+  substrateTypes: jsonb("substrate_types").$type<string[]>(),
+  humidityTolerance: varchar("humidity_tolerance", { length: 50 }),
+  dutyRating: varchar("duty_rating", { length: 50 }),
+  finishType: varchar("finish_type", { length: 50 }),
+  qualifiedAt: timestamp("qualified_at"),
+  qualifiedBy: varchar("qualified_by", { length: 100 }),
+  // When true, the product is exposed to the System Builder filter
+  isSystemReady: boolean("is_system_ready").default(false),
+});
+
+// `qualification_vocabularies` stores the closed-list values for each
+// qualification dimension (substrate / humidity / duty / finish). Seeded on
+// startup if empty — see seedQualificationVocabularies() in storage.ts.
+export const qualificationVocabularies = pgTable("qualification_vocabularies", {
+  id: serial("id").primaryKey(),
+  vocabType: varchar("vocab_type", { length: 50 }).notNull(),
+  value: varchar("value", { length: 100 }).notNull(),
+  label: varchar("label", { length: 100 }).notNull(),
+  sortOrder: integer("sort_order").default(0),
+  isActive: boolean("is_active").default(true),
+});
+
+export type ProductQualificationTag = typeof productQualificationTags.$inferSelect;
+export type InsertProductQualificationTag = typeof productQualificationTags.$inferInsert;
+export type QualificationVocabulary = typeof qualificationVocabularies.$inferSelect;
+export type InsertQualificationVocabulary = typeof qualificationVocabularies.$inferInsert;

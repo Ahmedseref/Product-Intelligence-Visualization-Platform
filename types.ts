@@ -337,3 +337,29 @@ export interface User {
   name: string;
   role: UserRole;
 }
+
+// =============================================================================
+// Product Qualification — Phase 1 (additive only)
+// =============================================================================
+// Mirrors shared/schema.ts. Used by the System Builder qualification filter
+// and any future qualification UI.
+export interface QualificationTag {
+  id: number;
+  productId: string;
+  substrateTypes: string[] | null;
+  humidityTolerance: string | null;
+  dutyRating: string | null;
+  finishType: string | null;
+  qualifiedAt: string | null;
+  qualifiedBy: string | null;
+  isSystemReady: boolean;
+}
+
+export interface QualificationVocabulary {
+  id: number;
+  vocabType: string; // 'substrate' | 'humidity' | 'duty' | 'finish'
+  value: string;
+  label: string;
+  sortOrder: number;
+  isActive: boolean;
+}

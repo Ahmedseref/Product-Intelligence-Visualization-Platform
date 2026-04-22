@@ -36,6 +36,7 @@ I prefer detailed explanations and thorough code comments. I value iterative dev
     - **Proforma Invoice System**: A comprehensive proforma invoice generation system with customer management, product selection, inline editing, financial engine for custom calculations, PDF/Excel export, and professional layout.
     - **Document Memory / File Manager**: Centralized document management for external links (Google Drive, OneDrive, PDFs, etc.) with document typing, relation system to products/suppliers/systems, CRUD, search, and filtering.
     - **Technical Intelligence Dashboard**: A multi-supplier intelligence and comparison layer with 7 tabs providing various KPIs, product/system intelligence, supplier matrix heatmaps, technical coverage radar charts, and competitive benchmarking, all with global filtering and export capabilities.
+    - **Product Qualification System (Phase 1)**: Backend foundation for tagging products with substrate types, humidity tolerance, duty rating, and finish type. Backed by `product_qualification_tags` (per-product metadata) and `qualification_vocabularies` (closed-list values, seeded on startup). Exposed via `/api/qualification-vocabularies` and `/api/qualification-tags` (GET list/by-product, POST upsert, PATCH update). Phase 1 is additive only — no UI yet.
 
 ### System Design Choices
 - Monorepo structure with `client/` and `server/` directories.

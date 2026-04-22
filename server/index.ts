@@ -6,6 +6,7 @@ import fs from "fs";
 import { registerRoutes } from "./routes";
 import { registerObjectStorageRoutes } from "./replit_integrations/object_storage";
 import { startScheduledBackups, initializeBackupService } from "./backupService";
+import { seedQualificationVocabularies } from "./storage";
 import { registerAuthRoutes } from "./authRoutes";
 import { bootstrapAdminUser } from "./authService";
 import { registerSystemRoutes } from "./systemRoutes";
@@ -103,6 +104,8 @@ app.listen(PORT, "0.0.0.0", () => {
       await bootstrapAdminUser();
       await initializeBackupService();
       startScheduledBackups();
+      // Seed qualification vocabularies (no-op if already seeded)
+      await seedQualificationVocabularies();
     } catch (error) {
       console.error("[Startup] Background initialization error:", error);
     }

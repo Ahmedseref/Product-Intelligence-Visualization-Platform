@@ -1,8 +1,8 @@
 import type { Express } from "express";
 import { storage } from "./storage";
 import { db } from "./db";
-import { stockCodeHistory, products as productsTable, suppliers as suppliersTable, documents as documentsTable } from "@shared/schema";
-import { eq, and } from "drizzle-orm";
+import { stockCodeHistory, products as productsTable, suppliers as suppliersTable, documents as documentsTable, productQualificationTags, qualificationVocabularies } from "@shared/schema";
+import { eq, and, asc } from "drizzle-orm";
 import * as backupService from "./backupService";
 import * as stockCodeService from "./stockCodeService";
 import { authMiddleware, requirePasswordChange } from "./authRoutes";
@@ -1286,5 +1286,149 @@ export function registerRoutes(app: Express): void {
   app.use("/api/refresh-state", authMiddleware);
   app.get("/api/refresh-state", (_req, res) => {
     res.json({ triggerId: refreshState.triggerId, lastUpdated: refreshState.lastUpdated });
+  });
+
+  // ===========================================================================
+  // Product Qualification — Phase 1 (additive only)
+  // ===========================================================================
+  // All five endpoints below are new and do not modify or replace any existing
+  // routes. They power the System Builder's product-qualification filter.
+  app.use("/api/qualification-vocabularies", authMiddleware, requirePasswordChange);
+  app.use("/api/qualification-tags", authMiddleware, requirePasswordChange);
+
+  // GET /api/qualification-vocabularies
+  // Returns all active vocabulary items grouped by vocab_type, e.g.
+  // { substrate: [...], humidity: [...], duty: [...], finish: [...] }
+  app.get("/api/qualification-vocabularies", async (_req, res) => {
+    try {
+      const rows = await db
+        .select()
+        .from(qualificationVocabularies)
+        .where(eq(qualificationVocabularies.isActive, true))
+        .orderBy(asc(qualificationVocabularies.vocabType), asc(qualificationVocabularies.sortOrder));
+
+      const grouped: Record<string, typeof rows> = {};
+      for (const row of rows) {
+        if (!grouped[row.vocabType]) grouped[row.vocabType] = [];
+        grouped[row.vocabType].push(row);
+      }
+      res.json(grouped);
+    } catch (error) {
+      console.error("Error fetching qualification vocabularies:", error);
+      res.status(500).json({ error: "Failed to fetch qualification vocabularies" });
+    }
+  });
+
+  // GET /api/qualification-tags — list all rows where is_system_ready = true
+  // Note: this must be registered BEFORE /:productId so the literal path wins.
+  app.get("/api/qualification-tags", async (_req, res) => {
+    try {
+      const rows = await db
+        .select()
+        .from(productQualificationTags)
+        .where(eq(productQualificationTags.isSystemReady, true));
+      res.json(rows);
+    } catch (error) {
+      console.error("Error fetching qualification tags:", error);
+      res.status(500).json({ error: "Failed to fetch qualification tags" });
+    }
+  });
+
+  // GET /api/qualification-tags/:productId — single product's tag, or null
+  app.get("/api/qualification-tags/:productId", async (req, res) => {
+    try {
+      const rows = await db
+        .select()
+        .from(productQualificationTags)
+        .where(eq(productQualificationTags.productId, req.params.productId))
+        .limit(1);
+      res.json(rows[0] || null);
+    } catch (error) {
+      console.error("Error fetching qualification tag:", error);
+      res.status(500).json({ error: "Failed to fetch qualification tag" });
+    }
+  });
+
+  // POST /api/qualification-tags — create or upsert (one row per product_id)
+  app.post("/api/qualification-tags", async (req, res) => {
+    try {
+      const {
+        productId, substrateTypes, humidityTolerance, dutyRating,
+        finishType, qualifiedBy, isSystemReady,
+      } = req.body || {};
+      if (!productId) {
+        return res.status(400).json({ error: "productId is required" });
+      }
+
+      const existing = await db
+        .select()
+        .from(productQualificationTags)
+        .where(eq(productQualificationTags.productId, productId))
+        .limit(1);
+
+      const payload = {
+        productId,
+        substrateTypes: substrateTypes ?? null,
+        humidityTolerance: humidityTolerance ?? null,
+        dutyRating: dutyRating ?? null,
+        finishType: finishType ?? null,
+        qualifiedAt: new Date(),
+        qualifiedBy: qualifiedBy ?? null,
+        isSystemReady: isSystemReady ?? false,
+      };
+
+      let result;
+      if (existing.length > 0) {
+        const updated = await db
+          .update(productQualificationTags)
+          .set(payload)
+          .where(eq(productQualificationTags.productId, productId))
+          .returning();
+        result = updated[0];
+      } else {
+        const inserted = await db
+          .insert(productQualificationTags)
+          .values(payload)
+          .returning();
+        result = inserted[0];
+      }
+      res.json(result);
+    } catch (error) {
+      console.error("Error upserting qualification tag:", error);
+      res.status(500).json({ error: "Failed to save qualification tag" });
+    }
+  });
+
+  // PATCH /api/qualification-tags/:productId — partial update of an existing row
+  app.patch("/api/qualification-tags/:productId", async (req, res) => {
+    try {
+      const allowed: Array<keyof typeof productQualificationTags.$inferInsert> = [
+        'substrateTypes', 'humidityTolerance', 'dutyRating',
+        'finishType', 'qualifiedBy', 'isSystemReady',
+      ];
+      const patch: Record<string, unknown> = {};
+      for (const key of allowed) {
+        if (key in (req.body || {})) patch[key] = req.body[key];
+      }
+      if (Object.keys(patch).length === 0) {
+        return res.status(400).json({ error: "No valid fields to update" });
+      }
+      // Refresh the qualification timestamp on every patch
+      patch.qualifiedAt = new Date();
+
+      const updated = await db
+        .update(productQualificationTags)
+        .set(patch)
+        .where(eq(productQualificationTags.productId, req.params.productId))
+        .returning();
+
+      if (updated.length === 0) {
+        return res.status(404).json({ error: "Qualification tag not found" });
+      }
+      res.json(updated[0]);
+    } catch (error) {
+      console.error("Error updating qualification tag:", error);
+      res.status(500).json({ error: "Failed to update qualification tag" });
+    }
   });
 }

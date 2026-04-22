@@ -3,6 +3,7 @@ import {
   suppliers, supplierProducts, attachments, appSettings,
   colors, documents, proformaSettings, proformas, proformaItems, proformaFinancials,
   customers, customerFields,
+  qualificationVocabularies,
   type TreeNode, type InsertTreeNode,
   type Product, type InsertProduct,
   type CustomFieldDefinition, type InsertCustomFieldDefinition,
@@ -529,3 +530,45 @@ export class DatabaseStorage implements IStorage {
 }
 
 export const storage = new DatabaseStorage();
+
+// =============================================================================
+// Product Qualification — vocabulary seeding (Phase 1, additive)
+// =============================================================================
+// Populates the closed-list values for the four qualification dimensions if
+// the table is empty. Safe to call on every startup — no-ops once seeded.
+export async function seedQualificationVocabularies(): Promise<void> {
+  const existing = await db.select().from(qualificationVocabularies).limit(1);
+  if (existing.length > 0) return;
+
+  const seed: Array<{ vocabType: string; values: string[] }> = [
+    {
+      vocabType: 'substrate',
+      values: ['Concrete', 'Steel', 'Metal', 'Wood', 'Screed', 'Asphalt', 'Ceramic', 'Existing Coating'],
+    },
+    {
+      vocabType: 'humidity',
+      values: ['Dry (0–4%)', 'Slightly Damp (4–6%)', 'Damp / High Moisture (6–8%)', 'Wet (>8%)'],
+    },
+    {
+      vocabType: 'duty',
+      values: ['Light', 'Medium', 'Heavy', 'Industrial', 'Antistatic', 'Antibacterial'],
+    },
+    {
+      vocabType: 'finish',
+      values: ['Smooth', 'Textured', 'Anti-Slip', 'Matt', 'Gloss', 'Satin'],
+    },
+  ];
+
+  const rows = seed.flatMap(({ vocabType, values }) =>
+    values.map((v, idx) => ({
+      vocabType,
+      value: v,
+      label: v,
+      sortOrder: idx,
+      isActive: true,
+    }))
+  );
+
+  await db.insert(qualificationVocabularies).values(rows);
+  console.log(`[Seed] Inserted ${rows.length} qualification vocabulary entries`);
+}

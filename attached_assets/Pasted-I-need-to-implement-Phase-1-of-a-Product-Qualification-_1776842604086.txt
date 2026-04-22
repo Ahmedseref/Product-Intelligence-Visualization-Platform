@@ -1,0 +1,61 @@
+I need to implement Phase 1 of a Product Qualification system for the System Builder module. This is a pure additive change — no existing tables, components, or API routes should be modified or deleted.
+
+## Context
+This app is a Product Intelligence Platform built with React/TypeScript (Vite), Express.js, Drizzle ORM, and PostgreSQL. The System Builder module already exists. Read the existing schema in shared/schema.ts and the system builder related routes in server/routes.ts before making any changes.
+
+## What to build
+
+### 1. Database schema additions (shared/schema.ts)
+Add a new table called `product_qualification_tags` with these columns:
+- id: serial primary key
+- product_id: varchar(100) — references the existing products table product_id field
+- substrate_types: jsonb — array of strings, nullable (e.g. ["Concrete", "Steel"])
+- humidity_tolerance: varchar(50) — nullable
+- duty_rating: varchar(50) — nullable
+- finish_type: varchar(50) — nullable
+- qualified_at: timestamp — nullable
+- qualified_by: varchar(100) — nullable
+- is_system_ready: boolean — default false
+
+Add a new table called `qualification_vocabularies` with these columns:
+- id: serial primary key
+- vocab_type: varchar(50) — e.g. "substrate", "humidity", "duty", "finish"
+- value: varchar(100) — the option value
+- label: varchar(100) — display label
+- sort_order: integer — default 0
+- is_active: boolean — default true
+
+### 2. Seed the vocabulary tables (server/storage.ts or a new seed function)
+After the table is created, insert these closed-list values if the table is empty:
+
+Substrate types (vocab_type = 'substrate'):
+Concrete, Steel,Metal,  Wood, Screed, Asphalt, Ceramic, Existing Coating
+
+Humidity tolerance (vocab_type = 'humidity'): Dry (0–4%), Slightly Damp (4–6%), Damp / High Moisture (6–8%), Wet (>8%)
+Duty rating (vocab_type = 'duty'): Light, Medium, Heavy, Industrial, Antistatic, Antibacterial
+
+Finish type (vocab_type = 'finish'): Smooth, Textured, Anti-Slip, Matt, Gloss, Satin
+
+### 3. API endpoints (server/routes.ts)
+Add these new routes — do not modify any existing routes:
+
+GET /api/qualification-vocabularies — returns all active vocabulary items grouped by vocab_type
+GET /api/qualification-tags/:productId — returns the qualification tag record for a product, or null
+POST /api/qualification-tags — creates or upserts a qualification tag record for a product
+PATCH /api/qualification-tags/:productId — updates an existing qualification tag record
+GET /api/qualification-tags — returns all qualification tag records with is_system_ready = true (for use by system builder filter)
+
+### 4. Run the migration
+After schema changes, run: npm run db:push
+
+### 5. TypeScript types (types.ts)
+Add TypeScript interfaces for QualificationTag and QualificationVocabulary matching the schema above.
+
+## Rules
+- Do not modify any existing table schemas
+- Do not modify any existing API routes
+- Do not modify any existing React components
+- Do not modify App.tsx or Sidebar.tsx
+- All new code must have TypeScript types
+- Add clear comments explaining each new addition
+- Test that existing endpoints still return 200 after changes
