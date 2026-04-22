@@ -178,6 +178,17 @@ export const systems = pgTable("systems", {
   status: varchar("status", { length: 20 }).default("draft"),
   version: integer("version").default(1),
   isActive: boolean("is_active").default(true),
+  // System-level qualification parameters. When any of these are set the
+  // layer product search is filtered to matching qualified products.
+  // All three are nullable so legacy systems continue to behave as before.
+  systemSubstrate: varchar("system_substrate", { length: 50 }),
+  systemHumidity: varchar("system_humidity", { length: 50 }),
+  systemDuty: varchar("system_duty", { length: 50 }),
+  // Per-sector overrides keyed by sector name, e.g.
+  //   { "Flooring": { "substrateOverride": "Concrete" } }
+  // Nullable / empty by default. Used to override systemSubstrate when
+  // searching products inside a particular sector's layers.
+  sectorOverrides: jsonb("sector_overrides").$type<Record<string, { substrateOverride?: string | null }>>().default({}),
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow(),
 });
@@ -189,6 +200,14 @@ export const systemLayers = pgTable("system_layers", {
   layerName: varchar("layer_name", { length: 255 }).notNull(),
   orderSequence: integer("order_sequence").notNull().default(0),
   notes: text("notes"),
+  // The product_id of the layer's default product, if any. Mirrors the
+  // is_default flag on system_product_options for direct querying without
+  // joining. Nullable so layers without a chosen default remain unchanged.
+  defaultProductId: varchar("default_product_id", { length: 100 }),
+  // Optional per-layer substrate override — wins over the sector override
+  // and the system-level substrate when filtering the product search for
+  // this specific layer. Nullable for backward compatibility.
+  layerSubstrateOverride: varchar("layer_substrate_override", { length: 50 }),
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow(),
 });

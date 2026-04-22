@@ -168,6 +168,13 @@ export interface SystemData {
   status: string;
   version: number;
   isActive: boolean;
+  // Optional system-level qualification parameters used to filter the
+  // layer product search. All three are nullable for backward compatibility.
+  systemSubstrate?: string | null;
+  systemHumidity?: string | null;
+  systemDuty?: string | null;
+  // Optional per-sector overrides keyed by sector name.
+  sectorOverrides?: Record<string, { substrateOverride?: string | null }> | null;
   createdAt: string;
   updatedAt: string;
 }
@@ -179,6 +186,11 @@ export interface SystemLayer {
   layerName: string;
   orderSequence: number;
   notes?: string;
+  // The product_id of the layer's pinned default product (if any).
+  defaultProductId?: string | null;
+  // Optional per-layer substrate override (wins over sector and system
+  // substrate when filtering product search).
+  layerSubstrateOverride?: string | null;
   createdAt: string;
   updatedAt: string;
 }

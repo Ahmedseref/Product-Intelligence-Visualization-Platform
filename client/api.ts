@@ -915,7 +915,22 @@ export const systemsApi = {
     if (!response.ok) throw new Error('Failed to create system');
     return response.json();
   },
-  updateSystem: async (systemId: string, data: Partial<{ name: string; description?: string; typicalUses?: string; sectorMapping?: string[]; status?: string }>) => {
+  updateSystem: async (
+    systemId: string,
+    data: Partial<{
+      name: string;
+      description?: string;
+      typicalUses?: string;
+      sectorMapping?: string[];
+      status?: string;
+      // Phase 3: system-level parameter header
+      systemSubstrate?: string | null;
+      systemHumidity?: string | null;
+      systemDuty?: string | null;
+      // Phase 3: per-sector substrate override
+      sectorOverrides?: Record<string, { substrateOverride?: string | null }>;
+    }>
+  ) => {
     const response = await fetch(`${API_BASE}/systems/${systemId}`, {
       method: 'PUT', headers: { ...getAuthHeaders(), 'Content-Type': 'application/json' },
       body: JSON.stringify(data),
@@ -944,7 +959,18 @@ export const systemsApi = {
     if (!response.ok) throw new Error('Failed to create layer');
     return response.json();
   },
-  updateLayer: async (layerId: string, data: Partial<{ layerName: string; notes?: string; orderSequence?: number }>) => {
+  updateLayer: async (
+    layerId: string,
+    data: Partial<{
+      layerName: string;
+      notes?: string;
+      orderSequence?: number;
+      // Phase 3: pinned default product for this layer
+      defaultProductId?: string | null;
+      // Phase 3: optional per-layer substrate override
+      layerSubstrateOverride?: string | null;
+    }>
+  ) => {
     const response = await fetch(`${API_BASE}/system-layers/${layerId}`, {
       method: 'PUT', headers: { ...getAuthHeaders(), 'Content-Type': 'application/json' },
       body: JSON.stringify(data),

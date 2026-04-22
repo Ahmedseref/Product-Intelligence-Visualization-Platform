@@ -1,0 +1,73 @@
+I need to upgrade the existing System Builder with parameter-aware filtering, a system-level parameter header, sector-as-substrate logic, and a default product pin. These changes enhance the existing builder — they must be fully backward-compatible with all existing systems.
+
+## Context
+This app uses React/TypeScript, Tailwind CSS, Express.js, Drizzle ORM, PostgreSQL. Phases 1 and 2 are complete:
+- product_qualification_tags table exists with substrate_types, humidity_tolerance, duty_rating, finish_type, is_system_ready columns
+- GET /api/qualification-tags returns all system-ready products with their tags
+- qualification_vocabularies table exists with closed lists
+- The Product Qualification tab exists inside System Builder
+
+Before writing any code, read the full existing System Builder component and the systems-related routes in server/routes.ts carefully.
+
+## What to build
+
+### Change 1 — System parameter header
+In the existing system detail view (where layers are shown), add a collapsible parameter header section directly above the layer list. It appears when a system is open/selected.
+
+The header contains 3 dropdowns:
+- Substrate: single select from vocabulary (vocab_type = 'substrate') — nullable
+- Humidity tolerance: single select from vocabulary (vocab_type = 'humidity') — nullable
+- Duty rating: single select from vocabulary (vocab_type = 'duty') — nullable
+
+Store these 3 values on the system record. Add columns to the existing systems table:
+- system_substrate: varchar(50) nullable
+- system_humidity: varchar(50) nullable  
+- system_duty: varchar(50) nullable
+
+Add PATCH /api/systems/:id endpoint update to accept and save these 3 new fields (the endpoint likely already exists — just extend it to handle these new fields).
+
+Backward compatibility rule: existing systems where all 3 are null must open and function exactly as today. The parameter header shows a "Not configured" state with a prompt to set parameters — it never blocks access to layers.
+
+### Change 2 — Smart slot filtering in layer product search
+The layer product search (the search bar that appears when adding products to a layer) currently searches all products. Upgrade it as follows:
+
+If the parent system has system_substrate, system_humidity, or system_duty set:
+- Filter product search results to only show products where:
+  - is_system_ready = true in qualification_tags
+  - substrate_types includes the system's system_substrate (if set)
+  - humidity_tolerance matches system_humidity (if set)
+  - duty_rating matches system_duty (if set)
+- Show a small filter indicator badge near the search bar: "Filtered by system parameters"
+- Add an "Show all products" toggle that disables the filter temporarily for that search session
+
+If the parent system has NO parameters set (all null):
+- Search behaves exactly as today — no filtering, no badge
+- This is the backward-compatible path
+
+The filtering happens client-side using the qualification tags data already loaded from GET /api/qualification-tags.
+
+### Change 3 — Sector substrate override
+The existing "Add Sector" feature already exists. Extend each sector to optionally have its own substrate override:
+
+Add a small "Substrate" dropdown to each sector header (collapsed by default, expand with a settings icon). The dropdown uses the same vocabulary. When set, this sector's substrate overrides the system-level substrate for product search filtering within that sector's layers only.
+
+Store the sector substrate as a field on the sector/layer group record. Check the existing schema for where sectors are stored and add a nullable substrate_override column there.
+
+### Change 4 — Default product pin per layer slot
+In each layer (Primer, Base Coat, etc.), products are listed. Add a pin/star icon next to each product in the list. Clicking it marks that product as the default for that layer slot.
+
+Rules:
+- Only one product per layer can be default at a time — setting a new default unpins the previous one
+- The System Summary panel (currently showing "0 Defaults") should now count and display the number of layers that have a default set
+- Store the default product selection on the layer record — add a default_product_id nullable varchar column to the layers table
+- Add a PATCH endpoint or extend the existing layer update endpoint to accept default_product_id
+
+## Rules
+- Every existing system must open and work without any changes needed by the user
+- Do not remove or rename any existing API endpoints
+- Do not change the tab structure — Qualification tab from Phase 2 must still work
+- Do not modify the Qualification tab component
+- Run npm run db:push after any schema changes
+- All new UI must use Tailwind CSS and Lucide React matching existing System Builder style
+- Add loading states and error handling for all new API calls
+- Write clear comments on every new or modified function explaining what changed and why

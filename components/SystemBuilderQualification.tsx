@@ -341,7 +341,7 @@ const SystemBuilderQualification: React.FC<Props> = ({ products, treeNodes, onPr
 
   // Build a quick lookup of nodeId -> path string for display
   const nodePath = useMemo(() => {
-    const byId = new Map(treeNodes.map(n => [n.id, n]));
+    const byId = new Map<string, TreeNode>(treeNodes.map(n => [n.id, n] as const));
     const cache = new Map<string, string>();
     const compute = (id: string | undefined): string => {
       if (!id) return '—';
@@ -349,8 +349,8 @@ const SystemBuilderQualification: React.FC<Props> = ({ products, treeNodes, onPr
       const parts: string[] = [];
       let cur = byId.get(id);
       const seen = new Set<string>();
-      while (cur && !seen.has(cur.nodeId)) {
-        seen.add(cur.nodeId);
+      while (cur && !seen.has(cur.id)) {
+        seen.add(cur.id);
         parts.unshift(cur.name);
         cur = (cur as any).parentId ? byId.get((cur as any).parentId) : undefined;
       }
@@ -492,7 +492,7 @@ const SystemBuilderQualification: React.FC<Props> = ({ products, treeNodes, onPr
   const handleBulkSave = async () => {
     if (selected.size === 0 || bulkSaving) return;
     setBulkSaving(true);
-    const ids = Array.from(selected);
+    const ids: string[] = Array.from(selected);
     // Save sequentially in small batches to avoid overwhelming the API.
     for (const id of ids) {
       // eslint-disable-next-line no-await-in-loop

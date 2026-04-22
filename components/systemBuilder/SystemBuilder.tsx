@@ -62,8 +62,99 @@ const SystemBuilder: React.FC<SystemBuilderProps> = ({ products, onProductUpdate
   const [editSystemForm, setEditSystemForm] = useState({ name: '', description: '', typicalUses: '', sectorMapping: [] as string[] });
   const [editSectorInput, setEditSectorInput] = useState('');
 
+  // ---------- Phase 3: parameter-aware filtering state ----------
+  // Vocab options for the substrate / humidity / duty dropdowns. Loaded once.
+  const [vocab, setVocab] = useState<{ substrate: { value: string; label: string }[]; humidity: { value: string; label: string }[]; duty: { value: string; label: string }[] }>({ substrate: [], humidity: [], duty: [] });
+  // Map of productId -> qualification tag for system-ready products. Used to
+  // filter the layer product search by substrate / humidity / duty.
+  const [tagsByProduct, setTagsByProduct] = useState<Record<string, { substrateTypes?: string[] | null; humidityTolerance?: string | null; dutyRating?: string | null; isSystemReady?: boolean | null }>>({});
+  // Whether the parameter header is expanded (true by default for visibility).
+  const [paramHeaderOpen, setParamHeaderOpen] = useState(true);
+  // Tracks per-system-session in-flight save state for the parameter header.
+  const [savingParams, setSavingParams] = useState(false);
+  // Per-product-search session toggle to bypass the smart filter and show all products.
+  const [showAllProductsInSearch, setShowAllProductsInSearch] = useState(false);
+  // Tracks which sector chip's substrate override editor is open (sector name or null).
+  const [editingSectorOverride, setEditingSectorOverride] = useState<string | null>(null);
+  // When more than one sector has a substrate override, the user can pick one
+  // as the "active" sector context for the next product search.
+  const [activeSectorContext, setActiveSectorContext] = useState<string | null>(null);
+
   useEscapeKey(showHistory ? () => setShowHistory(false) : null);
   useEscapeKey(detailsProduct ? () => setDetailsProduct(null) : null);
+
+  // Load qualification vocabularies (substrate / humidity / duty) once on mount
+  // so the parameter header dropdowns can render their options. Failures are
+  // logged but never block the builder from working.
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const token = localStorage.getItem('auth_token');
+        const headers: HeadersInit = token ? { Authorization: `Bearer ${token}` } : {};
+        const res = await fetch('/api/qualification-vocabularies', { headers });
+        if (!res.ok) return;
+        // Backend returns a grouped object keyed by vocabType, e.g.
+        //   { substrate: [{ value, label, ... }], humidity: [...], duty: [...], finish: [...] }
+        // Each entry already has value + label fields we need.
+        const grouped: Record<string, Array<{ value: string; label: string; isActive?: boolean | null }>> = await res.json();
+        if (cancelled) return;
+        const pickActive = (arr?: Array<{ value: string; label: string; isActive?: boolean | null }>) =>
+          (arr || []).filter(o => o.isActive !== false).map(o => ({ value: o.value, label: o.label }));
+        setVocab({
+          substrate: pickActive(grouped.substrate),
+          humidity: pickActive(grouped.humidity),
+          duty: pickActive(grouped.duty),
+        });
+      } catch (err) {
+        console.error('Failed to load qualification vocabularies:', err);
+      }
+    })();
+    return () => { cancelled = true; };
+  }, []);
+
+  // Load qualification tags for all system-ready products so the smart filter
+  // can run client-side. Re-fetched whenever the selected system changes (so a
+  // newly-tagged product becomes available without a hard refresh).
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const token = localStorage.getItem('auth_token');
+        const headers: HeadersInit = token ? { Authorization: `Bearer ${token}` } : {};
+        const res = await fetch('/api/qualification-tags', { headers });
+        if (!res.ok) return;
+        const rows: Array<{ productId: string; substrateTypes?: string[] | null; humidityTolerance?: string | null; dutyRating?: string | null; isSystemReady?: boolean | null }> = await res.json();
+        if (cancelled) return;
+        const map: Record<string, typeof rows[number]> = {};
+        for (const r of rows) map[r.productId] = r;
+        setTagsByProduct(map);
+      } catch (err) {
+        console.error('Failed to load qualification tags:', err);
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [selectedSystemId]);
+
+  // Compute the effective substrate to filter by, given precedence:
+  //   layerSubstrateOverride > activeSectorContext override > systemSubstrate
+  // Returns null when no substrate constraint should be applied.
+  const getEffectiveSubstrate = useCallback((layerOverride?: string | null): string | null => {
+    if (layerOverride) return layerOverride;
+    const overrides = (fullSystem?.sectorOverrides || {}) as Record<string, { substrateOverride?: string | null }>;
+    if (activeSectorContext && overrides[activeSectorContext]?.substrateOverride) {
+      return overrides[activeSectorContext]!.substrateOverride!;
+    }
+    // If exactly one sector has an override defined and no explicit context
+    // was chosen, use it automatically — it's almost certainly what the user
+    // wants when there's only one possibility.
+    const overrideSectors = Object.entries(overrides).filter(([_, v]) => v && v.substrateOverride);
+    if (!activeSectorContext && overrideSectors.length === 1) {
+      const only = overrideSectors[0][1] as { substrateOverride?: string | null };
+      if (only.substrateOverride) return only.substrateOverride;
+    }
+    return fullSystem?.systemSubstrate || null;
+  }, [fullSystem, activeSectorContext]);
 
   const loadSystems = useCallback(async () => {
     try {
@@ -314,12 +405,61 @@ const SystemBuilder: React.FC<SystemBuilderProps> = ({ products, onProductUpdate
     }
   };
 
+  // Toggle a product's default flag for its layer. Enforces the rule that
+  // only ONE product per layer may be marked default at a time:
+  //   - If we're pinning (current === false), unset every other option in
+  //     the same layer first, then set this one true, then write the chosen
+  //     productId back to the layer's defaultProductId column for direct
+  //     querying without joining through system_product_options.
+  //   - If we're unpinning (current === true), just clear this option and
+  //     null out the layer's defaultProductId.
   const handleToggleDefault = async (optionId: string, current: boolean) => {
     try {
-      await systemsApi.updateProductOption(optionId, { isDefault: !current });
+      const layer = fullSystem?.layers.find(l => l.productOptions.some(o => o.optionId === optionId));
+      const target = layer?.productOptions.find(o => o.optionId === optionId);
+      if (!current && layer) {
+        // Unset every other already-default option in this layer in parallel.
+        const others = layer.productOptions.filter(o => o.optionId !== optionId && o.isDefault);
+        await Promise.all(others.map(o => systemsApi.updateProductOption(o.optionId, { isDefault: false })));
+        await systemsApi.updateProductOption(optionId, { isDefault: true });
+        if (target) await systemsApi.updateLayer(layer.layerId, { defaultProductId: target.productId });
+      } else {
+        await systemsApi.updateProductOption(optionId, { isDefault: false });
+        if (layer) await systemsApi.updateLayer(layer.layerId, { defaultProductId: null });
+      }
       if (selectedSystemId) await loadFullSystem(selectedSystemId);
     } catch (err) {
       console.error('Failed to toggle default:', err);
+    }
+  };
+
+  // Save the system-level parameter header values (substrate / humidity /
+  // duty). All three are nullable — pass null to clear an individual field.
+  const handleSaveSystemParams = async (patch: { systemSubstrate?: string | null; systemHumidity?: string | null; systemDuty?: string | null }) => {
+    if (!selectedSystemId) return;
+    setSavingParams(true);
+    try {
+      await systemsApi.updateSystem(selectedSystemId, patch);
+      await loadFullSystem(selectedSystemId);
+    } catch (err) {
+      console.error('Failed to save system parameters:', err);
+    } finally {
+      setSavingParams(false);
+    }
+  };
+
+  // Save / clear an individual sector's substrate override on the system's
+  // sectorOverrides JSONB map. Passing null removes the entry entirely.
+  const handleSaveSectorOverride = async (sectorName: string, substrate: string | null) => {
+    if (!selectedSystemId || !fullSystem) return;
+    const next = { ...(fullSystem.sectorOverrides || {}) } as Record<string, { substrateOverride?: string | null }>;
+    if (substrate) next[sectorName] = { ...(next[sectorName] || {}), substrateOverride: substrate };
+    else delete next[sectorName];
+    try {
+      await systemsApi.updateSystem(selectedSystemId, { sectorOverrides: next });
+      await loadFullSystem(selectedSystemId);
+    } catch (err) {
+      console.error('Failed to save sector override:', err);
     }
   };
 
@@ -335,7 +475,16 @@ const SystemBuilder: React.FC<SystemBuilderProps> = ({ products, onProductUpdate
 
   const handleRemoveProduct = async (optionId: string) => {
     try {
+      // If we're removing the layer's currently-pinned default, also clear
+      // system_layers.defaultProductId so the column doesn't point at a
+      // dangling product. Without this, layer.defaultProductId becomes stale.
+      const layer = fullSystem?.layers.find(l => l.productOptions.some(o => o.optionId === optionId));
+      const target = layer?.productOptions.find(o => o.optionId === optionId);
+      const wasDefault = !!(target && target.isDefault);
       await systemsApi.removeProductOption(optionId);
+      if (wasDefault && layer) {
+        await systemsApi.updateLayer(layer.layerId, { defaultProductId: null });
+      }
       if (selectedSystemId) await loadFullSystem(selectedSystemId);
     } catch (err) {
       console.error('Failed to remove product:', err);
@@ -429,18 +578,60 @@ const SystemBuilder: React.FC<SystemBuilderProps> = ({ products, onProductUpdate
     s.name.toLowerCase().includes(searchTerm.toLowerCase())
   );
 
-  const filteredProducts = productSearch ? (() => {
-    const parsed = parseSearchQuery(productSearch);
-    return products.filter((p) => {
-      const searchableText = [
-        p.name || '',
-        p.stockCode || '',
-        p.supplier || '',
-        p.description || ''
-      ].join(' ');
-      return matchesAdvancedSearch(searchableText, parsed);
+  // ---------- Phase 3: smart slot filtering ----------
+  // Determine whether the parent system has any qualification parameters set
+  // (system-level OR sector-level OR layer-level). If none, the product
+  // search is the legacy unfiltered behavior — full backward compatibility.
+  const systemHasAnyParams = !!(
+    fullSystem && (
+      fullSystem.systemSubstrate ||
+      fullSystem.systemHumidity ||
+      fullSystem.systemDuty ||
+      Object.values((fullSystem.sectorOverrides || {}) as Record<string, { substrateOverride?: string | null }>).some(o => o?.substrateOverride) ||
+      // Layer-level overrides also count — even if no system/sector param exists,
+      // a layer with its own substrate override is enough to activate filtering
+      // for that specific layer's product search.
+      fullSystem.layers.some(l => l.layerSubstrateOverride)
+    )
+  );
+
+  // For the currently-open layer search (showAddProduct holds its layerId),
+  // compute the effective filter constraints we'll apply against tagsByProduct.
+  // Returns null when no smart filter applies for any reason.
+  const activeLayer = showAddProduct ? fullSystem?.layers.find(l => l.layerId === showAddProduct) : null;
+  const effectiveSubstrate = activeLayer ? getEffectiveSubstrate(activeLayer.layerSubstrateOverride) : null;
+  const smartFilterActive = !showAllProductsInSearch && systemHasAnyParams && !!showAddProduct;
+  const filterSummary = smartFilterActive ? [
+    effectiveSubstrate ? `substrate: ${effectiveSubstrate}` : null,
+    fullSystem?.systemHumidity ? `humidity: ${fullSystem.systemHumidity}` : null,
+    fullSystem?.systemDuty ? `duty: ${fullSystem.systemDuty}` : null,
+  ].filter(Boolean).join(' · ') : '';
+
+  const filteredProducts = (() => {
+    // Step 1: text search filter (existing behavior)
+    let pool = products;
+    if (productSearch) {
+      const parsed = parseSearchQuery(productSearch);
+      pool = pool.filter((p) => {
+        const searchableText = [p.name || '', p.stockCode || '', p.supplier || '', p.description || ''].join(' ');
+        return matchesAdvancedSearch(searchableText, parsed);
+      });
+    }
+    // Step 2: smart qualification filter (only when an open layer exists,
+    // user hasn't opted out, and the system actually defines parameters).
+    if (!smartFilterActive) return pool;
+    return pool.filter((p) => {
+      const tag = tagsByProduct[p.id];
+      if (!tag || !tag.isSystemReady) return false;
+      if (effectiveSubstrate) {
+        const subs = tag.substrateTypes || [];
+        if (!subs.includes(effectiveSubstrate)) return false;
+      }
+      if (fullSystem?.systemHumidity && tag.humidityTolerance !== fullSystem.systemHumidity) return false;
+      if (fullSystem?.systemDuty && tag.dutyRating !== fullSystem.systemDuty) return false;
+      return true;
     });
-  })() : products;
+  })();
 
   const getStatusColor = (status: string) => {
     switch (status) {
@@ -761,20 +952,54 @@ const SystemBuilder: React.FC<SystemBuilderProps> = ({ products, onProductUpdate
                   {fullSystem.typicalUses && <p className="text-xs text-slate-400 mt-0.5">Uses: {fullSystem.typicalUses}</p>}
                   {(() => {
                     const mapping = fullSystem.sectorMapping as string[] | undefined;
+                    const overrides = (fullSystem.sectorOverrides || {}) as Record<string, { substrateOverride?: string | null }>;
                     return Array.isArray(mapping) && mapping.length > 0 ? (
                       <div className="flex flex-wrap gap-1 mt-1">
-                        {mapping.map(sec => (
-                          <span key={sec} className="inline-flex items-center gap-1 px-2 py-0.5 text-[10px] bg-indigo-50 text-indigo-600 rounded-full font-medium">
+                        {mapping.map(sec => {
+                          const override = overrides[sec]?.substrateOverride || null;
+                          const isOpen = editingSectorOverride === sec;
+                          return (
+                          <span key={sec} className="relative inline-flex items-center gap-1 px-2 py-0.5 text-[10px] bg-indigo-50 text-indigo-600 rounded-full font-medium">
                             {sec}
+                            {override && (
+                              <span className="px-1 py-0.5 text-[9px] bg-indigo-200 text-indigo-800 rounded" title={`Substrate override: ${override}`}>{override}</span>
+                            )}
+                            {/* Toggle the per-sector substrate override editor */}
+                            <button
+                              onClick={() => setEditingSectorOverride(isOpen ? null : sec)}
+                              className="hover:text-indigo-900"
+                              title="Set sector substrate override"
+                            ><Edit size={8} /></button>
                             <button
                               onClick={() => {
                                 const updated = mapping.filter(s => s !== sec);
-                                systemsApi.updateSystem(selectedSystemId!, { sectorMapping: updated }).then(() => loadFullSystem(selectedSystemId!));
+                                // Also strip any override entry for the removed sector to keep state clean
+                                const cleaned = { ...overrides };
+                                delete cleaned[sec];
+                                systemsApi.updateSystem(selectedSystemId!, { sectorMapping: updated, sectorOverrides: cleaned }).then(() => loadFullSystem(selectedSystemId!));
                               }}
                               className="hover:text-red-500"
                             ><X size={8} /></button>
+                            {isOpen && (
+                              <span className="absolute z-20 top-full left-0 mt-1 p-2 bg-white border border-slate-200 rounded-lg shadow-lg flex flex-col gap-1 min-w-[160px]" onClick={(e) => e.stopPropagation()}>
+                                <span className="text-[10px] text-slate-500 font-semibold">Substrate override</span>
+                                <select
+                                  value={override || ''}
+                                  onChange={(e) => {
+                                    const v = e.target.value || null;
+                                    handleSaveSectorOverride(sec, v);
+                                    setEditingSectorOverride(null);
+                                  }}
+                                  className="text-[11px] border border-slate-200 rounded px-1.5 py-1 focus:ring-1 focus:ring-indigo-400 outline-none"
+                                >
+                                  <option value="">— None (use system) —</option>
+                                  {vocab.substrate.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+                                </select>
+                              </span>
+                            )}
                           </span>
-                        ))}
+                          );
+                        })}
                         <button
                           onClick={() => {
                             const newSec = prompt('Add sector:');
@@ -844,6 +1069,91 @@ const SystemBuilder: React.FC<SystemBuilderProps> = ({ products, onProductUpdate
                 </div>
               )}
 
+              {/* ---------- Phase 3: System Parameter Header ---------- */}
+              {/* Collapsible bar that lets the user pick system-wide qualification
+                   defaults. When any parameter is set, the layer product search is
+                   automatically narrowed to qualified, system-ready products. */}
+              <div className="mb-4 border border-slate-200 rounded-xl bg-slate-50 overflow-hidden" data-testid="system-parameter-header">
+                <button
+                  type="button"
+                  onClick={() => setParamHeaderOpen(o => !o)}
+                  className="w-full flex items-center justify-between px-3 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-100"
+                >
+                  <span className="flex items-center gap-2">
+                    <ShieldCheck size={14} className="text-indigo-500" />
+                    System Parameters
+                    {systemHasAnyParams && (
+                      <span className="px-1.5 py-0.5 text-[10px] bg-indigo-100 text-indigo-700 rounded">smart filter on</span>
+                    )}
+                    {savingParams && <span className="text-[10px] text-slate-400">saving…</span>}
+                  </span>
+                  {paramHeaderOpen ? <ChevronUp size={14} /> : <ChevronDown size={14} /> }
+                </button>
+                {paramHeaderOpen && (
+                  <div className="px-3 pb-3 grid grid-cols-1 sm:grid-cols-3 gap-2">
+                    <div>
+                      <label className="block text-[10px] font-semibold text-slate-500 uppercase mb-1">Substrate</label>
+                      <select
+                        value={fullSystem.systemSubstrate || ''}
+                        onChange={(e) => handleSaveSystemParams({ systemSubstrate: e.target.value || null })}
+                        className="w-full text-sm border border-slate-200 rounded-lg px-2 py-1.5 bg-white focus:ring-2 focus:ring-indigo-500 outline-none"
+                        data-testid="system-substrate-select"
+                      >
+                        <option value="">— Any —</option>
+                        {vocab.substrate.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+                      </select>
+                    </div>
+                    <div>
+                      <label className="block text-[10px] font-semibold text-slate-500 uppercase mb-1">Humidity tolerance</label>
+                      <select
+                        value={fullSystem.systemHumidity || ''}
+                        onChange={(e) => handleSaveSystemParams({ systemHumidity: e.target.value || null })}
+                        className="w-full text-sm border border-slate-200 rounded-lg px-2 py-1.5 bg-white focus:ring-2 focus:ring-indigo-500 outline-none"
+                        data-testid="system-humidity-select"
+                      >
+                        <option value="">— Any —</option>
+                        {vocab.humidity.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+                      </select>
+                    </div>
+                    <div>
+                      <label className="block text-[10px] font-semibold text-slate-500 uppercase mb-1">Duty rating</label>
+                      <select
+                        value={fullSystem.systemDuty || ''}
+                        onChange={(e) => handleSaveSystemParams({ systemDuty: e.target.value || null })}
+                        className="w-full text-sm border border-slate-200 rounded-lg px-2 py-1.5 bg-white focus:ring-2 focus:ring-indigo-500 outline-none"
+                        data-testid="system-duty-select"
+                      >
+                        <option value="">— Any —</option>
+                        {vocab.duty.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+                      </select>
+                    </div>
+                    {/* Active sector context picker — only shown when more than
+                        one sector has a substrate override defined, since
+                        otherwise getEffectiveSubstrate auto-resolves it. */}
+                    {(() => {
+                      const overrides = (fullSystem.sectorOverrides || {}) as Record<string, { substrateOverride?: string | null }>;
+                      const overrideSectors = Object.entries(overrides).filter(([_, v]) => v?.substrateOverride);
+                      if (overrideSectors.length < 2) return null;
+                      return (
+                        <div className="sm:col-span-3">
+                          <label className="block text-[10px] font-semibold text-slate-500 uppercase mb-1">Active sector context (for product search)</label>
+                          <select
+                            value={activeSectorContext || ''}
+                            onChange={(e) => setActiveSectorContext(e.target.value || null)}
+                            className="w-full text-sm border border-slate-200 rounded-lg px-2 py-1.5 bg-white focus:ring-2 focus:ring-indigo-500 outline-none"
+                          >
+                            <option value="">— Use system substrate —</option>
+                            {overrideSectors.map(([sec, v]) => (
+                              <option key={sec} value={sec}>{sec} ({v.substrateOverride})</option>
+                            ))}
+                          </select>
+                        </div>
+                      );
+                    })()}
+                  </div>
+                )}
+              </div>
+
               {fullSystem.layers.length === 0 ? (
                 <div className="text-center py-12 text-slate-400">
                   <Layers size={36} className="mx-auto mb-2 opacity-50" />
@@ -911,7 +1221,16 @@ const SystemBuilder: React.FC<SystemBuilderProps> = ({ products, onProductUpdate
                               <Edit size={13} />
                             </button>
                             <button
-                              onClick={() => setShowAddProduct(showAddProduct === layer.layerId ? null : layer.layerId)}
+                              onClick={() => {
+                                const next = showAddProduct === layer.layerId ? null : layer.layerId;
+                                setShowAddProduct(next);
+                                // Reset the smart-filter override on every search-session
+                                // change so the toggle is genuinely per-session and never
+                                // leaks across layers.
+                                setShowAllProductsInSearch(false);
+                                setSelectedProductIds([]);
+                                setProductSearch('');
+                              }}
                               className="p-1 text-slate-400 hover:text-green-600 hover:bg-green-50 rounded transition-colors"
                               title="Add product to layer"
                             >
@@ -929,6 +1248,38 @@ const SystemBuilder: React.FC<SystemBuilderProps> = ({ products, onProductUpdate
 
                       {showAddProduct === layer.layerId && (
                         <div className="px-3 py-2 bg-white border-b border-slate-100 border-l-4 border-l-green-400">
+                          {/* Smart filter banner — only visible when system has params and the user hasn't opted out */}
+                          {systemHasAnyParams && (
+                            <div className={`mb-2 flex items-center justify-between gap-2 px-2 py-1 rounded-lg border text-[11px] ${smartFilterActive ? 'bg-indigo-50 border-indigo-200 text-indigo-700' : 'bg-slate-50 border-slate-200 text-slate-500'}`}>
+                              <span className="flex items-center gap-1.5 truncate">
+                                <ShieldCheck size={12} />
+                                {smartFilterActive
+                                  ? <>Smart filter on — {filterSummary || 'system-ready only'}</>
+                                  : <>Smart filter off — showing all products</>}
+                              </span>
+                              <button
+                                type="button"
+                                onClick={() => setShowAllProductsInSearch(v => !v)}
+                                className="px-1.5 py-0.5 rounded text-[10px] font-semibold bg-white border border-current hover:opacity-80"
+                              >
+                                {smartFilterActive ? 'Show all' : 'Apply filter'}
+                              </button>
+                            </div>
+                          )}
+                          {/* Per-layer substrate override picker. Empty = inherit from sector/system. */}
+                          {systemHasAnyParams && vocab.substrate.length > 0 && (
+                            <div className="mb-2 flex items-center gap-2 text-[11px] text-slate-500">
+                              <span>Layer substrate:</span>
+                              <select
+                                value={layer.layerSubstrateOverride || ''}
+                                onChange={(e) => systemsApi.updateLayer(layer.layerId, { layerSubstrateOverride: e.target.value || null }).then(() => loadFullSystem(selectedSystemId!))}
+                                className="text-[11px] border border-slate-200 rounded px-1.5 py-0.5 bg-white focus:ring-1 focus:ring-indigo-400 outline-none"
+                              >
+                                <option value="">— Inherit —</option>
+                                {vocab.substrate.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+                              </select>
+                            </div>
+                          )}
                           <div className="relative mb-2">
                             <Search size={14} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-400" />
                             <input
@@ -942,7 +1293,7 @@ const SystemBuilder: React.FC<SystemBuilderProps> = ({ products, onProductUpdate
                           </div>
                           <div className="flex items-center justify-between mb-2">
                             <div className="text-xs text-slate-500">
-                              {selectedProductIds.length > 0 ? `${selectedProductIds.length} selected` : 'Select one or more products'}
+                              {selectedProductIds.length > 0 ? `${selectedProductIds.length} selected` : `${filteredProducts.length} match${filteredProducts.length === 1 ? '' : 'es'}`}
                             </div>
                             <button
                               onClick={() => handleAddSelectedProductsToLayer(layer.layerId)}
