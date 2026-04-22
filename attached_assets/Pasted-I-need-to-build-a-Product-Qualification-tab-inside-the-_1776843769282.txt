@@ -1,0 +1,72 @@
+I need to build a Product Qualification tab inside the existing System Builder page. Do NOT add anything to the navigation sidebar. The qualification UI lives entirely inside the System Builder component as a new tab alongside the existing Builder, Analytics, and Import tabs.
+
+## Context
+This app uses React/TypeScript, Tailwind CSS, Lucide React icons, and Express.js. The System Builder component is the existing module with system CRUD, layer editing, and product assignment. Phase 1 has already added these API endpoints:
+- GET /api/qualification-vocabularies
+- GET /api/qualification-tags/:productId
+- POST /api/qualification-tags
+- PATCH /api/qualification-tags/:productId
+- GET /api/products (already exists — use this to search products)
+- GET /api/tree-nodes (already exists — use this for taxonomy filtering)
+
+Before writing any code, read the existing System Builder component file to understand the current tab structure, then add the new tab without breaking anything existing.
+
+## What to build
+
+### New tab: "Product Qualification"
+Add a tab labelled "Product Qualification" with a shield or check-circle icon (Lucide) next to the existing Builder / Analytics / Import tabs in the System Builder header.
+
+### The Qualification tab UI has 3 sections:
+
+**Section A — Search & filter bar (top)**
+- A text search input: searches product name and product_id (calls GET /api/products with search param)
+- A taxonomy node dropdown: filters products by their node_id (uses GET /api/tree-nodes, shows only nodes that are system-relevant — i.e. in branches related to PU, Epoxy, Polyurea, Acrylic material bases)
+- A status filter: All Products / System-Ready Only / Not Yet Qualified
+- Results show as a table below (product name, product_id, supplier, taxonomy path, system-ready badge)
+
+**Section B — Bulk qualification table**
+When products are returned from search, show them in a table with these columns:
+1. Checkbox (for bulk selection)
+2. Product name + code (read-only)
+3. Substrate types — multi-select dropdown using vocabulary values from GET /api/qualification-vocabularies (vocab_type = 'substrate'). Allow selecting multiple.
+4. Humidity — single select dropdown (vocab_type = 'humidity')
+5. Duty rating — single select dropdown (vocab_type = 'duty')
+6. Finish type — single select dropdown (vocab_type = 'finish')
+7. System ready — toggle switch
+8. Save button per row (calls POST or PATCH /api/qualification-tags)
+
+Important UX rules:
+- Dropdowns must use the closed vocabulary lists only — no free text input allowed
+- Each row saves independently — clicking Save on one row does not affect others
+- Unsaved changes on a row show a yellow dot indicator on the row
+- After saving, show a brief green checkmark confirmation on that row
+- If a product already has qualification tags (from GET /api/qualification-tags/:productId), pre-populate its row with existing values
+
+**Section C — Bulk action bar (appears when rows are selected)**
+- "Save Selected" button — saves all selected rows at once
+- "Mark All Selected as System-Ready" toggle
+- Counter showing how many products are selected and how many are already qualified
+
+**Section D — Summary stats (top of tab, above search)**
+Show 4 metric cards:
+- Total products in inventory
+- System-ready products (is_system_ready = true)
+- Products with incomplete tags (has some tags but is_system_ready = false)
+- Unqualified products (no tags at all)
+
+### API calls to use
+- Search: GET /api/products?search={term}&nodeId={nodeId}
+- Load vocabularies once on mount: GET /api/qualification-vocabularies
+- Load existing tags per product: GET /api/qualification-tags/:productId (call per visible product)
+- Save: POST /api/qualification-tags (new) or PATCH /api/qualification-tags/:productId (existing)
+
+## Rules
+- The new tab must not affect the Builder, Analytics, or Import tabs in any way
+- Do not modify any existing API routes or database schema
+- Do not add anything to Sidebar.tsx or App.tsx navigation
+- Use Tailwind CSS only for styling — match the existing System Builder visual style
+- Use Lucide React for all icons
+- All state must be local to the Qualification tab component — no global state changes
+- Handle loading states and API errors gracefully with visible feedback
+- The component should be in a new file: components/SystemBuilderQualification.tsx
+- Import and render it inside the existing System Builder component only
