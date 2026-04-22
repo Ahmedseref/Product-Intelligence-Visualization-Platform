@@ -31,6 +31,8 @@ interface ProductListProps {
   colors?: any[];
   inventoryColumnsConfig?: InventoryColumnSetting[];
   onRefresh?: () => Promise<void>;
+  pendingEditProductId?: string | null;
+  onPendingEditConsumed?: () => void;
 }
 
 interface EditingCell {
@@ -176,11 +178,25 @@ const UsageAreasEditor: React.FC<UsageAreasEditorProps> = ({ product, usageAreas
 const ProductList: React.FC<ProductListProps> = ({ 
   products, onUpdate, onDelete, onCreate, customFields, treeNodes,
   suppliers = [], currentUser, onAddFieldDefinition, onAddTreeNode, usageAreas = [], units: unitsProp, colors = [],
-  inventoryColumnsConfig, onRefresh
+  inventoryColumnsConfig, onRefresh, pendingEditProductId, onPendingEditConsumed
 }) => {
   const dynamicUnits = unitsProp && unitsProp.length > 0 ? unitsProp : UNITS;
   const [selectedProduct, setSelectedProduct] = useState<Product | null>(null);
   const [editingProduct, setEditingProduct] = useState<Product | null>(null);
+
+  // Open the full editor when an external caller (e.g. SystemBuilder Qualification's
+  // "Manage Full Record") asks us to edit a specific product. Looks the product up
+  // in the current `products` array, opens it, then notifies the parent so the
+  // pending id is cleared and we don't reopen on every render.
+  useEffect(() => {
+    if (!pendingEditProductId) return;
+    const target = products.find(p => p.id === pendingEditProductId);
+    if (target) {
+      setSelectedProduct(null);
+      setEditingProduct(target);
+    }
+    onPendingEditConsumed?.();
+  }, [pendingEditProductId, products, onPendingEditConsumed]);
   const [sortField, setSortField] = useState<ColumnKey>('name');
   const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('asc');
   const [editingCell, setEditingCell] = useState<EditingCell | null>(null);

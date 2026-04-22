@@ -26,11 +26,12 @@ interface SystemBuilderProps {
   currentUser: User;
   onAddFieldDefinition: (field: CustomField) => void;
   onAddTreeNode: (node: TreeNode) => void;
+  onProductEdit?: (p: Product) => void;
 }
 
 type TabMode = 'builder' | 'analytics' | 'qualification';
 
-const SystemBuilder: React.FC<SystemBuilderProps> = ({ products, onProductUpdate, customFields, treeNodes, suppliers, usageAreas, units, colors, currentUser, onAddFieldDefinition, onAddTreeNode }) => {
+const SystemBuilder: React.FC<SystemBuilderProps> = ({ products, onProductUpdate, customFields, treeNodes, suppliers, usageAreas, units, colors, currentUser, onAddFieldDefinition, onAddTreeNode, onProductEdit }) => {
   const [activeTab, setActiveTab] = useState<TabMode>('builder');
   const [systems, setSystems] = useState<SystemData[]>([]);
   const [selectedSystemId, setSelectedSystemId] = useState<string | null>(null);
@@ -484,7 +485,7 @@ const SystemBuilder: React.FC<SystemBuilderProps> = ({ products, onProductUpdate
           </div>
         </div>
         <div className="flex-1 overflow-y-auto bg-slate-50">
-          <SystemBuilderQualification products={products} treeNodes={treeNodes} onProductUpdate={onProductUpdate} />
+          <SystemBuilderQualification products={products} treeNodes={treeNodes} onProductUpdate={onProductUpdate} onProductEdit={onProductEdit} />
         </div>
       </div>
     );

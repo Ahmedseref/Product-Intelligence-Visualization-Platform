@@ -50,6 +50,14 @@ const App: React.FC = () => {
   };
 
   const [viewMode, setViewModeState] = useState<ViewMode>(getViewFromHash);
+  const [pendingEditProductId, setPendingEditProductId] = useState<string | null>(null);
+
+  const editProductFully = useCallback((p: Product) => {
+    setPendingEditProductId(p.id);
+    setViewModeState('inventory');
+    const hash = viewToHash['inventory'] || '#inventory';
+    if (window.location.hash !== hash) window.location.hash = hash;
+  }, []);
 
   const setViewMode = useCallback((view: ViewMode) => {
     setViewModeState(view);
@@ -863,6 +871,8 @@ const App: React.FC = () => {
                 customFields={customFieldConfigs}
                 treeNodes={treeNodes}
                 suppliers={suppliers}
+                pendingEditProductId={pendingEditProductId}
+                onPendingEditConsumed={() => setPendingEditProductId(null)}
                 currentUser={currentUser}
                 onAddFieldDefinition={addCustomFieldDefinition}
                 onAddTreeNode={addTreeNode}
@@ -966,6 +976,7 @@ const App: React.FC = () => {
                 currentUser={currentUser}
                 onAddFieldDefinition={addCustomFieldDefinition}
                 onAddTreeNode={addTreeNode}
+                onProductEdit={editProductFully}
               />
             )}
             {viewMode === 'document-memory' && (
