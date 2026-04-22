@@ -4,23 +4,25 @@
 // Run with: npm test  (uses node:test + tsx — no extra dev deps required).
 //
 // Coverage:
-//  1. Each canonical taxonomy code from the Stock Code Manager
-//     (PW, EPC, EPP, PUP, SP, PR, PW&B, BBW, CBW, AWM, SF, AS, IF, FA, EP,
-//      PP, FP&SC, RM, IS, FR, PB, MPW) → expected substrate(s) and duty.
+//  1. Canonical taxonomy codes are sourced LIVE from the Stock Code Manager
+//     (tree_nodes.branch_code) so any branch the user adds is automatically
+//     exercised. For each code we assert:
+//       - if the engine has a rule for it (EXPECTED_MAPPINGS below) →
+//         substrate/duty match the expected values.
+//       - otherwise → the engine returns a well-formed result without
+//         throwing, and the test logs a friendly hint so devs can add a rule.
 //  2. Keyword overrides on product name (anti-slip, self-level, industrial,
 //     steel, etc.) override or augment taxonomy defaults as documented.
 //  3. The full Polyurea Waterproofing acceptance test from the engine spec:
 //     substrate=[Concrete,Steel], duty=Heavy, humidity=Standard, overall=high.
 // =============================================================================
 
-import { test } from 'node:test';
+import { test, before, after } from 'node:test';
 import assert from 'node:assert/strict';
 import { inferQualificationTags } from './qualificationEngine';
 
 // ---------- Helpers ----------
 
-// Tiny factory — most tests only care about taxonomy path. Name/description
-// default to empty so generic keyword rules don't fire by accident.
 const product = (overrides: Partial<{ name: string; description: string; nodeId: string }> = {}) => ({
   name: '',
   description: '',
@@ -28,79 +30,145 @@ const product = (overrides: Partial<{ name: string; description: string; nodeId:
   ...overrides,
 });
 
-// Build a taxonomy path that mimics what buildTaxonomyPath() would return:
-// alternating branch codes and node names from root → leaf. Only the leaf
-// values matter to most rules — the rest is realistic padding.
 const path = (...entries: string[]) => entries;
 
 // =============================================================================
-// 1) Canonical Stock Code Manager taxonomy codes
+// 1) Canonical Stock Code Manager codes — sourced LIVE from tree_nodes
 // =============================================================================
-// Each entry: leaf branch code (and a representative node name) → the
-// expected substrate and duty per the engine spec. We assert substrate set
-// equality (order-insensitive) and duty exact match.
+//
+// EXPECTED_MAPPINGS captures what the engine SHOULD output for each well-known
+// branch code per the engine spec. The list of codes to test is built at
+// runtime from tree_nodes.branch_code, so when a new branch is added in the
+// Stock Code Manager UI, the test automatically exercises it. Newly-added
+// codes that have no expected mapping yet are tested for "no crash" only and
+// printed as a hint, signalling that the engine may need a new rule.
 
-const TAXONOMY_CASES: Array<{
-  code: string;
-  name: string;
-  expectedSubstrates: string[];
-  expectedDuty: string | null;
-}> = [
-  { code: 'PW',    name: 'Polyurea Waterproofing',       expectedSubstrates: ['Concrete', 'Steel'],          expectedDuty: 'Heavy' },
-  { code: 'EPC',   name: 'Epoxy Waterproofing',          expectedSubstrates: ['Concrete', 'Steel'],          expectedDuty: 'Industrial' },
-  { code: 'EPP',   name: 'Epoxy Primer',                 expectedSubstrates: ['Concrete', 'Steel'],          expectedDuty: 'Medium' },
-  { code: 'PUP',   name: 'PU Primer',                    expectedSubstrates: ['Concrete', 'Steel'],          expectedDuty: 'Medium' },
-  { code: 'SP',    name: 'Silane Primer',                expectedSubstrates: ['Concrete'],                   expectedDuty: 'Medium' },
-  { code: 'PR',    name: 'Primers',                      expectedSubstrates: ['Concrete', 'Steel'],          expectedDuty: 'Medium' },
-  { code: 'PW&B',  name: 'Polyurethane Waterproofing',   expectedSubstrates: ['Concrete', 'Steel'],          expectedDuty: 'Heavy' },
-  { code: 'BBW',   name: 'Bitumen Based Waterproofing',  expectedSubstrates: ['Concrete'],                   expectedDuty: 'Heavy' },
-  { code: 'CBW',   name: 'Cement Based Waterproofing',   expectedSubstrates: ['Concrete'],                   expectedDuty: null },
-  { code: 'AWM',   name: 'Acrylic Waterproofing',        expectedSubstrates: ['Concrete'],                   expectedDuty: null },
-  { code: 'SF',    name: 'Sports Flooring',              expectedSubstrates: ['Concrete'],                   expectedDuty: 'Medium' },
-  { code: 'AS',    name: 'Acrylic System',               expectedSubstrates: ['Concrete'],                   expectedDuty: 'Light' },
-  { code: 'IF',    name: 'Industrial Flooring',          expectedSubstrates: ['Concrete', 'Steel'],          expectedDuty: 'Industrial' },
-  { code: 'FA',    name: 'Floor Adhesives',              expectedSubstrates: ['Concrete', 'Wood'],           expectedDuty: null },
-  { code: 'EP',    name: 'Epoxy Paints',                 expectedSubstrates: ['Concrete', 'Steel'],          expectedDuty: 'Medium' },
-  { code: 'PP',    name: 'Polyurethane Paints',          expectedSubstrates: ['Concrete', 'Steel'],          expectedDuty: 'Medium' },
-  { code: 'FP&SC', name: 'Floor Paints',                 expectedSubstrates: ['Concrete'],                   expectedDuty: 'Light' },
-  { code: 'RM',    name: 'Repair Mortars',               expectedSubstrates: ['Concrete'],                   expectedDuty: 'Heavy' },
-  { code: 'IS',    name: 'Injection Systems',            expectedSubstrates: ['Concrete'],                   expectedDuty: null },
-  { code: 'FR',    name: 'Fire rated',                   expectedSubstrates: ['Concrete', 'Steel'],          expectedDuty: 'Heavy' },
-  { code: 'PB',    name: 'Polyurethane Bitumen',         expectedSubstrates: ['Concrete', 'Steel'],          expectedDuty: 'Heavy' },
-  { code: 'MPW',   name: 'MS Polymer',                   expectedSubstrates: ['Concrete', 'Steel', 'Wood'],  expectedDuty: null },
-];
-
-for (const c of TAXONOMY_CASES) {
-  test(`taxonomy code ${c.code} (${c.name}) infers expected substrate + duty`, () => {
-    // Path includes a couple of fake ancestors plus the canonical leaf
-    // (both name and branch code) — this mirrors buildTaxonomyPath() output.
-    const result = inferQualificationTags(
-      product({ name: `Generic ${c.code} Product`, nodeId: 'leaf' }),
-      path('Construction', 'Construction Chemicals', c.code, c.name),
-    );
-
-    assert.deepEqual(
-      [...result.substrate_types].sort(),
-      [...c.expectedSubstrates].sort(),
-      `substrate mismatch for ${c.code}`,
-    );
-    assert.equal(result.duty_rating, c.expectedDuty, `duty mismatch for ${c.code}`);
-    // Substrate signal must be high (taxonomy match), not name fallback.
-    assert.equal(result.confidence.substrate, 'high', `substrate confidence should be high for ${c.code}`);
-  });
+interface ExpectedMapping {
+  substrates: string[];
+  duty: string | null;
 }
 
+const EXPECTED_MAPPINGS: Record<string, ExpectedMapping> = {
+  PW:    { substrates: ['Concrete', 'Steel'],          duty: 'Heavy' },
+  EPC:   { substrates: ['Concrete', 'Steel'],          duty: 'Industrial' },
+  EPP:   { substrates: ['Concrete', 'Steel'],          duty: 'Medium' },
+  PUP:   { substrates: ['Concrete', 'Steel'],          duty: 'Medium' },
+  SP:    { substrates: ['Concrete'],                   duty: 'Medium' },
+  PR:    { substrates: ['Concrete', 'Steel'],          duty: 'Medium' },
+  'PW&B':{ substrates: ['Concrete', 'Steel'],          duty: 'Heavy' },
+  BBW:   { substrates: ['Concrete'],                   duty: 'Heavy' },
+  CBW:   { substrates: ['Concrete'],                   duty: null },
+  AWM:   { substrates: ['Concrete'],                   duty: null },
+  SF:    { substrates: ['Concrete'],                   duty: 'Medium' },
+  AS:    { substrates: ['Concrete'],                   duty: 'Light' },
+  IF:    { substrates: ['Concrete', 'Steel'],          duty: 'Industrial' },
+  FA:    { substrates: ['Concrete', 'Wood'],           duty: null },
+  EP:    { substrates: ['Concrete', 'Steel'],          duty: 'Medium' },
+  PP:    { substrates: ['Concrete', 'Steel'],          duty: 'Medium' },
+  'FP&SC':{ substrates: ['Concrete'],                  duty: 'Light' },
+  RM:    { substrates: ['Concrete'],                   duty: 'Heavy' },
+  IS:    { substrates: ['Concrete'],                   duty: null },
+  FR:    { substrates: ['Concrete', 'Steel'],          duty: 'Heavy' },
+  PB:    { substrates: ['Concrete', 'Steel'],          duty: 'Heavy' },
+  MPW:   { substrates: ['Concrete', 'Steel', 'Wood'],  duty: null },
+};
+
+// Live-loaded list of { code, name } pairs from tree_nodes. Populated by
+// the `before` hook below. If the DB is unavailable (CI without
+// DATABASE_URL) the dynamic block falls back to EXPECTED_MAPPINGS keys so
+// the spec is still exercised.
+type LiveCode = { code: string; name: string };
+let liveCodes: LiveCode[] = [];
+let dbPool: import('pg').Pool | null = null;
+
+before(async () => {
+  if (!process.env.DATABASE_URL) {
+    console.log('[qualificationEngine.test] DATABASE_URL not set — using EXPECTED_MAPPINGS keys as canonical list.');
+    liveCodes = Object.keys(EXPECTED_MAPPINGS).map(code => ({ code, name: code }));
+    return;
+  }
+  try {
+    // Lazy import so a missing DB doesn't crash module load.
+    const { db, pool } = await import('./db');
+    const { treeNodes } = await import('@shared/schema');
+    dbPool = pool;
+    const rows = await db
+      .select({ code: treeNodes.branchCode, name: treeNodes.name })
+      .from(treeNodes);
+    liveCodes = rows
+      .filter((r): r is { code: string; name: string } => !!r.code)
+      .map(r => ({ code: r.code, name: r.name }));
+    if (liveCodes.length === 0) {
+      console.log('[qualificationEngine.test] tree_nodes has no branch codes — falling back to EXPECTED_MAPPINGS keys.');
+      liveCodes = Object.keys(EXPECTED_MAPPINGS).map(code => ({ code, name: code }));
+    } else {
+      console.log(`[qualificationEngine.test] Loaded ${liveCodes.length} branch codes from Stock Code Manager.`);
+    }
+  } catch (err) {
+    console.log(`[qualificationEngine.test] DB unavailable (${(err as Error).message}) — using EXPECTED_MAPPINGS keys.`);
+    liveCodes = Object.keys(EXPECTED_MAPPINGS).map(code => ({ code, name: code }));
+  }
+});
+
+after(async () => {
+  // Release the DB pool so the test process exits cleanly.
+  if (dbPool) await dbPool.end().catch(() => {});
+});
+
+// One umbrella test that fans out subtests per live branch code. Using a
+// single top-level test with t.test() keeps the dynamic codes grouped and
+// guarantees the `before` hook runs first.
+test('Stock Code Manager branch codes drive engine inference', async (t) => {
+  // If liveCodes is empty here something went wrong in `before`.
+  assert.ok(liveCodes.length > 0, 'no canonical codes available to test');
+
+  for (const { code, name } of liveCodes) {
+    await t.test(`code "${code}" (${name})`, () => {
+      const result = inferQualificationTags(
+        product({ name: `Generic ${code} Product`, nodeId: 'leaf' }),
+        // Path mimics buildTaxonomyPath() output — both name and code present.
+        path('Construction', 'Construction Chemicals', code, name),
+      );
+
+      // Universal sanity checks — these must hold for every code, even
+      // brand-new ones the engine hasn't been taught yet.
+      assert.ok(Array.isArray(result.substrate_types), 'substrate_types must be an array');
+      assert.ok(typeof result.confidence.overall === 'string', 'overall confidence must be present');
+
+      const expected = EXPECTED_MAPPINGS[code];
+      if (!expected) {
+        // New code — nothing to assert beyond "engine didn't crash".
+        // Surface a hint so a developer adds a rule when they see this.
+        console.log(`  ↳ no engine rule for "${code}" yet — engine returned substrates=${JSON.stringify(result.substrate_types)} duty=${result.duty_rating}`);
+        return;
+      }
+
+      // Known code — assert spec compliance.
+      assert.deepEqual(
+        [...result.substrate_types].sort(),
+        [...expected.substrates].sort(),
+        `substrate mismatch for ${code}`,
+      );
+      assert.equal(result.duty_rating, expected.duty, `duty mismatch for ${code}`);
+      assert.equal(
+        result.confidence.substrate,
+        'high',
+        `substrate confidence should be high (taxonomy match) for ${code}`,
+      );
+    });
+  }
+});
+
 // -----------------------------------------------------------------------------
-// Code-collision regression: the bug fix that made `pathIncludesAny` require
-// EXACT token match for code-like fragments. MPW must NOT match the earlier
-// PW rule (substring would have collided).
+// Code-collision regression: MPW must NOT match the earlier PW rule via
+// substring matching. This is independent of the live-codes loop because we
+// want to lock in the bug fix forever, even if MPW is removed from the DB.
 // -----------------------------------------------------------------------------
 test('MPW does NOT collide with PW (code-token collision regression)', () => {
   const result = inferQualificationTags(
     product({ name: 'MS Polymer Sealant', nodeId: 'leaf' }),
     path('Construction', 'MPW', 'MS Polymer'),
   );
-  // Wood is the discriminator — only MPW assigns Wood. PW does not.
   assert.ok(
     result.substrate_types.includes('Wood'),
     `expected Wood in substrate (MPW rule). Got: ${JSON.stringify(result.substrate_types)}`,
@@ -142,8 +210,6 @@ test('standalone " SL " token in name → Smooth finish', () => {
 });
 
 test('keyword "industrial" in name → Industrial duty (overrides medium taxonomy)', () => {
-  // EP path defaults duty=Medium, but the name keyword wins via the duty
-  // taxonomy rules (Industrial Flooring fragment in name).
   const result = inferQualificationTags(
     product({ name: 'Industrial Heavy Duty Coating', nodeId: 'leaf' }),
     path('Generic'),
@@ -175,7 +241,6 @@ test('humidity keyword "moisture tolerant" in description → Moisture-Tolerant 
     path('Generic'),
   );
   assert.equal(result.humidity_tolerance, 'Moisture-Tolerant');
-  // Name didn't match — description fallback gives medium confidence.
   assert.equal(result.confidence.humidity, 'medium');
 });
 
@@ -201,9 +266,8 @@ test('SPEC: Polyurea Waterproofing → substrate=[Concrete,Steel], duty=Heavy, h
   assert.deepEqual(
     [...result.substrate_types].sort(),
     ['Concrete', 'Steel'],
-    'substrate must equal [Concrete, Steel]',
   );
-  assert.equal(result.duty_rating, 'Heavy', 'duty must be Heavy');
-  assert.equal(result.humidity_tolerance, 'Standard', 'humidity must default to Standard');
-  assert.equal(result.confidence.overall, 'high', 'overall confidence must be high');
+  assert.equal(result.duty_rating, 'Heavy');
+  assert.equal(result.humidity_tolerance, 'Standard');
+  assert.equal(result.confidence.overall, 'high');
 });
