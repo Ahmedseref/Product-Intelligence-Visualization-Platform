@@ -1086,6 +1086,17 @@ const SystemBuilderQualification: React.FC<Props> = ({ products, treeNodes, onPr
     return sorted;
   }, [products, searchTerm, nodeFilter, statusFilter, layerFilter, confidenceFilter, mainQuickFilter, rows, rowConfidence, nodePath, mainSortKey, mainSortDir]);
 
+  // True whenever any main-table filter narrows the visible set. Drives the
+  // smart Auto-qualify button — when filters are active the primary action
+  // targets the visible subset instead of all products.
+  const mainFiltersActive =
+    !!searchTerm ||
+    !!nodeFilter ||
+    statusFilter !== 'all' ||
+    !!layerFilter ||
+    confidenceFilter !== 'all' ||
+    mainQuickFilter !== 'none';
+
   // -------------------------------------------------------------------------
   // Summary stats — global (across ALL products, not just filtered).
   // -------------------------------------------------------------------------
@@ -1508,28 +1519,46 @@ const SystemBuilderQualification: React.FC<Props> = ({ products, treeNodes, onPr
         </div>
       )}
 
-      {/* Auto-Qualification Engine bar */}
+      {/* Auto-Qualification Engine bar — smart primary button: when filters are
+          active it targets the visible subset; otherwise it targets all products.
+          Secondary "all" button only appears when filters narrow the set. */}
       <div className="flex flex-wrap items-center gap-3 p-3 bg-gradient-to-r from-indigo-50 via-blue-50 to-emerald-50 border border-indigo-200 rounded-lg">
         <Sparkles size={16} className="text-indigo-600 flex-shrink-0" />
         <button
-          onClick={() => runAutoInfer([])}
-          disabled={autoInferring}
+          onClick={() =>
+            runAutoInfer(mainFiltersActive ? filteredProducts.map(p => p.id) : [])
+          }
+          disabled={
+            autoInferring || (mainFiltersActive && filteredProducts.length === 0)
+          }
+          title={
+            mainFiltersActive
+              ? `Run on the ${filteredProducts.length} product(s) currently shown by your filters`
+              : `Run on all ${products.length} products`
+          }
           className="flex items-center gap-1.5 px-3 py-1.5 text-sm bg-indigo-600 text-white rounded-md hover:bg-indigo-700 disabled:opacity-50"
         >
           {autoInferring ? <Loader2 size={14} className="animate-spin" /> : <Wand2 size={14} />}
-          Auto-qualify all products
+          {mainFiltersActive
+            ? `Auto-qualify filtered (${filteredProducts.length})`
+            : `Auto-qualify all products (${products.length})`}
         </button>
-        <button
-          onClick={() => runAutoInfer(filteredProducts.map(p => p.id))}
-          disabled={autoInferring || filteredProducts.length === 0}
-          className="flex items-center gap-1.5 px-3 py-1.5 text-sm bg-white border border-indigo-300 text-indigo-700 rounded-md hover:bg-indigo-100 disabled:opacity-50"
-        >
-          <Wand2 size={14} />
-          Auto-qualify filtered ({filteredProducts.length})
-        </button>
+        {mainFiltersActive && (
+          <button
+            onClick={() => runAutoInfer([])}
+            disabled={autoInferring}
+            title={`Ignore filters and run on all ${products.length} products`}
+            className="flex items-center gap-1.5 px-3 py-1.5 text-sm bg-white border border-indigo-300 text-indigo-700 rounded-md hover:bg-indigo-100 disabled:opacity-50"
+          >
+            <Wand2 size={14} />
+            Run on all {products.length} instead
+          </button>
+        )}
         <div className="text-xs text-slate-600 flex items-center gap-1.5 ml-auto">
           <Info size={12} />
-          Engine uses product name, description, and taxonomy path — review suggestions before saving
+          {mainFiltersActive
+            ? 'Primary button follows your active filters — only visible products will be processed'
+            : 'Engine uses product name, description, and taxonomy path — review suggestions before saving'}
         </div>
         {autoInferError && (
           <div className="w-full text-xs text-rose-700 bg-rose-50 border border-rose-200 rounded px-2 py-1">
