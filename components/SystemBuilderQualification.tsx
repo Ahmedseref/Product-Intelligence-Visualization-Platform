@@ -258,7 +258,7 @@ const MultiSelect: React.FC<{
         type="button"
         disabled={disabled}
         onClick={() => setOpen(o => !o)}
-        className="w-full min-h-[32px] px-2 py-1 text-xs border border-slate-200 rounded-md bg-white text-left flex items-center justify-between gap-1 hover:border-slate-300 disabled:bg-slate-50 disabled:cursor-not-allowed"
+        className="w-full min-h-[26px] px-1.5 py-0.5 text-[11px] border border-slate-200 rounded-md bg-white text-left flex items-center justify-between gap-1 hover:border-slate-300 disabled:bg-slate-50 disabled:cursor-not-allowed"
       >
         <span className="truncate text-slate-700">
           {value.length === 0 ? <span className="text-slate-400">{placeholder}</span> : value.join(', ')}
@@ -302,7 +302,7 @@ const SingleSelect: React.FC<{
     value={value}
     disabled={disabled}
     onChange={e => onChange(e.target.value)}
-    className="w-full h-[32px] px-2 text-xs border border-slate-200 rounded-md bg-white hover:border-slate-300 disabled:bg-slate-50 disabled:cursor-not-allowed"
+    className="w-full h-[26px] px-1.5 text-[11px] border border-slate-200 rounded-md bg-white hover:border-slate-300 disabled:bg-slate-50 disabled:cursor-not-allowed"
   >
     <option value="">{placeholder}</option>
     {options.map(opt => (
@@ -497,7 +497,7 @@ const ReviewModal: React.FC<ReviewModalProps> = ({ state, setState, vocab, syste
   return (
     <div className="absolute inset-0 z-50 bg-slate-900/50 flex items-start justify-center overflow-y-auto"
          style={{ minHeight: '100vh' }}>
-      <div className="bg-white rounded-lg shadow-2xl my-8 mx-4 w-[min(1280px,95vw)] max-h-[90vh] flex flex-col">
+      <div className="bg-white rounded-lg shadow-2xl my-8 mx-4 w-[min(1100px,95vw)] max-h-[90vh] flex flex-col">
         {/* Header */}
         <div className="flex items-center gap-3 px-5 py-4 border-b border-slate-200">
           <Sparkles size={18} className="text-indigo-600" />
@@ -634,10 +634,10 @@ const ReviewModal: React.FC<ReviewModalProps> = ({ state, setState, vocab, syste
               {filtersActive ? 'No products match the active filters.' : 'No products in this group.'}
             </div>
           ) : (
-            <table className="min-w-full text-sm">
-              <thead className="bg-slate-50 border-b border-slate-200 text-xs uppercase text-slate-500 sticky top-0">
+            <table className="min-w-full text-xs">
+              <thead className="bg-slate-50 border-b border-slate-200 text-[10px] uppercase text-slate-500 sticky top-0">
                 <tr>
-                  <th className="px-3 py-2 text-left w-8">
+                  <th className="px-2 py-1.5 text-left w-7">
                     <input
                       type="checkbox"
                       checked={allVisibleIncluded}
@@ -651,22 +651,22 @@ const ReviewModal: React.FC<ReviewModalProps> = ({ state, setState, vocab, syste
                       title="Select only the currently visible (filtered) rows"
                     />
                   </th>
-                  <th className="px-3 py-2 text-left cursor-pointer select-none hover:text-slate-700" onClick={() => toggleSort('name')}>
+                  <th className="px-2 py-1.5 text-left cursor-pointer select-none hover:text-slate-700" onClick={() => toggleSort('name')}>
                     Product{sortIndicator('name')}
                   </th>
-                  <th className="px-3 py-2 text-left cursor-pointer select-none hover:text-slate-700" onClick={() => toggleSort('taxonomy')}>
+                  <th className="px-2 py-1.5 text-left cursor-pointer select-none hover:text-slate-700" onClick={() => toggleSort('taxonomy')}>
                     Taxonomy{sortIndicator('taxonomy')}
                   </th>
                   {/* Fix 2: Layer Position is the FIRST data column in the modal too */}
-                  <th className="px-3 py-2 text-left w-[160px] cursor-pointer select-none hover:text-slate-700" onClick={() => toggleSort('layer_position')}>
+                  <th className="px-2 py-1.5 text-left w-[120px] cursor-pointer select-none hover:text-slate-700" onClick={() => toggleSort('layer_position')}>
                     Layer{sortIndicator('layer_position')}
                   </th>
-                  <th className="px-3 py-2 text-left w-[200px]">Substrate</th>
-                  <th className="px-3 py-2 text-left w-[160px]">Humidity</th>
-                  <th className="px-3 py-2 text-left w-[160px]">Duty</th>
-                  <th className="px-3 py-2 text-left w-[160px]">Finish</th>
-                  <th className="px-3 py-2 text-center w-[90px] cursor-pointer select-none hover:text-slate-700" onClick={() => toggleSort('confidence')}>
-                    Overall{sortIndicator('confidence')}
+                  <th className="px-2 py-1.5 text-left w-[150px]">Substrate</th>
+                  <th className="px-2 py-1.5 text-left w-[110px]">Humidity</th>
+                  <th className="px-2 py-1.5 text-left w-[100px]">Duty</th>
+                  <th className="px-2 py-1.5 text-left w-[110px]">Finish</th>
+                  <th className="px-2 py-1.5 text-center w-[70px] cursor-pointer select-none hover:text-slate-700" onClick={() => toggleSort('confidence')}>
+                    Conf.{sortIndicator('confidence')}
                   </th>
                 </tr>
               </thead>
@@ -676,28 +676,28 @@ const ReviewModal: React.FC<ReviewModalProps> = ({ state, setState, vocab, syste
                   const lp = r.edited.layer_position;
                   return (
                     <tr key={r.product_id} className="border-b border-slate-100 align-top">
-                      <td className="px-3 py-2">
+                      <td className="px-2 py-1.5">
                         <input
                           type="checkbox"
                           checked={r.included}
                           onChange={(e) => updateModalRow(r.product_id, { included: e.target.checked })}
                         />
                       </td>
-                      <td className="px-3 py-2">
-                        <div className="font-medium text-slate-700 text-xs">{r.product_name}</div>
-                        <div className="text-[11px] text-slate-400">{r.product_id}</div>
+                      <td className="px-2 py-1.5">
+                        <div className="font-medium text-slate-700 text-[11px]">{r.product_name}</div>
+                        <div className="text-[10px] text-slate-400">{r.product_id}</div>
                       </td>
-                      <td className="px-3 py-2 text-xs text-slate-500 max-w-[260px]">
-                        <div className="whitespace-normal break-words leading-snug">{r.taxonomy_path || '—'}</div>
+                      <td className="px-2 py-1.5 text-[11px] text-slate-500 max-w-[200px]">
+                        <div className="whitespace-normal break-words leading-tight">{r.taxonomy_path || '—'}</div>
                       </td>
                       {/* Layer Position editor */}
-                      <td className="px-3 py-2">
+                      <td className="px-2 py-1.5">
                         <select
                           value={lp}
                           onChange={e => updateModalRow(r.product_id, { layer_position: e.target.value })}
-                          className="w-full h-[32px] px-2 text-xs border border-slate-200 rounded-md bg-white"
+                          className="w-full h-[26px] px-1.5 text-[11px] border border-slate-200 rounded-md bg-white"
                         >
-                          <option value="">— select —</option>
+                          <option value="">—</option>
                           {(vocab?.layer_position || []).map(o => (
                             <option key={o.id} value={o.value}>{o.label}</option>
                           ))}
@@ -705,13 +705,13 @@ const ReviewModal: React.FC<ReviewModalProps> = ({ state, setState, vocab, syste
                         <SourceBadge source={r.sources.layer_position} />
                       </td>
                       {/* Substrate — conditional per Fix 2 */}
-                      <td className="px-3 py-2">
+                      <td className="px-2 py-1.5">
                         {(lp === 'base_coat' || lp === 'intermediate') ? (
-                          <span className="inline-block px-2 py-1 text-[11px] rounded-full bg-blue-50 border border-blue-200 text-blue-700 font-medium">
+                          <span className="inline-block px-1.5 py-0.5 text-[10px] rounded-full bg-blue-50 border border-blue-200 text-blue-700 font-medium">
                             Over Primer
                           </span>
                         ) : lp === 'topcoat' ? (
-                          <div className="inline-flex rounded-md border border-slate-200 overflow-hidden text-[11px]">
+                          <div className="inline-flex rounded-md border border-slate-200 overflow-hidden text-[10px]">
                             {(['Over Base Coat', 'Over Primer'] as const).map(opt => {
                               const cur = r.edited.substrate_types[0] === 'Over Primer' ? 'Over Primer' : 'Over Base Coat';
                               return (
@@ -719,8 +719,9 @@ const ReviewModal: React.FC<ReviewModalProps> = ({ state, setState, vocab, syste
                                   key={opt}
                                   type="button"
                                   onClick={() => updateModalRow(r.product_id, { substrate_types: [opt] })}
-                                  className={`px-2 py-1 ${cur === opt ? 'bg-blue-600 text-white' : 'bg-white text-slate-600 hover:bg-slate-50'}`}
-                                >{opt}</button>
+                                  className={`px-1.5 py-0.5 ${cur === opt ? 'bg-blue-600 text-white' : 'bg-white text-slate-600 hover:bg-slate-50'}`}
+                                  title={opt}
+                                >{opt === 'Over Base Coat' ? 'Base' : 'Primer'}</button>
                               );
                             })}
                           </div>
@@ -733,7 +734,7 @@ const ReviewModal: React.FC<ReviewModalProps> = ({ state, setState, vocab, syste
                         )}
                         <SourceBadge source={r.sources.substrate} />
                       </td>
-                      <td className="px-3 py-2">
+                      <td className="px-2 py-1.5">
                         <SingleSelect
                           options={vocab?.humidity || []}
                           value={r.edited.humidity_tolerance}
@@ -741,7 +742,7 @@ const ReviewModal: React.FC<ReviewModalProps> = ({ state, setState, vocab, syste
                         />
                         <SourceBadge source={r.sources.humidity} />
                       </td>
-                      <td className="px-3 py-2">
+                      <td className="px-2 py-1.5">
                         <SingleSelect
                           options={vocab?.duty || []}
                           value={r.edited.duty_rating}
@@ -749,23 +750,23 @@ const ReviewModal: React.FC<ReviewModalProps> = ({ state, setState, vocab, syste
                         />
                         <SourceBadge source={r.sources.duty} />
                       </td>
-                      <td className="px-3 py-2">
+                      <td className="px-2 py-1.5">
                         {isFinishHidden(lp) ? (
-                          <span className="inline-block px-2 py-1 text-[11px] text-slate-400 italic">N/A</span>
+                          <span className="inline-block px-1.5 py-0.5 text-[10px] text-slate-400 italic">N/A</span>
                         ) : (
                           <div className={lp === 'topcoat' && !r.edited.finish_type ? 'ring-1 ring-amber-300 rounded-md' : ''}>
                             <SingleSelect
                               options={vocab?.finish || []}
                               value={r.edited.finish_type}
                               onChange={v => updateModalRow(r.product_id, { finish_type: v })}
-                              placeholder={lp === 'topcoat' ? 'Required…' : 'Select…'}
+                              placeholder={lp === 'topcoat' ? 'Required…' : '—'}
                             />
                           </div>
                         )}
                         <SourceBadge source={r.sources.finish} />
                       </td>
-                      <td className="px-3 py-2 text-center">
-                        <span className={`inline-block px-2 py-0.5 text-[11px] font-medium border rounded-full ${overall.pill}`}>
+                      <td className="px-2 py-1.5 text-center">
+                        <span className={`inline-block px-1.5 py-0.5 text-[10px] font-medium border rounded-full ${overall.pill}`}>
                           {overall.label}
                         </span>
                       </td>
@@ -1726,10 +1727,10 @@ const SystemBuilderQualification: React.FC<Props> = ({ products, treeNodes, onPr
           </div>
         )}
         <div className="overflow-x-auto">
-          <table className="min-w-full text-sm">
-            <thead className="bg-slate-50 border-b border-slate-200 text-xs uppercase text-slate-500">
+          <table className="min-w-full text-xs">
+            <thead className="bg-slate-50 border-b border-slate-200 text-[10px] uppercase text-slate-500">
               <tr>
-                <th className="px-3 py-2 text-left w-8">
+                <th className="px-2 py-1.5 text-left w-7">
                   <input
                     type="checkbox"
                     checked={
@@ -1740,24 +1741,24 @@ const SystemBuilderQualification: React.FC<Props> = ({ products, treeNodes, onPr
                     className="rounded text-blue-600"
                   />
                 </th>
-                <th className="px-3 py-2 text-left">Product</th>
-                <th className="px-3 py-2 text-left">Taxonomy</th>
+                <th className="px-2 py-1.5 text-left">Product</th>
+                <th className="px-2 py-1.5 text-left">Taxonomy</th>
                 {/* Fix 2: Layer Position is the FIRST qualification column — it
                     drives the conditional rendering of every column to its right. */}
-                <th className="px-3 py-2 text-left w-[160px]">Layer Position</th>
-                <th className="px-3 py-2 text-left w-[180px]">Substrate</th>
-                <th className="px-3 py-2 text-left w-[140px]">Humidity</th>
-                <th className="px-3 py-2 text-left w-[130px]">Duty</th>
-                <th className="px-3 py-2 text-left w-[130px]">Finish</th>
-                <th className="px-3 py-2 text-center w-[90px]" title="Auto-inference confidence (grey = manually set)">Confidence</th>
-                <th className="px-3 py-2 text-center w-[80px]">Ready</th>
-                <th className="px-3 py-2 text-right w-[150px]">Actions</th>
+                <th className="px-2 py-1.5 text-left w-[120px]">Layer</th>
+                <th className="px-2 py-1.5 text-left w-[140px]">Substrate</th>
+                <th className="px-2 py-1.5 text-left w-[110px]">Humidity</th>
+                <th className="px-2 py-1.5 text-left w-[100px]">Duty</th>
+                <th className="px-2 py-1.5 text-left w-[110px]">Finish</th>
+                <th className="px-2 py-1.5 text-center w-[70px]" title="Auto-inference confidence (grey = manually set)">Conf.</th>
+                <th className="px-2 py-1.5 text-center w-[55px]">Ready</th>
+                <th className="px-2 py-1.5 text-right w-[120px]">Actions</th>
               </tr>
             </thead>
             <tbody>
               {filteredProducts.length === 0 && !loadingTags && (
                 <tr key="__empty__">
-                  <td colSpan={10} className="px-3 py-8 text-center text-slate-400 text-sm">
+                  <td colSpan={11} className="px-2 py-6 text-center text-slate-400 text-xs">
                     No products match the current filters.
                   </td>
                 </tr>
@@ -1772,7 +1773,7 @@ const SystemBuilderQualification: React.FC<Props> = ({ products, treeNodes, onPr
                       isSelected ? 'bg-blue-50/40' : ''
                     }`}
                   >
-                    <td className="px-3 py-2 align-top">
+                    <td className="px-2 py-1.5 align-top">
                       <input
                         type="checkbox"
                         checked={isSelected}
@@ -1780,27 +1781,27 @@ const SystemBuilderQualification: React.FC<Props> = ({ products, treeNodes, onPr
                         className="rounded text-blue-600 mt-1"
                       />
                     </td>
-                    <td className="px-3 py-2 align-top">
-                      <div className="flex items-start gap-2">
+                    <td className="px-2 py-1.5 align-top">
+                      <div className="flex items-start gap-1.5">
                         {/* Dirty / saved indicators */}
                         {r.dirty && (
                           <span
                             title="Unsaved changes"
-                            className="mt-1.5 inline-block w-2 h-2 rounded-full bg-amber-400 flex-shrink-0"
+                            className="mt-1 inline-block w-1.5 h-1.5 rounded-full bg-amber-400 flex-shrink-0"
                           />
                         )}
                         {r.savedFlash && (
                           <CheckCircle2
-                            size={14}
+                            size={12}
                             className="mt-0.5 text-emerald-500 flex-shrink-0"
                           />
                         )}
                         <div className="min-w-0 flex-1">
                           <div
-                            className="flex items-center gap-1.5"
+                            className="flex items-center gap-1"
                             title={p.description || 'No description available'}
                           >
-                            <span className="font-medium text-slate-700 truncate">{p.name}</span>
+                            <span className="font-medium text-slate-700 truncate text-xs">{p.name}</span>
                             <button
                               type="button"
                               onClick={(e) => { e.stopPropagation(); setDetailProduct(p); }}
@@ -1808,21 +1809,21 @@ const SystemBuilderQualification: React.FC<Props> = ({ products, treeNodes, onPr
                               title="View product details"
                               aria-label={`View details for ${p.name}`}
                             >
-                              <Info size={14} />
+                              <Info size={12} />
                             </button>
                           </div>
-                          <div className="text-xs text-slate-400 truncate">
+                          <div className="text-[10px] text-slate-400 truncate">
                             {p.id}
                             {p.supplier ? ` · ${p.supplier}` : ''}
                           </div>
                           {r.error && (
-                            <div className="text-xs text-rose-600 mt-1">{r.error}</div>
+                            <div className="text-[10px] text-rose-600 mt-0.5">{r.error}</div>
                           )}
                         </div>
                       </div>
                     </td>
-                    <td className="px-3 py-2 align-top text-xs text-slate-500 min-w-[260px]" title={nodePath(p.nodeId)}>
-                      <div className="whitespace-normal break-words leading-snug">
+                    <td className="px-2 py-1.5 align-top text-[11px] text-slate-500 min-w-[160px] max-w-[220px]" title={nodePath(p.nodeId)}>
+                      <div className="whitespace-normal break-words leading-tight">
                         {nodePath(p.nodeId)}
                       </div>
                     </td>
@@ -1830,17 +1831,17 @@ const SystemBuilderQualification: React.FC<Props> = ({ products, treeNodes, onPr
                     {/* Fix 2: Layer Position single-select (FIRST data column).
                         When empty, show a subtle hint underneath the dropdown
                         instead of a hard validation message. */}
-                    <td className="px-3 py-2 align-top">
+                    <td className="px-2 py-1.5 align-top">
                       <SingleSelect
                         options={vocab?.layer_position || []}
                         value={r.layerPosition}
                         onChange={v => updateRow(p.id, { layerPosition: v })}
                         disabled={r.saving}
-                        placeholder="— select —"
+                        placeholder="—"
                       />
                       {!r.layerPosition && (
-                        <div className="text-[10px] text-slate-400 mt-0.5">
-                          Set for smarter fields
+                        <div className="text-[9px] text-slate-400 mt-0.5">
+                          Set first
                         </div>
                       )}
                     </td>
@@ -1849,12 +1850,12 @@ const SystemBuilderQualification: React.FC<Props> = ({ products, treeNodes, onPr
                         a) base_coat / intermediate → forced "Over Primer" pill
                         b) topcoat → 2-option pill toggle (Over Base Coat / Over Primer)
                         c) primer / standalone / null → standard MultiSelect */}
-                    <td className="px-3 py-2 align-top">
+                    <td className="px-2 py-1.5 align-top">
                       {(() => {
                         const lp = r.layerPosition;
                         if (lp === 'base_coat' || lp === 'intermediate') {
                           return (
-                            <span className="inline-block px-2 py-1 text-xs rounded-full bg-blue-50 border border-blue-200 text-blue-700 font-medium">
+                            <span className="inline-block px-1.5 py-0.5 text-[10px] rounded-full bg-blue-50 border border-blue-200 text-blue-700 font-medium">
                               Over Primer
                             </span>
                           );
@@ -1862,16 +1863,17 @@ const SystemBuilderQualification: React.FC<Props> = ({ products, treeNodes, onPr
                         if (lp === 'topcoat') {
                           const cur = r.substrateTypes[0] === 'Over Primer' ? 'Over Primer' : 'Over Base Coat';
                           return (
-                            <div className="inline-flex rounded-md border border-slate-200 overflow-hidden text-[11px]">
+                            <div className="inline-flex rounded-md border border-slate-200 overflow-hidden text-[10px]">
                               {(['Over Base Coat', 'Over Primer'] as const).map(opt => (
                                 <button
                                   key={opt}
                                   type="button"
                                   disabled={r.saving}
                                   onClick={() => updateRow(p.id, { substrateTypes: [opt] })}
-                                  className={`px-2 py-1 ${cur === opt ? 'bg-blue-600 text-white' : 'bg-white text-slate-600 hover:bg-slate-50'}`}
+                                  className={`px-1.5 py-0.5 ${cur === opt ? 'bg-blue-600 text-white' : 'bg-white text-slate-600 hover:bg-slate-50'}`}
+                                  title={opt}
                                 >
-                                  {opt}
+                                  {opt === 'Over Base Coat' ? 'Base' : 'Primer'}
                                 </button>
                               ))}
                             </div>
@@ -1887,7 +1889,7 @@ const SystemBuilderQualification: React.FC<Props> = ({ products, treeNodes, onPr
                         );
                       })()}
                     </td>
-                    <td className="px-3 py-2 align-top">
+                    <td className="px-2 py-1.5 align-top">
                       <SingleSelect
                         options={vocab?.humidity || []}
                         value={r.humidityTolerance}
@@ -1895,7 +1897,7 @@ const SystemBuilderQualification: React.FC<Props> = ({ products, treeNodes, onPr
                         disabled={r.saving}
                       />
                     </td>
-                    <td className="px-3 py-2 align-top">
+                    <td className="px-2 py-1.5 align-top">
                       <SingleSelect
                         options={vocab?.duty || []}
                         value={r.dutyRating}
@@ -1905,9 +1907,9 @@ const SystemBuilderQualification: React.FC<Props> = ({ products, treeNodes, onPr
                     </td>
                     {/* Finish — hidden (rendered as N/A placeholder) for primers
                         per Fix 2 spec; required-style outline for topcoats. */}
-                    <td className="px-3 py-2 align-top">
+                    <td className="px-2 py-1.5 align-top">
                       {isFinishHidden(r.layerPosition) ? (
-                        <span className="inline-block px-2 py-1 text-[11px] text-slate-400 italic">N/A</span>
+                        <span className="inline-block px-1.5 py-0.5 text-[10px] text-slate-400 italic">N/A</span>
                       ) : (
                         <div className={r.layerPosition === 'topcoat' && !r.finishType ? 'ring-1 ring-amber-300 rounded-md' : ''}
                              title={r.layerPosition === 'topcoat' ? 'Required for topcoats' : undefined}>
@@ -1916,7 +1918,7 @@ const SystemBuilderQualification: React.FC<Props> = ({ products, treeNodes, onPr
                             value={r.finishType}
                             onChange={v => updateRow(p.id, { finishType: v })}
                             disabled={r.saving}
-                            placeholder={r.layerPosition === 'topcoat' ? 'Required…' : 'Select…'}
+                            placeholder={r.layerPosition === 'topcoat' ? 'Required…' : '—'}
                           />
                         </div>
                       )}
@@ -1961,30 +1963,30 @@ const SystemBuilderQualification: React.FC<Props> = ({ products, treeNodes, onPr
                         />
                       </div>
                     </td>
-                    <td className="px-3 py-2 align-top text-right">
-                      <div className="inline-flex items-center gap-1 justify-end">
+                    <td className="px-2 py-1.5 align-top text-right">
+                      <div className="inline-flex items-center gap-0.5 justify-end">
                         <button
                           onClick={() => autoFillRow(p.id)}
                           disabled={r.saving}
                           title="Auto-fill from product name, description and taxonomy"
-                          className="inline-flex items-center gap-1 px-2 py-1 text-xs rounded-md bg-indigo-50 border border-indigo-200 text-indigo-700 hover:bg-indigo-100 disabled:opacity-50"
+                          className="inline-flex items-center gap-0.5 px-1.5 py-0.5 text-[10px] rounded-md bg-indigo-50 border border-indigo-200 text-indigo-700 hover:bg-indigo-100 disabled:opacity-50"
                         >
-                          <Sparkles size={12} />
+                          <Sparkles size={10} />
                           Auto
                         </button>
                         <button
                           onClick={() => saveRow(p.id)}
                           disabled={r.saving || !r.dirty}
-                          className={`inline-flex items-center gap-1 px-2.5 py-1 text-xs rounded-md ${
+                          className={`inline-flex items-center gap-0.5 px-1.5 py-0.5 text-[10px] rounded-md ${
                             r.dirty && !r.saving
                               ? 'bg-blue-600 text-white hover:bg-blue-700'
                               : 'bg-slate-100 text-slate-400 cursor-not-allowed'
                           }`}
                         >
                           {r.saving ? (
-                            <Loader2 size={12} className="animate-spin" />
+                            <Loader2 size={10} className="animate-spin" />
                           ) : (
-                            <Save size={12} />
+                            <Save size={10} />
                           )}
                           Save
                         </button>
