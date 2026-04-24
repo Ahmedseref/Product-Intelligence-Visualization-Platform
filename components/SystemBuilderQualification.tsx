@@ -1003,15 +1003,21 @@ const SystemBuilderQualification: React.FC<Props> = ({ products, treeNodes, onPr
   }, [products]);
 
   // -------------------------------------------------------------------------
-  // Derived: system-relevant taxonomy nodes for the dropdown.
+  // Derived: taxonomy nodes for the dropdown.
   // Sorted alphabetically by their FULL path (Fix 1) so users can scan the
-  // dropdown in a stable, hierarchical order.
+  // dropdown in a stable, hierarchical order. We include every node that
+  // either (a) directly holds at least one product, OR (b) matches one of
+  // the system-relevant chemistry keywords. This ensures the dropdown
+  // always reflects the user's real taxonomy and never appears empty just
+  // because their categories aren't named after chemistry families.
   // -------------------------------------------------------------------------
   const systemRelevantNodes = useMemo(() => {
     return liveTreeNodes
       .filter(n => {
         const lower = n.name.toLowerCase();
-        return SYSTEM_RELEVANT_KEYWORDS.some(k => lower.includes(k));
+        const matchesKeyword = SYSTEM_RELEVANT_KEYWORDS.some(k => lower.includes(k));
+        const hasProducts = (productCountByNode.get(n.id) || 0) > 0;
+        return matchesKeyword || hasProducts;
       })
       .map(n => ({ node: n, path: nodePath(n.id), count: productCountByNode.get(n.id) || 0 }))
       .sort((a, b) => a.path.localeCompare(b.path));
