@@ -488,6 +488,9 @@ export const productQualificationTags = pgTable("product_qualification_tags", {
   humidityTolerance: varchar("humidity_tolerance", { length: 50 }),
   dutyRating: varchar("duty_rating", { length: 50 }),
   finishType: varchar("finish_type", { length: 50 }),
+  // Layer Position — controls which other fields are shown and what
+  // substrate options are available. Nullable so existing rows still load.
+  layerPosition: varchar("layer_position", { length: 50 }),
   qualifiedAt: timestamp("qualified_at"),
   qualifiedBy: varchar("qualified_by", { length: 100 }),
   // When true, the product is exposed to the System Builder filter

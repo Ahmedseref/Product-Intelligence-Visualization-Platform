@@ -14,10 +14,11 @@
 // - Each row saves independently and shows its own dirty/saved indicator.
 // =============================================================================
 
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState, useCallback } from 'react';
 import {
   ShieldCheck, Search, CheckCircle2, AlertCircle, Loader2,
-  Save, X, ChevronDown, Filter, Info, Sparkles, Wand2,
+  Save, X, ChevronDown, ChevronUp, Filter, Info, Sparkles, Wand2,
+  RefreshCw, ArrowUpDown,
 } from 'lucide-react';
 import { Product, TreeNode } from '../types';
 import ProductDetailsModal from './ProductDetailsModal';
@@ -36,7 +37,9 @@ interface VocabItem {
   sortOrder: number;
   isActive: boolean;
 }
-type VocabMap = Record<'substrate' | 'humidity' | 'duty' | 'finish', VocabItem[]>;
+// VocabMap now also tracks the new `layer_position` vocabulary that drives
+// the conditional row layout (Fix 2).
+type VocabMap = Record<'substrate' | 'humidity' | 'duty' | 'finish' | 'layer_position', VocabItem[]>;
 
 interface QualificationTag {
   id?: number;
@@ -45,6 +48,7 @@ interface QualificationTag {
   humidityTolerance: string | null;
   dutyRating: string | null;
   finishType: string | null;
+  layerPosition: string | null;
   isSystemReady: boolean;
   qualifiedAt?: string | null;
   qualifiedBy?: string | null;
@@ -52,6 +56,7 @@ interface QualificationTag {
 
 interface RowState {
   // Current (possibly unsaved) values shown in the row
+  layerPosition: string; // Drives conditional UI for the rest of the row
   substrateTypes: string[];
   humidityTolerance: string;
   dutyRating: string;
@@ -68,6 +73,10 @@ interface RowState {
 }
 
 type StatusFilter = 'all' | 'ready' | 'unqualified';
+// Sort key applied to the main qualification table (Fix 4)
+type MainSortKey = 'name' | 'taxonomy' | 'confidence' | 'ready';
+// Quick filter pill states for the main table
+type MainQuickFilter = 'none' | 'needs_layer' | 'missing_substrate' | 'missing_duty' | 'missing_finish';
 
 // ---------- Auto-Qualification types ----------
 type Confidence = 'high' | 'medium' | 'low' | 'none';
@@ -81,9 +90,10 @@ interface AutoInferRow {
     humidity_tolerance: string | null;
     duty_rating: string | null;
     finish_type: string | null;
+    layer_position: string | null;
   };
-  confidence: { substrate: Confidence; humidity: Confidence; duty: Confidence; finish: Confidence; overall: Confidence };
-  sources: { substrate: string; humidity: string; duty: string; finish: string };
+  confidence: { substrate: Confidence; humidity: Confidence; duty: Confidence; finish: Confidence; layer_position: Confidence; overall: Confidence };
+  sources: { substrate: string; humidity: string; duty: string; finish: string; layer_position: string };
   already_qualified: boolean;
   // UI-only state — editable values + selection checkbox
   edited: {
@@ -91,11 +101,51 @@ interface AutoInferRow {
     humidity_tolerance: string;
     duty_rating: string;
     finish_type: string;
+    layer_position: string;
   };
   included: boolean;
 }
 
 type ReviewTab = 'high' | 'review' | 'none';
+// Sort key applied to the modal table (Fix 3)
+type ModalSortKey = 'name' | 'taxonomy' | 'confidence' | 'layer_position';
+type SortDir = 'asc' | 'desc';
+type ModalSubstrateFilter = 'all' | 'has' | 'none';
+type ModalConfidenceFilter = 'all' | 'high' | 'medium' | 'low' | 'none';
+
+// -----------------------------------------------------------------------------
+// Layer-Position helpers (Fix 2 conditional UI rules)
+// -----------------------------------------------------------------------------
+// Per spec, certain layer positions completely change which other fields are
+// editable, hidden, or fixed to a single value. Centralising the logic here
+// keeps the row markup readable and the modal/table behaviour consistent.
+
+// Finish is hidden completely for primers.
+const isFinishHidden = (lp: string): boolean => lp === 'primer';
+
+// Substrate becomes a fixed read-only pill (or 2-option choice for topcoat).
+const isSubstrateFixed = (lp: string): boolean =>
+  lp === 'base_coat' || lp === 'intermediate' || lp === 'topcoat';
+
+// Default fixed substrate value when no manual override has been set.
+const defaultFixedSubstrate = (lp: string): string => {
+  if (lp === 'base_coat' || lp === 'intermediate') return 'Over Primer';
+  if (lp === 'topcoat') return 'Over Base Coat';
+  return '';
+};
+
+// For topcoats the user may toggle between "Over Primer" and "Over Base Coat".
+// For base_coat / intermediate the value is forced to "Over Primer".
+// Returns the substrate array we should persist for a given row.
+const computeFixedSubstrate = (lp: string, current: string[]): string[] => {
+  if (lp === 'base_coat' || lp === 'intermediate') return ['Over Primer'];
+  if (lp === 'topcoat') {
+    const cur = current[0];
+    if (cur === 'Over Primer' || cur === 'Over Base Coat') return [cur];
+    return ['Over Base Coat'];
+  }
+  return current;
+};
 
 // Map an InferenceResult.confidence per-row → row's RowState confidence dot.
 const overallToTone = (c: Confidence): { dot: string; label: string; pill: string } => {
@@ -140,6 +190,7 @@ const authHeaders = (): HeadersInit => {
 };
 
 const emptyRow = (): RowState => ({
+  layerPosition: '',
   substrateTypes: [],
   humidityTolerance: '',
   dutyRating: '',
@@ -153,6 +204,7 @@ const emptyRow = (): RowState => ({
 });
 
 const rowFromTag = (tag: QualificationTag): RowState => ({
+  layerPosition: tag.layerPosition ?? '',
   substrateTypes: tag.substrateTypes ?? [],
   humidityTolerance: tag.humidityTolerance ?? '',
   dutyRating: tag.dutyRating ?? '',
@@ -167,6 +219,7 @@ const rowFromTag = (tag: QualificationTag): RowState => ({
 
 const hasAnyTagData = (r: RowState | undefined): boolean =>
   !!r && (
+    !!r.layerPosition ||
     r.substrateTypes.length > 0 ||
     !!r.humidityTolerance ||
     !!r.dutyRating ||
@@ -304,6 +357,461 @@ const StatCard: React.FC<{
   );
 };
 
+// =============================================================================
+// ReviewModal — Auto-Qualification Review modal (Fix 3)
+// =============================================================================
+// Extracted to its own component so the local filter / sort / quick-pill state
+// stays self-contained and doesn't pollute the main table's namespace.
+// All filtering, sorting and selection happens client-side over the rows the
+// engine already returned — no extra API calls.
+// =============================================================================
+
+interface ReviewModalProps {
+  state: { rows: AutoInferRow[]; tab: ReviewTab };
+  setState: React.Dispatch<React.SetStateAction<{ rows: AutoInferRow[]; tab: ReviewTab } | null>>;
+  vocab: VocabMap | null;
+  systemRelevantNodes: Array<{ node: TreeNode; path: string; count: number }>;
+  batchSaving: boolean;
+  saveBatch: (rowsToSave: AutoInferRow[], markReady: boolean) => Promise<void>;
+}
+
+const ReviewModal: React.FC<ReviewModalProps> = ({ state, setState, vocab, systemRelevantNodes, batchSaving, saveBatch }) => {
+  const all = state.rows;
+  const skipped = all.filter(r => r.already_qualified);
+  const eligible = all.filter(r => !r.already_qualified);
+  const high = eligible.filter(r => r.confidence.overall === 'high');
+  const review = eligible.filter(r => r.confidence.overall === 'medium' || r.confidence.overall === 'low');
+  const none = eligible.filter(r => r.confidence.overall === 'none');
+  const tabs: Array<{ key: ReviewTab; label: string; rows: AutoInferRow[] }> = [
+    { key: 'high',   label: `High confidence (${high.length})`, rows: high },
+    { key: 'review', label: `Needs review (${review.length})`, rows: review },
+    { key: 'none',   label: `Could not infer (${none.length})`, rows: none },
+  ];
+  const tabRows = tabs.find(t => t.key === state.tab)!.rows;
+
+  // ---- Local Fix 3 state ----
+  const [searchTerm, setSearchTerm] = useState('');
+  const [taxonomyFilter, setTaxonomyFilter] = useState(''); // matches tax path substring
+  const [substrateFilter, setSubstrateFilter] = useState<ModalSubstrateFilter>('all');
+  const [confidenceFilter, setConfidenceFilter] = useState<ModalConfidenceFilter>('all');
+  const [layerFilter, setLayerFilter] = useState<string>(''); // '' = all
+  const [unresolvedOnly, setUnresolvedOnly] = useState(false);
+  const [highOnly, setHighOnly] = useState(false);
+  const [needsLayerOnly, setNeedsLayerOnly] = useState(false);
+  const [sortKey, setSortKey] = useState<ModalSortKey>('confidence');
+  const [sortDir, setSortDir] = useState<SortDir>('desc');
+
+  // Reset selection-only filters when switching tabs so users always see rows.
+  useEffect(() => {
+    // Switching tabs shouldn't necessarily clear filters — keep them sticky.
+  }, [state.tab]);
+
+  const updateModalRow = (productId: string, patch: Partial<AutoInferRow['edited']> & { included?: boolean }) => {
+    setState(prev => prev ? {
+      ...prev,
+      rows: prev.rows.map(r => {
+        if (r.product_id !== productId) return r;
+        const nextEdited = { ...r.edited };
+        if ('substrate_types' in patch)    nextEdited.substrate_types    = patch.substrate_types!;
+        if ('humidity_tolerance' in patch) nextEdited.humidity_tolerance = patch.humidity_tolerance!;
+        if ('duty_rating' in patch)        nextEdited.duty_rating        = patch.duty_rating!;
+        if ('finish_type' in patch)        nextEdited.finish_type        = patch.finish_type!;
+        if ('layer_position' in patch) {
+          nextEdited.layer_position = patch.layer_position!;
+          // Apply Fix 2 conditional reshape locally so the modal preview stays consistent.
+          const lp = nextEdited.layer_position;
+          if (isSubstrateFixed(lp)) nextEdited.substrate_types = computeFixedSubstrate(lp, nextEdited.substrate_types);
+          else if (lp === 'primer' || lp === 'standalone')
+            nextEdited.substrate_types = nextEdited.substrate_types.filter(s => s !== 'Over Primer' && s !== 'Over Base Coat');
+          if (isFinishHidden(lp)) nextEdited.finish_type = '';
+        }
+        return { ...r, edited: nextEdited, included: patch.included ?? r.included };
+      }),
+    } : prev);
+  };
+
+  // Apply filter bar + quick filters to the current tab's rows.
+  const filtered = useMemo(() => {
+    const term = searchTerm.trim().toLowerCase();
+    return tabRows.filter(r => {
+      if (term && !r.product_name.toLowerCase().includes(term)) return false;
+      if (taxonomyFilter && !r.taxonomy_path.toLowerCase().includes(taxonomyFilter.toLowerCase())) return false;
+      if (substrateFilter === 'has' && r.edited.substrate_types.length === 0) return false;
+      if (substrateFilter === 'none' && r.edited.substrate_types.length > 0) return false;
+      if (confidenceFilter !== 'all' && r.confidence.overall !== confidenceFilter) return false;
+      if (layerFilter && (r.edited.layer_position || '') !== layerFilter) return false;
+      if (highOnly && r.confidence.overall !== 'high') return false;
+      if (needsLayerOnly && !!r.edited.layer_position) return false;
+      if (unresolvedOnly) {
+        const lp = r.edited.layer_position;
+        const finishOk = isFinishHidden(lp) || !!r.edited.finish_type;
+        const subOk = r.edited.substrate_types.length > 0;
+        const allFilled = subOk && !!r.edited.humidity_tolerance && !!r.edited.duty_rating && finishOk && !!lp;
+        if (allFilled) return false;
+      }
+      return true;
+    });
+  }, [tabRows, searchTerm, taxonomyFilter, substrateFilter, confidenceFilter, layerFilter, highOnly, needsLayerOnly, unresolvedOnly]);
+
+  // Sort the filtered list by the user's chosen key.
+  const visible = useMemo(() => {
+    const confRank: Record<string, number> = { high: 4, medium: 3, low: 2, none: 1 };
+    const arr = [...filtered].sort((a, b) => {
+      let cmp = 0;
+      switch (sortKey) {
+        case 'name':           cmp = a.product_name.localeCompare(b.product_name); break;
+        case 'taxonomy':       cmp = (a.taxonomy_path || '').localeCompare(b.taxonomy_path || ''); break;
+        case 'confidence':     cmp = (confRank[a.confidence.overall] || 0) - (confRank[b.confidence.overall] || 0); break;
+        case 'layer_position': cmp = (a.edited.layer_position || '~').localeCompare(b.edited.layer_position || '~'); break;
+      }
+      return sortDir === 'asc' ? cmp : -cmp;
+    });
+    return arr;
+  }, [filtered, sortKey, sortDir]);
+
+  // Bulk select-all for the currently visible (filtered) rows only.
+  const allVisibleIncluded = visible.length > 0 && visible.every(r => r.included);
+  const visibleSelectedCount = visible.filter(r => r.included).length;
+  const filtersActive = !!(searchTerm || taxonomyFilter || substrateFilter !== 'all' || confidenceFilter !== 'all' || layerFilter || highOnly || needsLayerOnly || unresolvedOnly);
+
+  const clearAllFilters = () => {
+    setSearchTerm('');
+    setTaxonomyFilter('');
+    setSubstrateFilter('all');
+    setConfidenceFilter('all');
+    setLayerFilter('');
+    setHighOnly(false);
+    setNeedsLayerOnly(false);
+    setUnresolvedOnly(false);
+  };
+
+  const toggleSort = (k: ModalSortKey) => {
+    if (sortKey === k) setSortDir(d => d === 'asc' ? 'desc' : 'asc');
+    else { setSortKey(k); setSortDir('asc'); }
+  };
+  const sortIndicator = (k: ModalSortKey) => sortKey !== k ? '' : (sortDir === 'asc' ? ' ↑' : ' ↓');
+
+  const includedCount = all.filter(r => r.included && !r.already_qualified).length;
+  const includedHighCount = high.filter(r => r.included).length;
+
+  return (
+    <div className="absolute inset-0 z-50 bg-slate-900/50 flex items-start justify-center overflow-y-auto"
+         style={{ minHeight: '100vh' }}>
+      <div className="bg-white rounded-lg shadow-2xl my-8 mx-4 w-[min(1280px,95vw)] max-h-[90vh] flex flex-col">
+        {/* Header */}
+        <div className="flex items-center gap-3 px-5 py-4 border-b border-slate-200">
+          <Sparkles size={18} className="text-indigo-600" />
+          <div className="flex-1">
+            <div className="text-base font-semibold text-slate-800">Auto-Qualification Review</div>
+            <div className="text-xs text-slate-500 mt-0.5">
+              {all.length} analysed · {high.length} high confidence · {review.length + none.length} need review · {skipped.length} already qualified (skipped)
+            </div>
+          </div>
+          <button onClick={() => setState(null)} className="p-1.5 text-slate-400 hover:bg-slate-100 rounded">
+            <X size={16} />
+          </button>
+        </div>
+
+        {/* Tabs */}
+        <div className="flex border-b border-slate-200 px-5">
+          {tabs.map(t => (
+            <button
+              key={t.key}
+              onClick={() => setState(prev => prev ? { ...prev, tab: t.key } : prev)}
+              className={`px-4 py-2.5 text-sm border-b-2 transition-colors ${
+                state.tab === t.key
+                  ? 'border-indigo-600 text-indigo-700 font-semibold'
+                  : 'border-transparent text-slate-500 hover:text-slate-700'
+              }`}
+            >
+              {t.label}
+            </button>
+          ))}
+        </div>
+
+        {/* Fix 3: Filter bar + quick filter buttons */}
+        <div className="px-5 py-3 border-b border-slate-200 bg-slate-50/60 space-y-2">
+          <div className="flex flex-wrap items-center gap-2">
+            <div className="relative flex-1 min-w-[180px]">
+              <Search size={12} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-400" />
+              <input
+                type="text"
+                placeholder="Search product…"
+                value={searchTerm}
+                onChange={e => setSearchTerm(e.target.value)}
+                className="w-full pl-7 pr-2 py-1.5 text-xs border border-slate-200 rounded-md outline-none focus:ring-2 focus:ring-indigo-500"
+              />
+            </div>
+            <select
+              value={taxonomyFilter}
+              onChange={e => setTaxonomyFilter(e.target.value)}
+              className="px-2 py-1.5 text-xs border border-slate-200 rounded-md bg-white"
+              title="Taxonomy path filter"
+            >
+              <option value="">All taxonomies</option>
+              {systemRelevantNodes.map(({ node, path, count }) => (
+                <option key={node.id} value={path}>{path} ({count})</option>
+              ))}
+            </select>
+            <select
+              value={substrateFilter}
+              onChange={e => setSubstrateFilter(e.target.value as ModalSubstrateFilter)}
+              className="px-2 py-1.5 text-xs border border-slate-200 rounded-md bg-white"
+            >
+              <option value="all">Substrate: all</option>
+              <option value="has">Has substrate</option>
+              <option value="none">No substrate</option>
+            </select>
+            <select
+              value={confidenceFilter}
+              onChange={e => setConfidenceFilter(e.target.value as ModalConfidenceFilter)}
+              className="px-2 py-1.5 text-xs border border-slate-200 rounded-md bg-white"
+            >
+              <option value="all">Confidence: all</option>
+              <option value="high">High</option>
+              <option value="medium">Medium</option>
+              <option value="low">Low</option>
+              <option value="none">None</option>
+            </select>
+            <select
+              value={layerFilter}
+              onChange={e => setLayerFilter(e.target.value)}
+              className="px-2 py-1.5 text-xs border border-slate-200 rounded-md bg-white"
+              title="Layer Position filter"
+            >
+              <option value="">Layer: all</option>
+              {(vocab?.layer_position || []).map(o => (
+                <option key={o.id} value={o.value}>{o.label}</option>
+              ))}
+            </select>
+            {filtersActive && (
+              <button
+                type="button"
+                onClick={clearAllFilters}
+                className="text-[11px] text-indigo-600 hover:text-indigo-800 underline"
+              >
+                Clear all filters
+              </button>
+            )}
+          </div>
+
+          {/* Quick filter buttons (left) + visibility / selection counter (right) */}
+          <div className="flex flex-wrap items-center gap-2">
+            <span className="text-[10px] uppercase tracking-wide text-slate-400 font-medium">Quick:</span>
+            {([
+              { key: 'unresolved', label: 'Unresolved only', value: unresolvedOnly, set: setUnresolvedOnly },
+              { key: 'highonly',   label: 'High confidence only', value: highOnly, set: setHighOnly },
+              { key: 'needslayer', label: 'Needs layer position', value: needsLayerOnly, set: setNeedsLayerOnly },
+            ] as const).map(b => (
+              <button
+                key={b.key}
+                type="button"
+                onClick={() => b.set(!b.value)}
+                className={`px-2.5 py-1 text-[11px] rounded-full border transition-colors ${
+                  b.value
+                    ? 'bg-indigo-600 text-white border-indigo-600'
+                    : 'bg-white text-slate-600 border-slate-200 hover:border-slate-300'
+                }`}
+              >
+                {b.label}
+              </button>
+            ))}
+            <div className="ml-auto text-[11px] text-slate-500">
+              <span className="font-medium text-slate-700">{visibleSelectedCount} of {visible.length} visible selected</span>
+              {filtersActive && (
+                <span className="ml-2 text-indigo-600">
+                  · Showing {visible.length} of {tabRows.length} {state.tab === 'high' ? 'high-confidence' : state.tab === 'review' ? 'review' : 'no-inference'} products · filters active
+                </span>
+              )}
+            </div>
+          </div>
+        </div>
+
+        {/* Body — table */}
+        <div className="flex-1 overflow-auto">
+          {visible.length === 0 ? (
+            <div className="p-12 text-center text-slate-400 text-sm">
+              {filtersActive ? 'No products match the active filters.' : 'No products in this group.'}
+            </div>
+          ) : (
+            <table className="min-w-full text-sm">
+              <thead className="bg-slate-50 border-b border-slate-200 text-xs uppercase text-slate-500 sticky top-0">
+                <tr>
+                  <th className="px-3 py-2 text-left w-8">
+                    <input
+                      type="checkbox"
+                      checked={allVisibleIncluded}
+                      onChange={(e) => {
+                        const checked = e.target.checked;
+                        setState(prev => prev ? {
+                          ...prev,
+                          rows: prev.rows.map(r => visible.some(v => v.product_id === r.product_id) ? { ...r, included: checked } : r),
+                        } : prev);
+                      }}
+                      title="Select only the currently visible (filtered) rows"
+                    />
+                  </th>
+                  <th className="px-3 py-2 text-left cursor-pointer select-none hover:text-slate-700" onClick={() => toggleSort('name')}>
+                    Product{sortIndicator('name')}
+                  </th>
+                  <th className="px-3 py-2 text-left cursor-pointer select-none hover:text-slate-700" onClick={() => toggleSort('taxonomy')}>
+                    Taxonomy{sortIndicator('taxonomy')}
+                  </th>
+                  {/* Fix 2: Layer Position is the FIRST data column in the modal too */}
+                  <th className="px-3 py-2 text-left w-[160px] cursor-pointer select-none hover:text-slate-700" onClick={() => toggleSort('layer_position')}>
+                    Layer{sortIndicator('layer_position')}
+                  </th>
+                  <th className="px-3 py-2 text-left w-[200px]">Substrate</th>
+                  <th className="px-3 py-2 text-left w-[160px]">Humidity</th>
+                  <th className="px-3 py-2 text-left w-[160px]">Duty</th>
+                  <th className="px-3 py-2 text-left w-[160px]">Finish</th>
+                  <th className="px-3 py-2 text-center w-[90px] cursor-pointer select-none hover:text-slate-700" onClick={() => toggleSort('confidence')}>
+                    Overall{sortIndicator('confidence')}
+                  </th>
+                </tr>
+              </thead>
+              <tbody>
+                {visible.map(r => {
+                  const overall = overallToTone(r.confidence.overall);
+                  const lp = r.edited.layer_position;
+                  return (
+                    <tr key={r.product_id} className="border-b border-slate-100 align-top">
+                      <td className="px-3 py-2">
+                        <input
+                          type="checkbox"
+                          checked={r.included}
+                          onChange={(e) => updateModalRow(r.product_id, { included: e.target.checked })}
+                        />
+                      </td>
+                      <td className="px-3 py-2">
+                        <div className="font-medium text-slate-700 text-xs">{r.product_name}</div>
+                        <div className="text-[11px] text-slate-400">{r.product_id}</div>
+                      </td>
+                      <td className="px-3 py-2 text-xs text-slate-500 max-w-[260px]">
+                        <div className="whitespace-normal break-words leading-snug">{r.taxonomy_path || '—'}</div>
+                      </td>
+                      {/* Layer Position editor */}
+                      <td className="px-3 py-2">
+                        <select
+                          value={lp}
+                          onChange={e => updateModalRow(r.product_id, { layer_position: e.target.value })}
+                          className="w-full h-[32px] px-2 text-xs border border-slate-200 rounded-md bg-white"
+                        >
+                          <option value="">— select —</option>
+                          {(vocab?.layer_position || []).map(o => (
+                            <option key={o.id} value={o.value}>{o.label}</option>
+                          ))}
+                        </select>
+                        <SourceBadge source={r.sources.layer_position} />
+                      </td>
+                      {/* Substrate — conditional per Fix 2 */}
+                      <td className="px-3 py-2">
+                        {(lp === 'base_coat' || lp === 'intermediate') ? (
+                          <span className="inline-block px-2 py-1 text-[11px] rounded-full bg-blue-50 border border-blue-200 text-blue-700 font-medium">
+                            Over Primer
+                          </span>
+                        ) : lp === 'topcoat' ? (
+                          <div className="inline-flex rounded-md border border-slate-200 overflow-hidden text-[11px]">
+                            {(['Over Base Coat', 'Over Primer'] as const).map(opt => {
+                              const cur = r.edited.substrate_types[0] === 'Over Primer' ? 'Over Primer' : 'Over Base Coat';
+                              return (
+                                <button
+                                  key={opt}
+                                  type="button"
+                                  onClick={() => updateModalRow(r.product_id, { substrate_types: [opt] })}
+                                  className={`px-2 py-1 ${cur === opt ? 'bg-blue-600 text-white' : 'bg-white text-slate-600 hover:bg-slate-50'}`}
+                                >{opt}</button>
+                              );
+                            })}
+                          </div>
+                        ) : (
+                          <MultiSelect
+                            options={vocab?.substrate.filter(o => o.value !== 'Over Primer' && o.value !== 'Over Base Coat') || []}
+                            value={r.edited.substrate_types}
+                            onChange={v => updateModalRow(r.product_id, { substrate_types: v })}
+                          />
+                        )}
+                        <SourceBadge source={r.sources.substrate} />
+                      </td>
+                      <td className="px-3 py-2">
+                        <SingleSelect
+                          options={vocab?.humidity || []}
+                          value={r.edited.humidity_tolerance}
+                          onChange={v => updateModalRow(r.product_id, { humidity_tolerance: v })}
+                        />
+                        <SourceBadge source={r.sources.humidity} />
+                      </td>
+                      <td className="px-3 py-2">
+                        <SingleSelect
+                          options={vocab?.duty || []}
+                          value={r.edited.duty_rating}
+                          onChange={v => updateModalRow(r.product_id, { duty_rating: v })}
+                        />
+                        <SourceBadge source={r.sources.duty} />
+                      </td>
+                      <td className="px-3 py-2">
+                        {isFinishHidden(lp) ? (
+                          <span className="inline-block px-2 py-1 text-[11px] text-slate-400 italic">N/A</span>
+                        ) : (
+                          <div className={lp === 'topcoat' && !r.edited.finish_type ? 'ring-1 ring-amber-300 rounded-md' : ''}>
+                            <SingleSelect
+                              options={vocab?.finish || []}
+                              value={r.edited.finish_type}
+                              onChange={v => updateModalRow(r.product_id, { finish_type: v })}
+                              placeholder={lp === 'topcoat' ? 'Required…' : 'Select…'}
+                            />
+                          </div>
+                        )}
+                        <SourceBadge source={r.sources.finish} />
+                      </td>
+                      <td className="px-3 py-2 text-center">
+                        <span className={`inline-block px-2 py-0.5 text-[11px] font-medium border rounded-full ${overall.pill}`}>
+                          {overall.label}
+                        </span>
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          )}
+        </div>
+
+        {/* Footer actions */}
+        <div className="flex items-center gap-2 px-5 py-3 border-t border-slate-200 bg-slate-50">
+          <div className="text-xs text-slate-500">
+            Save High confidence will mark {includedHighCount} products as System-Ready.
+          </div>
+          <div className="ml-auto flex items-center gap-2">
+            <button
+              onClick={() => setState(null)}
+              className="px-3 py-1.5 text-sm text-slate-600 hover:bg-slate-100 rounded-md"
+            >
+              Cancel
+            </button>
+            <button
+              onClick={() => saveBatch(high.filter(r => r.included), true)}
+              disabled={batchSaving || includedHighCount === 0}
+              className="flex items-center gap-1.5 px-3 py-1.5 text-sm bg-emerald-600 text-white rounded-md hover:bg-emerald-700 disabled:opacity-50"
+            >
+              {batchSaving ? <Loader2 size={14} className="animate-spin" /> : <CheckCircle2 size={14} />}
+              Save high confidence ({includedHighCount})
+            </button>
+            <button
+              onClick={() => saveBatch(all.filter(r => r.included && !r.already_qualified), false)}
+              disabled={batchSaving || includedCount === 0}
+              className="flex items-center gap-1.5 px-3 py-1.5 text-sm bg-indigo-600 text-white rounded-md hover:bg-indigo-700 disabled:opacity-50"
+            >
+              {batchSaving ? <Loader2 size={14} className="animate-spin" /> : <Save size={14} />}
+              Save selected ({includedCount})
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+};
+
 // ---------- Main component ----------
 const SystemBuilderQualification: React.FC<Props> = ({ products, treeNodes, onProductUpdate, onProductEdit }) => {
   const [detailProduct, setDetailProduct] = useState<Product | null>(null);
@@ -314,10 +822,22 @@ const SystemBuilderQualification: React.FC<Props> = ({ products, treeNodes, onPr
   const [loadError, setLoadError] = useState<string | null>(null);
   const [bulkSaving, setBulkSaving] = useState(false);
 
+  // Live taxonomy nodes — initialised from prop but refetched on mount and on
+  // visibilitychange so the dropdown never goes stale (Fix 1).
+  const [liveTreeNodes, setLiveTreeNodes] = useState<TreeNode[]>(treeNodes);
+  const [refreshingNodes, setRefreshingNodes] = useState(false);
+  const [taxonomyJustRefreshed, setTaxonomyJustRefreshed] = useState(false);
+
   // Filters
   const [searchTerm, setSearchTerm] = useState('');
   const [nodeFilter, setNodeFilter] = useState<string>(''); // '' = all
   const [statusFilter, setStatusFilter] = useState<StatusFilter>('all');
+  // Fix 4: extra filters / sort / quick pills for the main table
+  const [layerFilter, setLayerFilter] = useState<string>(''); // '' = all
+  const [confidenceFilter, setConfidenceFilter] = useState<'all' | Confidence>('all');
+  const [mainSortKey, setMainSortKey] = useState<MainSortKey>('name');
+  const [mainSortDir, setMainSortDir] = useState<SortDir>('asc');
+  const [mainQuickFilter, setMainQuickFilter] = useState<MainQuickFilter>('none');
 
   // Selected product IDs (for bulk actions)
   const [selected, setSelected] = useState<Set<string>>(new Set());
@@ -358,6 +878,8 @@ const SystemBuilderQualification: React.FC<Props> = ({ products, treeNodes, onPr
           humidity: vocabData.humidity || [],
           duty: vocabData.duty || [],
           finish: vocabData.finish || [],
+          // layer_position is the new vocab driving Fix 2 conditional UI.
+          layer_position: (vocabData as any).layer_position || [],
         });
 
         // Load tags in batches of 20 to avoid spamming the server with
@@ -395,20 +917,62 @@ const SystemBuilderQualification: React.FC<Props> = ({ products, treeNodes, onPr
   }, [products.length]);
 
   // -------------------------------------------------------------------------
-  // Derived: system-relevant taxonomy nodes for the dropdown.
+  // Fix 1 — Live taxonomy refresh
   // -------------------------------------------------------------------------
-  const systemRelevantNodes = useMemo(() => {
-    return treeNodes
-      .filter(n => {
-        const lower = n.name.toLowerCase();
-        return SYSTEM_RELEVANT_KEYWORDS.some(k => lower.includes(k));
-      })
-      .sort((a, b) => a.name.localeCompare(b.name));
+  // Refetch GET /api/tree-nodes on demand. Triggered on mount, on
+  // visibilitychange (tab focus), and via a manual refresh button so the
+  // dropdown never shows stale data after the taxonomy is edited elsewhere.
+  const refetchTreeNodes = useCallback(async (silent = false) => {
+    if (!silent) setRefreshingNodes(true);
+    try {
+      const res = await fetch(`${API_BASE}/tree-nodes`, { headers: authHeaders() });
+      if (!res.ok) throw new Error(`Tree nodes fetch failed (${res.status})`);
+      // Backend returns DB rows: { id (serial), nodeId (string), parentId, name, ... }
+      // Frontend TreeNode expects `id` to be the business `nodeId` string (matches
+      // App.tsx). Without this mapping, dropdown filters and full-path lookup
+      // mismatch product.nodeId references and break taxonomy resolution.
+      const raw: any[] = await res.json();
+      const fresh: TreeNode[] = (Array.isArray(raw) ? raw : []).map((n: any) => ({
+        id: n.nodeId,
+        name: n.name,
+        type: n.type as any,
+        parentId: n.parentId,
+        description: n.description || undefined,
+        metadata: n.metadata as any,
+        branchCode: n.branchCode || undefined,
+      }));
+      setLiveTreeNodes(fresh);
+      if (!silent) {
+        setTaxonomyJustRefreshed(true);
+        setTimeout(() => setTaxonomyJustRefreshed(false), 1200);
+      }
+    } catch (err) {
+      // Non-fatal — keep the existing taxonomy in state.
+      console.warn('Could not refresh taxonomy nodes:', err);
+    } finally {
+      if (!silent) setRefreshingNodes(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    // Mount-time refresh (component remounts when the tab becomes active in
+    // SystemBuilder), plus visibilitychange covers when the user toggles back
+    // to this browser tab.
+    refetchTreeNodes(true);
+    const onVis = () => { if (!document.hidden) refetchTreeNodes(true); };
+    document.addEventListener('visibilitychange', onVis);
+    return () => document.removeEventListener('visibilitychange', onVis);
+  }, [refetchTreeNodes]);
+
+  // Keep liveTreeNodes in sync if the parent's prop changes (e.g. user just
+  // edited the tree in another tab and we get fresh props).
+  useEffect(() => {
+    setLiveTreeNodes(treeNodes);
   }, [treeNodes]);
 
   // Build a quick lookup of nodeId -> path string for display
   const nodePath = useMemo(() => {
-    const byId = new Map<string, TreeNode>(treeNodes.map(n => [n.id, n] as const));
+    const byId = new Map<string, TreeNode>(liveTreeNodes.map(n => [n.id, n] as const));
     const cache = new Map<string, string>();
     const compute = (id: string | undefined): string => {
       if (!id) return '—';
@@ -426,14 +990,39 @@ const SystemBuilderQualification: React.FC<Props> = ({ products, treeNodes, onPr
       return out;
     };
     return compute;
-  }, [treeNodes]);
+  }, [liveTreeNodes]);
+
+  // Per-node product count, derived from the products list.
+  const productCountByNode = useMemo(() => {
+    const m = new Map<string, number>();
+    for (const p of products) {
+      if (!p.nodeId) continue;
+      m.set(p.nodeId, (m.get(p.nodeId) || 0) + 1);
+    }
+    return m;
+  }, [products]);
+
+  // -------------------------------------------------------------------------
+  // Derived: system-relevant taxonomy nodes for the dropdown.
+  // Sorted alphabetically by their FULL path (Fix 1) so users can scan the
+  // dropdown in a stable, hierarchical order.
+  // -------------------------------------------------------------------------
+  const systemRelevantNodes = useMemo(() => {
+    return liveTreeNodes
+      .filter(n => {
+        const lower = n.name.toLowerCase();
+        return SYSTEM_RELEVANT_KEYWORDS.some(k => lower.includes(k));
+      })
+      .map(n => ({ node: n, path: nodePath(n.id), count: productCountByNode.get(n.id) || 0 }))
+      .sort((a, b) => a.path.localeCompare(b.path));
+  }, [liveTreeNodes, nodePath, productCountByNode]);
 
   // -------------------------------------------------------------------------
   // Filtering
   // -------------------------------------------------------------------------
   const filteredProducts = useMemo(() => {
     const term = searchTerm.trim().toLowerCase();
-    return products.filter(p => {
+    const base = products.filter(p => {
       if (term) {
         const matches =
           p.name.toLowerCase().includes(term) ||
@@ -441,14 +1030,54 @@ const SystemBuilderQualification: React.FC<Props> = ({ products, treeNodes, onPr
         if (!matches) return false;
       }
       if (nodeFilter && p.nodeId !== nodeFilter) return false;
+      const r = rows[p.id];
       if (statusFilter !== 'all') {
-        const r = rows[p.id];
         if (statusFilter === 'ready' && !(r && r.isSystemReady)) return false;
         if (statusFilter === 'unqualified' && hasAnyTagData(r)) return false;
       }
+      // Fix 4: Layer-position filter
+      if (layerFilter && (r?.layerPosition || '') !== layerFilter) return false;
+      // Fix 4: Confidence filter (uses captured rowConfidence, fallback 'manual'→'none')
+      if (confidenceFilter !== 'all') {
+        const c = rowConfidence[p.id];
+        if (!c || c !== confidenceFilter) return false;
+      }
+      // Fix 4: Quick filter pills
+      if (mainQuickFilter !== 'none') {
+        if (mainQuickFilter === 'needs_layer' && !!r?.layerPosition) return false;
+        if (mainQuickFilter === 'missing_substrate' && (r?.substrateTypes.length ?? 0) > 0) return false;
+        if (mainQuickFilter === 'missing_duty' && !!r?.dutyRating) return false;
+        if (mainQuickFilter === 'missing_finish') {
+          // For primers Finish is hidden — never count those rows as "missing finish"
+          if (r && isFinishHidden(r.layerPosition)) return false;
+          if (!!r?.finishType) return false;
+        }
+      }
       return true;
     });
-  }, [products, searchTerm, nodeFilter, statusFilter, rows]);
+
+    // Fix 4 — sort the filtered result. Confidence ranks high→low so a
+    // descending sort places "high" first; "manual" / no-inference is treated
+    // as the lowest rank so it sinks to the bottom.
+    const confRank: Record<string, number> = { high: 4, medium: 3, low: 2, none: 1 };
+    const score = (id: string) => confRank[rowConfidence[id] || ''] || 0;
+    const sorted = [...base].sort((a, b) => {
+      let cmp = 0;
+      switch (mainSortKey) {
+        case 'name':       cmp = a.name.localeCompare(b.name); break;
+        case 'taxonomy':   cmp = nodePath(a.nodeId).localeCompare(nodePath(b.nodeId)); break;
+        case 'confidence': cmp = score(b.id) - score(a.id); break;
+        case 'ready': {
+          const ar = rows[a.id]?.isSystemReady ? 1 : 0;
+          const br = rows[b.id]?.isSystemReady ? 1 : 0;
+          cmp = br - ar;
+          break;
+        }
+      }
+      return mainSortDir === 'asc' ? cmp : -cmp;
+    });
+    return sorted;
+  }, [products, searchTerm, nodeFilter, statusFilter, layerFilter, confidenceFilter, mainQuickFilter, rows, rowConfidence, nodePath, mainSortKey, mainSortDir]);
 
   // -------------------------------------------------------------------------
   // Summary stats — global (across ALL products, not just filtered).
@@ -465,15 +1094,47 @@ const SystemBuilderQualification: React.FC<Props> = ({ products, treeNodes, onPr
   }, [products, rows]);
 
   // -------------------------------------------------------------------------
+  // Fix 4 — Quick-pill counts (across ALL products so the badge stays stable
+  // regardless of the active text/dropdown filters).
+  // -------------------------------------------------------------------------
+  const quickCounts = useMemo(() => {
+    let needsLayer = 0, missingSub = 0, missingDuty = 0, missingFinish = 0;
+    for (const p of products) {
+      const r = rows[p.id];
+      if (!r?.layerPosition) needsLayer++;
+      if (!r || r.substrateTypes.length === 0) missingSub++;
+      if (!r?.dutyRating) missingDuty++;
+      if (!(r && isFinishHidden(r.layerPosition)) && !r?.finishType) missingFinish++;
+    }
+    return { needsLayer, missingSub, missingDuty, missingFinish };
+  }, [products, rows]);
+
+  // -------------------------------------------------------------------------
   // Row mutations
   // -------------------------------------------------------------------------
   const updateRow = (productId: string, patch: Partial<RowState>) => {
     setRows(prev => {
       const cur = prev[productId] || emptyRow();
-      return {
-        ...prev,
-        [productId]: { ...cur, ...patch, dirty: true, savedFlash: false, error: null },
-      };
+      const next: RowState = { ...cur, ...patch, dirty: true, savedFlash: false, error: null };
+
+      // Fix 2: when Layer Position changes, immediately reshape derived
+      // fields so the row is internally consistent (and so the user never
+      // has a chance to save a Finish on a Primer, etc.).
+      if ('layerPosition' in patch && patch.layerPosition !== cur.layerPosition) {
+        const lp = next.layerPosition;
+        if (isSubstrateFixed(lp)) {
+          next.substrateTypes = computeFixedSubstrate(lp, cur.substrateTypes);
+        } else if (lp === 'primer' || lp === 'standalone') {
+          // Switching FROM a fixed-substrate layer back to a structural layer:
+          // drop any "Over Primer" / "Over Base Coat" leftover that no longer
+          // belongs to a structural substrate vocabulary.
+          next.substrateTypes = cur.substrateTypes.filter(s => s !== 'Over Primer' && s !== 'Over Base Coat');
+        }
+        if (isFinishHidden(lp)) {
+          next.finishType = '';
+        }
+      }
+      return { ...prev, [productId]: next };
     });
   };
 
@@ -482,12 +1143,22 @@ const SystemBuilderQualification: React.FC<Props> = ({ products, treeNodes, onPr
     if (!r) return false;
     setRows(prev => ({ ...prev, [productId]: { ...prev[productId], saving: true, error: null } }));
     try {
+      // Apply Fix 2 conditional rules at save-time too: when a layer position
+      // forces a fixed substrate or hides Finish, ensure we never persist a
+      // stale value that the UI was hiding from the user.
+      const lp = r.layerPosition;
+      const substratePersist = isSubstrateFixed(lp)
+        ? computeFixedSubstrate(lp, r.substrateTypes)
+        : (r.substrateTypes.length > 0 ? r.substrateTypes : null);
+      const finishPersist = isFinishHidden(lp) ? null : (r.finishType || null);
+
       const body = {
         productId,
-        substrateTypes: r.substrateTypes.length > 0 ? r.substrateTypes : null,
+        layerPosition: lp || null,
+        substrateTypes: substratePersist,
         humidityTolerance: r.humidityTolerance || null,
         dutyRating: r.dutyRating || null,
-        finishType: r.finishType || null,
+        finishType: finishPersist,
         isSystemReady: r.isSystemReady,
       };
       // POST upserts — works for both new and existing tags.
@@ -576,6 +1247,7 @@ const SystemBuilderQualification: React.FC<Props> = ({ products, treeNodes, onPr
     humidity_tolerance: s.humidity_tolerance || '',
     duty_rating: s.duty_rating || '',
     finish_type: s.finish_type || '',
+    layer_position: s.layer_position || '',
   });
 
   const runAutoInfer = async (productIds: string[]) => {
@@ -622,6 +1294,7 @@ const SystemBuilderQualification: React.FC<Props> = ({ products, treeNodes, onPr
         ...prev,
         [productId]: {
           ...(prev[productId] || emptyRow()),
+          layerPosition: r.suggested.layer_position || '',
           substrateTypes: r.suggested.substrate_types || [],
           humidityTolerance: r.suggested.humidity_tolerance || '',
           dutyRating: r.suggested.duty_rating || '',
@@ -647,30 +1320,46 @@ const SystemBuilderQualification: React.FC<Props> = ({ products, treeNodes, onPr
     if (rowsToSave.length === 0 || batchSaving) return;
     setBatchSaving(true);
     try {
-      const payload = rowsToSave.map(r => ({
-        product_id: r.product_id,
-        substrate_types: r.edited.substrate_types,
-        humidity_tolerance: r.edited.humidity_tolerance || null,
-        duty_rating: r.edited.duty_rating || null,
-        finish_type: r.edited.finish_type || null,
-        is_system_ready: markReady,
-      }));
+      const payload = rowsToSave.map(r => {
+        // Apply Fix 2 conditional rules: never persist a Finish for primers,
+        // and force the substrate value when the layer position dictates it.
+        const lp = r.edited.layer_position || '';
+        const substrate = isSubstrateFixed(lp)
+          ? computeFixedSubstrate(lp, r.edited.substrate_types)
+          : r.edited.substrate_types;
+        const finish = isFinishHidden(lp) ? null : (r.edited.finish_type || null);
+        return {
+          product_id: r.product_id,
+          layer_position: lp || null,
+          substrate_types: substrate,
+          humidity_tolerance: r.edited.humidity_tolerance || null,
+          duty_rating: r.edited.duty_rating || null,
+          finish_type: finish,
+          is_system_ready: markReady,
+        };
+      });
       const res = await fetch(`${API_BASE}/qualification-tags/auto-save-batch`, {
         method: 'POST',
         headers: authHeaders(),
         body: JSON.stringify({ tags: payload }),
       });
       if (!res.ok) throw new Error(`Batch save failed (${res.status})`);
-      // Reflect saved values into the table immediately.
+      // Reflect saved values into the table immediately. We re-derive substrate
+      // and finish from the same `payload` we just sent so the local row state
+      // exactly mirrors what was persisted (Fix 2: conditional reshape applied
+      // — fixed substrate pills, primer-finish nulled — and layerPosition is
+      // preserved so the row keeps rendering in conditional mode).
       setRows(prev => {
         const next = { ...prev };
         const conf: Record<string, Confidence> = { ...rowConfidence };
         rowsToSave.forEach((r, idx) => {
+          const sent = payload[idx];
           next[r.product_id] = {
-            substrateTypes: r.edited.substrate_types,
-            humidityTolerance: r.edited.humidity_tolerance,
-            dutyRating: r.edited.duty_rating,
-            finishType: r.edited.finish_type,
+            layerPosition: sent.layer_position || '',
+            substrateTypes: sent.substrate_types,
+            humidityTolerance: sent.humidity_tolerance || '',
+            dutyRating: sent.duty_rating || '',
+            finishType: sent.finish_type || '',
             isSystemReady: markReady,
             exists: true,
             dirty: false,
@@ -842,43 +1531,150 @@ const SystemBuilderQualification: React.FC<Props> = ({ products, treeNodes, onPr
         )}
       </div>
 
-      {/* Section A — Search & filter bar */}
-      <div className="flex flex-wrap items-center gap-2 p-3 bg-white border border-slate-200 rounded-lg">
-        <div className="relative flex-1 min-w-[220px]">
-          <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
-          <input
-            type="text"
-            placeholder="Search by product name or code…"
-            value={searchTerm}
-            onChange={e => setSearchTerm(e.target.value)}
-            className="w-full pl-9 pr-3 py-2 text-sm border border-slate-200 rounded-md focus:ring-2 focus:ring-blue-500 outline-none"
-          />
-        </div>
-        <div className="flex items-center gap-2">
-          <Filter size={14} className="text-slate-400" />
+      {/* Section A — Search & filter bar (Fix 1: live taxonomy + path + counts; Fix 4: layer/conf filters + sort + quick pills) */}
+      <div className="space-y-2">
+        <div className="flex flex-wrap items-center gap-2 p-3 bg-white border border-slate-200 rounded-lg">
+          <div className="relative flex-1 min-w-[220px]">
+            <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+            <input
+              type="text"
+              placeholder="Search by product name or code…"
+              value={searchTerm}
+              onChange={e => setSearchTerm(e.target.value)}
+              className="w-full pl-9 pr-3 py-2 text-sm border border-slate-200 rounded-md focus:ring-2 focus:ring-blue-500 outline-none"
+            />
+          </div>
+
+          {/* Fix 1: taxonomy dropdown shows full path + per-node product count;
+              refresh button forces a refetch from the server. */}
+          <div className="flex items-center gap-1.5">
+            <Filter size={14} className="text-slate-400" />
+            <select
+              value={nodeFilter}
+              onChange={e => setNodeFilter(e.target.value)}
+              className="px-3 py-2 text-sm border border-slate-200 rounded-md bg-white focus:ring-2 focus:ring-blue-500 outline-none min-w-[260px]"
+              title="Taxonomy filter — shows full taxonomy path and product count per node"
+            >
+              <option value="">All taxonomy nodes</option>
+              {systemRelevantNodes.map(({ node, path, count }) => (
+                <option key={node.id} value={node.id}>
+                  {path} ({count})
+                </option>
+              ))}
+            </select>
+            <button
+              type="button"
+              onClick={() => refetchTreeNodes(false)}
+              disabled={refreshingNodes}
+              title="Refresh taxonomy from server"
+              className={`p-1.5 rounded-md border ${
+                taxonomyJustRefreshed
+                  ? 'border-emerald-300 text-emerald-600 bg-emerald-50'
+                  : 'border-slate-200 text-slate-500 hover:bg-slate-50'
+              } disabled:opacity-50`}
+            >
+              <RefreshCw size={14} className={refreshingNodes ? 'animate-spin' : ''} />
+            </button>
+          </div>
+
           <select
-            value={nodeFilter}
-            onChange={e => setNodeFilter(e.target.value)}
+            value={statusFilter}
+            onChange={e => setStatusFilter(e.target.value as StatusFilter)}
             className="px-3 py-2 text-sm border border-slate-200 rounded-md bg-white focus:ring-2 focus:ring-blue-500 outline-none"
-            title="Taxonomy filter (PU, Epoxy, Polyurea, Acrylic branches)"
           >
-            <option value="">All taxonomy nodes</option>
-            {systemRelevantNodes.map(n => (
-              <option key={n.id} value={n.id}>{n.name}</option>
+            <option value="all">All products</option>
+            <option value="ready">System-ready only</option>
+            <option value="unqualified">Not yet qualified</option>
+          </select>
+
+          {/* Fix 4: layer-position + confidence filters */}
+          <select
+            value={layerFilter}
+            onChange={e => setLayerFilter(e.target.value)}
+            className="px-3 py-2 text-sm border border-slate-200 rounded-md bg-white focus:ring-2 focus:ring-blue-500 outline-none"
+            title="Filter by Layer Position"
+          >
+            <option value="">All layer positions</option>
+            {(vocab?.layer_position || []).map(o => (
+              <option key={o.id} value={o.value}>{o.label}</option>
             ))}
           </select>
+          <select
+            value={confidenceFilter}
+            onChange={e => setConfidenceFilter(e.target.value as 'all' | Confidence)}
+            className="px-3 py-2 text-sm border border-slate-200 rounded-md bg-white focus:ring-2 focus:ring-blue-500 outline-none"
+            title="Filter by overall inference confidence"
+          >
+            <option value="all">All confidence</option>
+            <option value="high">High</option>
+            <option value="medium">Medium</option>
+            <option value="low">Low</option>
+            <option value="none">None</option>
+          </select>
+
+          {/* Fix 4: sort */}
+          <div className="flex items-center gap-1 text-xs text-slate-500">
+            <ArrowUpDown size={12} />
+            <span>Sort:</span>
+            <select
+              value={mainSortKey}
+              onChange={e => setMainSortKey(e.target.value as MainSortKey)}
+              className="px-2 py-1.5 text-xs border border-slate-200 rounded-md bg-white"
+            >
+              <option value="name">Product name</option>
+              <option value="taxonomy">Taxonomy</option>
+              <option value="confidence">Confidence</option>
+              <option value="ready">System-ready</option>
+            </select>
+            <button
+              type="button"
+              onClick={() => setMainSortDir(d => d === 'asc' ? 'desc' : 'asc')}
+              className="px-2 py-1.5 text-xs border border-slate-200 rounded-md bg-white hover:bg-slate-50"
+              title={`Direction: ${mainSortDir === 'asc' ? 'ascending' : 'descending'}`}
+            >
+              {mainSortDir === 'asc' ? '↑ A→Z' : '↓ Z→A'}
+            </button>
+          </div>
+
+          <div className="text-xs text-slate-500 ml-auto whitespace-nowrap">
+            Showing {filteredProducts.length} of {products.length}
+          </div>
         </div>
-        <select
-          value={statusFilter}
-          onChange={e => setStatusFilter(e.target.value as StatusFilter)}
-          className="px-3 py-2 text-sm border border-slate-200 rounded-md bg-white focus:ring-2 focus:ring-blue-500 outline-none"
-        >
-          <option value="all">All products</option>
-          <option value="ready">System-ready only</option>
-          <option value="unqualified">Not yet qualified</option>
-        </select>
-        <div className="text-xs text-slate-500 ml-auto">
-          Showing {filteredProducts.length} of {products.length}
+
+        {/* Fix 4: Quick filter pills with live counts */}
+        <div className="flex flex-wrap items-center gap-2 px-1">
+          <span className="text-[11px] uppercase tracking-wide text-slate-400 font-medium">Quick filters:</span>
+          {([
+            { key: 'needs_layer',       label: 'Needs layer position', count: quickCounts.needsLayer },
+            { key: 'missing_substrate', label: 'Missing substrate',    count: quickCounts.missingSub },
+            { key: 'missing_duty',      label: 'Missing duty',         count: quickCounts.missingDuty },
+            { key: 'missing_finish',    label: 'Missing finish',       count: quickCounts.missingFinish },
+          ] as Array<{ key: MainQuickFilter; label: string; count: number }>).map(pill => {
+            const active = mainQuickFilter === pill.key;
+            return (
+              <button
+                key={pill.key}
+                type="button"
+                onClick={() => setMainQuickFilter(active ? 'none' : pill.key)}
+                className={`px-2.5 py-1 text-xs rounded-full border transition-colors ${
+                  active
+                    ? 'bg-indigo-600 text-white border-indigo-600'
+                    : 'bg-white text-slate-600 border-slate-200 hover:border-slate-300'
+                }`}
+              >
+                {pill.label} <span className={`ml-1 ${active ? 'text-indigo-100' : 'text-slate-400'}`}>({pill.count})</span>
+              </button>
+            );
+          })}
+          {mainQuickFilter !== 'none' && (
+            <button
+              type="button"
+              onClick={() => setMainQuickFilter('none')}
+              className="text-xs text-slate-500 hover:text-slate-700 underline"
+            >
+              Clear quick filter
+            </button>
+          )}
         </div>
       </div>
 
@@ -940,6 +1736,9 @@ const SystemBuilderQualification: React.FC<Props> = ({ products, treeNodes, onPr
                 </th>
                 <th className="px-3 py-2 text-left">Product</th>
                 <th className="px-3 py-2 text-left">Taxonomy</th>
+                {/* Fix 2: Layer Position is the FIRST qualification column — it
+                    drives the conditional rendering of every column to its right. */}
+                <th className="px-3 py-2 text-left w-[160px]">Layer Position</th>
                 <th className="px-3 py-2 text-left w-[180px]">Substrate</th>
                 <th className="px-3 py-2 text-left w-[140px]">Humidity</th>
                 <th className="px-3 py-2 text-left w-[130px]">Duty</th>
@@ -952,7 +1751,7 @@ const SystemBuilderQualification: React.FC<Props> = ({ products, treeNodes, onPr
             <tbody>
               {filteredProducts.length === 0 && !loadingTags && (
                 <tr key="__empty__">
-                  <td colSpan={9} className="px-3 py-8 text-center text-slate-400 text-sm">
+                  <td colSpan={10} className="px-3 py-8 text-center text-slate-400 text-sm">
                     No products match the current filters.
                   </td>
                 </tr>
@@ -1021,13 +1820,66 @@ const SystemBuilderQualification: React.FC<Props> = ({ products, treeNodes, onPr
                         {nodePath(p.nodeId)}
                       </div>
                     </td>
+
+                    {/* Fix 2: Layer Position single-select (FIRST data column).
+                        When empty, show a subtle hint underneath the dropdown
+                        instead of a hard validation message. */}
                     <td className="px-3 py-2 align-top">
-                      <MultiSelect
-                        options={vocab?.substrate || []}
-                        value={r.substrateTypes}
-                        onChange={v => updateRow(p.id, { substrateTypes: v })}
+                      <SingleSelect
+                        options={vocab?.layer_position || []}
+                        value={r.layerPosition}
+                        onChange={v => updateRow(p.id, { layerPosition: v })}
                         disabled={r.saving}
+                        placeholder="— select —"
                       />
+                      {!r.layerPosition && (
+                        <div className="text-[10px] text-slate-400 mt-0.5">
+                          Set for smarter fields
+                        </div>
+                      )}
+                    </td>
+
+                    {/* Substrate — three modes:
+                        a) base_coat / intermediate → forced "Over Primer" pill
+                        b) topcoat → 2-option pill toggle (Over Base Coat / Over Primer)
+                        c) primer / standalone / null → standard MultiSelect */}
+                    <td className="px-3 py-2 align-top">
+                      {(() => {
+                        const lp = r.layerPosition;
+                        if (lp === 'base_coat' || lp === 'intermediate') {
+                          return (
+                            <span className="inline-block px-2 py-1 text-xs rounded-full bg-blue-50 border border-blue-200 text-blue-700 font-medium">
+                              Over Primer
+                            </span>
+                          );
+                        }
+                        if (lp === 'topcoat') {
+                          const cur = r.substrateTypes[0] === 'Over Primer' ? 'Over Primer' : 'Over Base Coat';
+                          return (
+                            <div className="inline-flex rounded-md border border-slate-200 overflow-hidden text-[11px]">
+                              {(['Over Base Coat', 'Over Primer'] as const).map(opt => (
+                                <button
+                                  key={opt}
+                                  type="button"
+                                  disabled={r.saving}
+                                  onClick={() => updateRow(p.id, { substrateTypes: [opt] })}
+                                  className={`px-2 py-1 ${cur === opt ? 'bg-blue-600 text-white' : 'bg-white text-slate-600 hover:bg-slate-50'}`}
+                                >
+                                  {opt}
+                                </button>
+                              ))}
+                            </div>
+                          );
+                        }
+                        return (
+                          <MultiSelect
+                            options={vocab?.substrate.filter(o => o.value !== 'Over Primer' && o.value !== 'Over Base Coat') || []}
+                            value={r.substrateTypes}
+                            onChange={v => updateRow(p.id, { substrateTypes: v })}
+                            disabled={r.saving}
+                          />
+                        );
+                      })()}
                     </td>
                     <td className="px-3 py-2 align-top">
                       <SingleSelect
@@ -1045,13 +1897,23 @@ const SystemBuilderQualification: React.FC<Props> = ({ products, treeNodes, onPr
                         disabled={r.saving}
                       />
                     </td>
+                    {/* Finish — hidden (rendered as N/A placeholder) for primers
+                        per Fix 2 spec; required-style outline for topcoats. */}
                     <td className="px-3 py-2 align-top">
-                      <SingleSelect
-                        options={vocab?.finish || []}
-                        value={r.finishType}
-                        onChange={v => updateRow(p.id, { finishType: v })}
-                        disabled={r.saving}
-                      />
+                      {isFinishHidden(r.layerPosition) ? (
+                        <span className="inline-block px-2 py-1 text-[11px] text-slate-400 italic">N/A</span>
+                      ) : (
+                        <div className={r.layerPosition === 'topcoat' && !r.finishType ? 'ring-1 ring-amber-300 rounded-md' : ''}
+                             title={r.layerPosition === 'topcoat' ? 'Required for topcoats' : undefined}>
+                          <SingleSelect
+                            options={vocab?.finish || []}
+                            value={r.finishType}
+                            onChange={v => updateRow(p.id, { finishType: v })}
+                            disabled={r.saving}
+                            placeholder={r.layerPosition === 'topcoat' ? 'Required…' : 'Select…'}
+                          />
+                        </div>
+                      )}
                     </td>
                     {/* Confidence — auto-inference confidence dot. Grey = manually set
                         (we never recorded an inference for this row). */}
@@ -1131,198 +1993,19 @@ const SystemBuilderQualification: React.FC<Props> = ({ products, treeNodes, onPr
       </div>
 
       {/* Auto-Qualification Review Modal — uses min-height wrapper instead of
-          position:fixed (per design rules). Backdrop covers viewport. */}
-      {reviewModal && (() => {
-        const all = reviewModal.rows;
-        const skipped = all.filter(r => r.already_qualified);
-        const eligible = all.filter(r => !r.already_qualified);
-        const high = eligible.filter(r => r.confidence.overall === 'high');
-        const review = eligible.filter(r => r.confidence.overall === 'medium' || r.confidence.overall === 'low');
-        const none = eligible.filter(r => r.confidence.overall === 'none');
-        const tabs: Array<{ key: ReviewTab; label: string; rows: AutoInferRow[] }> = [
-          { key: 'high',   label: `High confidence (${high.length})`, rows: high },
-          { key: 'review', label: `Needs review (${review.length})`, rows: review },
-          { key: 'none',   label: `Could not infer (${none.length})`, rows: none },
-        ];
-        const visible = tabs.find(t => t.key === reviewModal.tab)!.rows;
-
-        const updateModalRow = (productId: string, patch: Partial<AutoInferRow['edited']> & { included?: boolean }) => {
-          setReviewModal(prev => prev ? {
-            ...prev,
-            rows: prev.rows.map(r => r.product_id !== productId ? r : ({
-              ...r,
-              edited: { ...r.edited, ...('substrate_types' in patch ? { substrate_types: patch.substrate_types! } : {}),
-                                     ...('humidity_tolerance' in patch ? { humidity_tolerance: patch.humidity_tolerance! } : {}),
-                                     ...('duty_rating' in patch ? { duty_rating: patch.duty_rating! } : {}),
-                                     ...('finish_type' in patch ? { finish_type: patch.finish_type! } : {}) },
-              included: patch.included ?? r.included,
-            })),
-          } : prev);
-        };
-
-        return (
-          <div className="absolute inset-0 z-50 bg-slate-900/50 flex items-start justify-center overflow-y-auto"
-               style={{ minHeight: '100vh' }}>
-            <div className="bg-white rounded-lg shadow-2xl my-8 mx-4 w-[min(1200px,95vw)] max-h-[90vh] flex flex-col">
-              {/* Header */}
-              <div className="flex items-center gap-3 px-5 py-4 border-b border-slate-200">
-                <Sparkles size={18} className="text-indigo-600" />
-                <div className="flex-1">
-                  <div className="text-base font-semibold text-slate-800">Auto-Qualification Review</div>
-                  <div className="text-xs text-slate-500 mt-0.5">
-                    {all.length} analysed · {high.length} high confidence · {review.length + none.length} need review · {skipped.length} already qualified (skipped)
-                  </div>
-                </div>
-                <button onClick={() => setReviewModal(null)} className="p-1.5 text-slate-400 hover:bg-slate-100 rounded">
-                  <X size={16} />
-                </button>
-              </div>
-
-              {/* Tabs */}
-              <div className="flex border-b border-slate-200 px-5">
-                {tabs.map(t => (
-                  <button
-                    key={t.key}
-                    onClick={() => setReviewModal(prev => prev ? { ...prev, tab: t.key } : prev)}
-                    className={`px-4 py-2.5 text-sm border-b-2 transition-colors ${
-                      reviewModal.tab === t.key
-                        ? 'border-indigo-600 text-indigo-700 font-semibold'
-                        : 'border-transparent text-slate-500 hover:text-slate-700'
-                    }`}
-                  >
-                    {t.label}
-                  </button>
-                ))}
-              </div>
-
-              {/* Body — table */}
-              <div className="flex-1 overflow-auto">
-                {visible.length === 0 ? (
-                  <div className="p-12 text-center text-slate-400 text-sm">No products in this group.</div>
-                ) : (
-                  <table className="min-w-full text-sm">
-                    <thead className="bg-slate-50 border-b border-slate-200 text-xs uppercase text-slate-500 sticky top-0">
-                      <tr>
-                        <th className="px-3 py-2 text-left w-8">
-                          <input
-                            type="checkbox"
-                            checked={visible.every(r => r.included)}
-                            onChange={(e) => {
-                              const checked = e.target.checked;
-                              setReviewModal(prev => prev ? {
-                                ...prev,
-                                rows: prev.rows.map(r => visible.some(v => v.product_id === r.product_id) ? { ...r, included: checked } : r),
-                              } : prev);
-                            }}
-                          />
-                        </th>
-                        <th className="px-3 py-2 text-left">Product</th>
-                        <th className="px-3 py-2 text-left">Taxonomy</th>
-                        <th className="px-3 py-2 text-left w-[200px]">Substrate</th>
-                        <th className="px-3 py-2 text-left w-[160px]">Humidity</th>
-                        <th className="px-3 py-2 text-left w-[160px]">Duty</th>
-                        <th className="px-3 py-2 text-left w-[160px]">Finish</th>
-                        <th className="px-3 py-2 text-center w-[90px]">Overall</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {visible.map(r => {
-                        const overall = overallToTone(r.confidence.overall);
-                        return (
-                          <tr key={r.product_id} className="border-b border-slate-100 align-top">
-                            <td className="px-3 py-2">
-                              <input
-                                type="checkbox"
-                                checked={r.included}
-                                onChange={(e) => updateModalRow(r.product_id, { included: e.target.checked })}
-                              />
-                            </td>
-                            <td className="px-3 py-2">
-                              <div className="font-medium text-slate-700 text-xs">{r.product_name}</div>
-                              <div className="text-[11px] text-slate-400">{r.product_id}</div>
-                            </td>
-                            <td className="px-3 py-2 text-xs text-slate-500 max-w-[260px]">
-                              <div className="whitespace-normal break-words leading-snug">{r.taxonomy_path || '—'}</div>
-                            </td>
-                            <td className="px-3 py-2">
-                              <MultiSelect
-                                options={vocab?.substrate || []}
-                                value={r.edited.substrate_types}
-                                onChange={v => updateModalRow(r.product_id, { substrate_types: v })}
-                              />
-                              <SourceBadge source={r.sources.substrate} />
-                            </td>
-                            <td className="px-3 py-2">
-                              <SingleSelect
-                                options={vocab?.humidity || []}
-                                value={r.edited.humidity_tolerance}
-                                onChange={v => updateModalRow(r.product_id, { humidity_tolerance: v })}
-                              />
-                              <SourceBadge source={r.sources.humidity} />
-                            </td>
-                            <td className="px-3 py-2">
-                              <SingleSelect
-                                options={vocab?.duty || []}
-                                value={r.edited.duty_rating}
-                                onChange={v => updateModalRow(r.product_id, { duty_rating: v })}
-                              />
-                              <SourceBadge source={r.sources.duty} />
-                            </td>
-                            <td className="px-3 py-2">
-                              <SingleSelect
-                                options={vocab?.finish || []}
-                                value={r.edited.finish_type}
-                                onChange={v => updateModalRow(r.product_id, { finish_type: v })}
-                              />
-                              <SourceBadge source={r.sources.finish} />
-                            </td>
-                            <td className="px-3 py-2 text-center">
-                              <span className={`inline-block px-2 py-0.5 text-[11px] font-medium border rounded-full ${overall.pill}`}>
-                                {overall.label}
-                              </span>
-                            </td>
-                          </tr>
-                        );
-                      })}
-                    </tbody>
-                  </table>
-                )}
-              </div>
-
-              {/* Footer actions */}
-              <div className="flex items-center gap-2 px-5 py-3 border-t border-slate-200 bg-slate-50">
-                <div className="text-xs text-slate-500">
-                  Save High confidence will mark {high.filter(r => r.included).length} products as System-Ready.
-                </div>
-                <div className="ml-auto flex items-center gap-2">
-                  <button
-                    onClick={() => setReviewModal(null)}
-                    className="px-3 py-1.5 text-sm text-slate-600 hover:bg-slate-100 rounded-md"
-                  >
-                    Cancel
-                  </button>
-                  <button
-                    onClick={() => saveBatch(high.filter(r => r.included), true)}
-                    disabled={batchSaving || high.filter(r => r.included).length === 0}
-                    className="flex items-center gap-1.5 px-3 py-1.5 text-sm bg-emerald-600 text-white rounded-md hover:bg-emerald-700 disabled:opacity-50"
-                  >
-                    {batchSaving ? <Loader2 size={14} className="animate-spin" /> : <CheckCircle2 size={14} />}
-                    Save high confidence ({high.filter(r => r.included).length})
-                  </button>
-                  <button
-                    onClick={() => saveBatch(all.filter(r => r.included && !r.already_qualified), false)}
-                    disabled={batchSaving || all.filter(r => r.included && !r.already_qualified).length === 0}
-                    className="flex items-center gap-1.5 px-3 py-1.5 text-sm bg-indigo-600 text-white rounded-md hover:bg-indigo-700 disabled:opacity-50"
-                  >
-                    {batchSaving ? <Loader2 size={14} className="animate-spin" /> : <Save size={14} />}
-                    Save selected ({all.filter(r => r.included && !r.already_qualified).length})
-                  </button>
-                </div>
-              </div>
-            </div>
-          </div>
-        );
-      })()}
+          position:fixed (per design rules). Backdrop covers viewport.
+          Fix 3: filter bar + sortable column headers + quick filter buttons +
+          visible-aware select-all + "X of Y visible selected" counter. */}
+      {reviewModal && (
+        <ReviewModal
+          state={reviewModal}
+          setState={setReviewModal}
+          vocab={vocab}
+          systemRelevantNodes={systemRelevantNodes}
+          batchSaving={batchSaving}
+          saveBatch={saveBatch}
+        />
+      )}
 
       {detailProduct && (
         <ProductDetailsModal

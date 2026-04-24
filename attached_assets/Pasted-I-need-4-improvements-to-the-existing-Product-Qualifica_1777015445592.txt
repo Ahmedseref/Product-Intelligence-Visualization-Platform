@@ -1,0 +1,151 @@
+I need 4 improvements to the existing Product Qualification tab and Auto-Qualification Review modal. Read all existing qualification-related components and server routes before making any changes.
+
+---
+
+## Fix 1 — Taxonomy filter live refresh
+
+The taxonomy node dropdown in the Product Qualification tab currently loads nodes once on mount and goes stale if the taxonomy tree is updated.
+
+Fix:
+- Add a useEffect that refetches GET /api/tree-nodes every time the Product Qualification tab becomes the active tab (on tab focus/visibility change, not on every render)
+- Add a small "refresh" icon button next to the taxonomy dropdown that manually triggers a refetch
+- After refetch, rebuild the dropdown options from fresh data
+- The dropdown should show the full taxonomy path for each node, not just the node name. Format: "Construction › Construction Chemicals › Waterproofing Products › Polyurea Waterproofing"
+- Sort dropdown options alphabetically by full path
+- Add a count badge next to each node showing how many products are in that node (from the products data already loaded)
+
+---
+
+## Fix 2 — Layer Position: new qualification field
+
+Add a 5th qualification attribute called Layer Position. This is the most important field — it controls which other fields are shown and what substrate options are available.
+
+### Schema change (shared/schema.ts)
+Add column to product_qualification_tags table:
+- layer_position: varchar(50) nullable
+
+Options (add to qualification_vocabularies as vocab_type = 'layer_position'):
+- value: 'primer', label: 'Primer' — applied directly to structural substrate
+- value: 'base_coat', label: 'Base Coat' — applied over primer
+- value: 'intermediate', label: 'Intermediate Coat' — applied over base coat or primer
+- value: 'topcoat', label: 'Topcoat / Sealer' — final exposed layer
+- value: 'standalone', label: 'Standalone' — used independently, not in a system stack
+
+Run npm run db:push after schema change.
+
+### Conditional field logic based on Layer Position:
+
+When layer_position = 'primer':
+- Substrate: show structural options (Concrete, Steel, Wood, Screed, Asphalt, Ceramic, Existing Coating) — normal multi-select
+- Humidity: show — relevant
+- Duty: show — relevant
+- Finish: HIDE completely — not applicable for primers
+
+When layer_position = 'base_coat' or 'intermediate':
+- Substrate: show only "Over Primer" as a fixed non-editable label — no dropdown needed. Save substrate_types = ['Over Primer'] automatically
+- Humidity: show — relevant
+- Duty: show — relevant
+- Finish: show — it can be the final layer 
+
+When layer_position = 'topcoat':
+- Substrate: show only "Over Base Coat" or "Over Primer" as fixed options (2 options only)
+- Humidity: show — relevant
+- Duty: show — relevant
+- Finish: SHOW and mark as required — this is the critical field for topcoats
+
+When layer_position = 'standalone':
+- Substrate: show structural options (Concrete, Steel, Wood, Screed, Asphalt, Ceramic, Existing Coating)
+- Humidity: show
+- Duty: show
+- Finish: show — relevant
+
+When layer_position = null (not set yet):
+- Show all fields as today (existing behavior, no regression)
+- Show a gentle prompt: "Set Layer Position to get smarter field options"
+
+### UI changes in the qualification table rows:
+- Add Layer Position as the FIRST dropdown column (before Substrate) in the qualification table
+- When Layer Position is selected, immediately hide/show/change the other columns on that row
+- Hidden fields show a grey "N/A" label in their column cell instead of a dropdown
+- Fixed substrate fields (Over Primer, Over Base Coat) show as a read-only pill/badge, not a dropdown
+
+### Auto-inference for Layer Position in qualificationEngine.ts:
+Add layer_position inference to the existing inferQualificationTags function:
+
+Taxonomy rules (confidence: 'high'):
+- Path includes any 'Primer' node or code contains 'PR', 'PUP', 'EPP', 'SP' → 'primer'
+- Path includes 'Epoxy Paints' (EP) or 'Polyurethane Paints' (PP) or 'Floor Paints' (FP&SC) or 'Acrylic System' (AS) → 'topcoat'
+- Path includes 'Sports Flooring' (SF) or 'Acrylic Waterproofing' (AWM) → check name and product description: if name contains 'top' or 'seal' or 'finish' → 'topcoat', else → 'base_coat'
+- Path includes 'Polyurea Waterproofing' (PW) or 'Polyurethane Waterproofing' (PW&B) → check name and product description: if name contains 'primer' → 'primer', if contains 'top' or 'seal' or 'UV' → 'topcoat', else → 'base_coat' 
+- Path includes 'Cement Based Waterproofing' (CBW) or 'Repair Mortars' (RM) or 'Injection Systems' (IS) or 'Waterproofing Concrete Additives' (WCA) or 'Sealants' (SM&JF) or 'Bitumen' (BBW, PB) or 'Fire rated' (FR) or 'Adhesives' (AD) or 'Mineral Wool' (MW) or 'Insulation' → 'standalone'
+
+Name keyword rules (confidence: 'medium'):
+- Name or product description contains 'primer' or 'prime' → 'primer'
+- Name or product description contains 'topcoat' or 'top coat' or 'sealer' or 'finish coat' or 'UV' → 'topcoat'
+- Name or product description contains 'base coat' or 'basecoat' or 'body coat' or 'mid coat' → 'base_coat'
+- Name or product description contains 'intermediate' → 'intermediate'
+
+Also update the substrate auto-inference: when layer_position is inferred as 'base_coat', 'intermediate', or 'topcoat', override substrate_types to ['Over Primer'] or ['Over Base Coat'] automatically — do not run the structural substrate inference for these positions.
+
+---
+
+## Fix 3 — Sorting and filtering in the Auto-Qualification Review modal
+
+The modal currently shows a flat list with no way to sort or filter. Add:
+
+### Filter bar inside modal (above the table, below the tab bar):
+A horizontal filter bar with these controls:
+- Text search: filters by product name in real time
+- Taxonomy filter dropdown: filters by taxonomy path (uses the same nodes data)
+- Substrate filter: "All" / "Has substrate" / "No substrate"  
+- Confidence filter: "All" / "High" / "Medium" / "Low" / "None"
+- Layer Position filter: "All" + each layer_position option
+- A "Clear all filters" link that resets all filters
+
+### Sortable and size control column headers:
+Make these column headers clickable to sort ascending/descending:
+- Product name (alphabetical)
+- Taxonomy (alphabetical by path)
+- Overall confidence (High → Medium → Low → None, or reverse)
+- Layer Position (alphabetical)
+
+Show a sort arrow indicator on the active sort column.
+
+### Bulk selection improvements:
+- "Select all visible" checkbox in header selects only the currently filtered/visible rows, not all 225
+- Show count: "X of Y visible selected"
+- When filters are active, show a note: "Showing X of 225 products · filters active"
+
+### Quick filter buttons (above the table, left side):
+- "Unresolved only" — shows products where at least one field is empty/null
+- "High confidence only" — quick filter for the best candidates to batch-save
+- "Needs layer position" — shows products where layer_position is null
+- These are toggle buttons, can combine with the filter bar
+
+---
+
+## Fix 4 — Filtering in the main Qualification tab table
+
+The main product table in the Qualification tab needs the same treatment:
+
+Add a filter/sort toolbar above the product table:
+- Sort by: Product name / Taxonomy / Overall confidence / System-ready status
+- Filter by: System-ready (All / Ready / Not ready) / Confidence level / Layer Position / Has incomplete tags
+- Quick filter pills: "Needs layer position" / "Missing substrate" / "Missing duty" / "Missing finish"
+
+Each pill shows a count badge (e.g. "Needs layer position (47)"). Clicking it instantly filters the table.
+
+Also fix: when the user saves a row in the table, the row should visually update immediately (confidence badge, system-ready toggle state) without requiring a page refresh. Update local state after successful save API call.
+
+---
+
+## Rules
+- Run npm run db:push after schema changes
+- Do not modify any existing API routes — only extend or add
+- Do not change the System Builder Builder tab or Analytics tab
+- Layer Position field must appear FIRST in the qualification row, before Substrate
+- Hidden fields must show "N/A" placeholder, never just collapse (to keep column widths stable)
+- All filters are client-side — no new API calls for filtering/sorting
+- Sorting and filtering must work independently and combine (filter then sort the filtered result)
+- Existing saved qualification records with null layer_position must still display and save correctly
+- After all changes, test that: (1) a Primer product hides the Finish field, (2) a Base Coat product shows "Over Primer" as fixed substrate, (3) a Topcoat product shows Finish as required

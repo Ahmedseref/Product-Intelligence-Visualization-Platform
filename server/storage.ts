@@ -532,18 +532,20 @@ export class DatabaseStorage implements IStorage {
 export const storage = new DatabaseStorage();
 
 // =============================================================================
-// Product Qualification — vocabulary seeding (Phase 1, additive)
+// Product Qualification — vocabulary seeding (idempotent)
 // =============================================================================
-// Populates the closed-list values for the four qualification dimensions if
-// the table is empty. Safe to call on every startup — no-ops once seeded.
+// Populates the closed-list values for each qualification dimension. The seed
+// is idempotent — on every startup it INSERTs only the rows that don't
+// already exist, so adding new entries (e.g. new layer-position values) on a
+// populated database is safe and automatic.
 export async function seedQualificationVocabularies(): Promise<void> {
-  const existing = await db.select().from(qualificationVocabularies).limit(1);
-  if (existing.length > 0) return;
-
-  const seed: Array<{ vocabType: string; values: string[] }> = [
+  const seed: Array<{ vocabType: string; values: Array<string | { value: string; label: string }> }> = [
     {
       vocabType: 'substrate',
-      values: ['Concrete', 'Steel', 'Metal', 'Wood', 'Screed', 'Asphalt', 'Ceramic', 'Existing Coating'],
+      // Note: 'Over Primer' and 'Over Base Coat' are required by the Layer
+      // Position feature — they're stored in substrate_types when a base
+      // coat / intermediate / topcoat product is qualified.
+      values: ['Concrete', 'Steel', 'Metal', 'Wood', 'Screed', 'Asphalt', 'Ceramic', 'Existing Coating', 'Over Primer', 'Over Base Coat'],
     },
     {
       vocabType: 'humidity',
@@ -557,18 +559,37 @@ export async function seedQualificationVocabularies(): Promise<void> {
       vocabType: 'finish',
       values: ['Smooth', 'Textured', 'Anti-Slip', 'Matt', 'Gloss', 'Satin'],
     },
+    {
+      // Layer Position — controls which other fields are visible/required.
+      vocabType: 'layer_position',
+      values: [
+        { value: 'primer',       label: 'Primer' },
+        { value: 'base_coat',    label: 'Base Coat' },
+        { value: 'intermediate', label: 'Intermediate Coat' },
+        { value: 'topcoat',      label: 'Topcoat / Sealer' },
+        { value: 'standalone',   label: 'Standalone' },
+      ],
+    },
   ];
 
-  const rows = seed.flatMap(({ vocabType, values }) =>
-    values.map((v, idx) => ({
-      vocabType,
-      value: v,
-      label: v,
-      sortOrder: idx,
-      isActive: true,
-    }))
-  );
+  // Pull every existing (vocabType, value) pair into a Set for fast lookup.
+  const existing = await db
+    .select({ vocabType: qualificationVocabularies.vocabType, value: qualificationVocabularies.value })
+    .from(qualificationVocabularies);
+  const existingKey = new Set(existing.map(r => `${r.vocabType}::${r.value}`));
 
-  await db.insert(qualificationVocabularies).values(rows);
-  console.log(`[Seed] Inserted ${rows.length} qualification vocabulary entries`);
+  const toInsert: Array<typeof qualificationVocabularies.$inferInsert> = [];
+  for (const { vocabType, values } of seed) {
+    values.forEach((v, idx) => {
+      const value = typeof v === 'string' ? v : v.value;
+      const label = typeof v === 'string' ? v : v.label;
+      if (!existingKey.has(`${vocabType}::${value}`)) {
+        toInsert.push({ vocabType, value, label, sortOrder: idx, isActive: true });
+      }
+    });
+  }
+
+  if (toInsert.length === 0) return;
+  await db.insert(qualificationVocabularies).values(toInsert);
+  console.log(`[Seed] Inserted ${toInsert.length} new qualification vocabulary entries`);
 }

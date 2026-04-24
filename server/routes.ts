@@ -1395,7 +1395,7 @@ export function registerRoutes(app: Express): void {
     try {
       const {
         productId, substrateTypes, humidityTolerance, dutyRating,
-        finishType, qualifiedBy, isSystemReady,
+        finishType, layerPosition, qualifiedBy, isSystemReady,
       } = req.body || {};
       if (!productId) {
         return res.status(400).json({ error: "productId is required" });
@@ -1413,6 +1413,7 @@ export function registerRoutes(app: Express): void {
         humidityTolerance: humidityTolerance ?? null,
         dutyRating: dutyRating ?? null,
         finishType: finishType ?? null,
+        layerPosition: layerPosition ?? null,
         qualifiedAt: new Date(),
         qualifiedBy: qualifiedBy ?? null,
         isSystemReady: isSystemReady ?? false,
@@ -1445,7 +1446,7 @@ export function registerRoutes(app: Express): void {
     try {
       const allowed: Array<keyof typeof productQualificationTags.$inferInsert> = [
         'substrateTypes', 'humidityTolerance', 'dutyRating',
-        'finishType', 'qualifiedBy', 'isSystemReady',
+        'finishType', 'layerPosition', 'qualifiedBy', 'isSystemReady',
       ];
       const patch: Record<string, unknown> = {};
       for (const key of allowed) {
@@ -1507,7 +1508,13 @@ export function registerRoutes(app: Express): void {
         product_id: string;
         product_name: string;
         taxonomy_path: string;
-        suggested: { substrate_types: string[]; humidity_tolerance: string | null; duty_rating: string | null; finish_type: string | null };
+        suggested: {
+          substrate_types: string[];
+          humidity_tolerance: string | null;
+          duty_rating: string | null;
+          finish_type: string | null;
+          layer_position: string | null;
+        };
         confidence: InferenceResult['confidence'];
         sources: InferenceResult['sources'];
         already_qualified: boolean;
@@ -1528,6 +1535,7 @@ export function registerRoutes(app: Express): void {
             humidity_tolerance: inf.humidity_tolerance,
             duty_rating: inf.duty_rating,
             finish_type: inf.finish_type,
+            layer_position: inf.layer_position,
           },
           confidence: inf.confidence,
           sources: inf.sources,
@@ -1562,6 +1570,7 @@ export function registerRoutes(app: Express): void {
           humidityTolerance: t.humidity_tolerance || null,
           dutyRating: t.duty_rating || null,
           finishType: t.finish_type || null,
+          layerPosition: t.layer_position || null,
           isSystemReady: !!t.is_system_ready,
           qualifiedAt: new Date(),
         };

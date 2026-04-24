@@ -33,11 +33,16 @@ export interface InferenceResult {
   humidity_tolerance: string | null;
   duty_rating: string | null;
   finish_type: string | null;
+  // Layer Position is the most important field — when present it overrides
+  // substrate inference (e.g. base coats are always "Over Primer"). Nullable
+  // when the engine can't pick one with confidence.
+  layer_position: string | null;
   confidence: {
     substrate: Confidence;
     humidity: Confidence;
     duty: Confidence;
     finish: Confidence;
+    layer_position: Confidence;
     overall: Confidence;
   };
   sources: {
@@ -45,6 +50,7 @@ export interface InferenceResult {
     humidity: string;
     duty: string;
     finish: string;
+    layer_position: string;
   };
 }
 
@@ -256,6 +262,101 @@ function inferFinish(input: InferenceInput, taxonomyPath: string[]): { value: st
   return { value: null, confidence: 'none', source: '' };
 }
 
+// ---------- LAYER POSITION rules ----------
+// Layer Position is the most important field — it controls which other
+// fields are visible and what substrate options apply. Taxonomy rules win
+// over name-keyword rules. When a layer is base coat / intermediate /
+// topcoat, the substrate inference is overridden downstream so that base
+// coats always store ['Over Primer'] and topcoats store ['Over Base Coat']
+// (or 'Over Primer' when the name explicitly says so).
+
+interface LayerRule {
+  fragments?: string[];           // taxonomy match
+  keywords?: string[];            // name keyword match
+  layer: string;
+  // For taxonomy "smart" rules where the chosen layer depends on additional
+  // text in the name/description (e.g. PW: name contains 'top' → topcoat).
+  smart?: (input: InferenceInput) => string;
+}
+
+const LAYER_TAXONOMY_RULES: LayerRule[] = [
+  // Primers — every dedicated primer branch.
+  { fragments: ['Primer', 'PR', 'PUP', 'EPP', 'SP'], layer: 'primer' },
+  // Topcoats — paint branches.
+  { fragments: ['Epoxy Paints', 'EP', 'Polyurethane Paints', 'PP', 'Floor Paints', 'FP&SC', 'Acrylic System', 'AS'], layer: 'topcoat' },
+  // Sports flooring + acrylic waterproofing — depends on name.
+  {
+    fragments: ['Sports Flooring', 'SF', 'Acrylic Waterproofing', 'AWM'],
+    layer: 'base_coat',
+    smart: (input) => {
+      const n = norm(input.name) + ' ' + norm(input.description);
+      if (/\btop\b|\bseal(er)?\b|\bfinish\b/.test(n)) return 'topcoat';
+      return 'base_coat';
+    },
+  },
+  // Polyurea / polyurethane waterproofing — depends on name.
+  {
+    fragments: ['Polyurea Waterproofing', 'PW', 'Polyurethane Waterproofing', 'PW&B'],
+    layer: 'base_coat',
+    smart: (input) => {
+      const n = norm(input.name) + ' ' + norm(input.description);
+      if (/\bprimer\b|\bprime\b/.test(n)) return 'primer';
+      if (/\btop\b|\bseal(er)?\b|\bUV\b/i.test(input.name + ' ' + input.description)) return 'topcoat';
+      return 'base_coat';
+    },
+  },
+  // Standalone — products that aren't part of a layered stack.
+  { fragments: ['Cement Based Waterproofing', 'CBW', 'Repair Mortars', 'RM', 'Injection Systems', 'IS', 'Waterproofing Concrete Additives', 'WCA', 'Sealants', 'SM&JF', 'Bitumen', 'BBW', 'PB', 'Fire rated', 'FR', 'Adhesives', 'AD', 'Mineral Wool', 'MW', 'Insulation'], layer: 'standalone' },
+];
+
+const LAYER_NAME_KEYWORDS: LayerRule[] = [
+  { keywords: ['primer', 'prime'],                                     layer: 'primer' },
+  { keywords: ['topcoat', 'top coat', 'sealer', 'finish coat', 'UV'],  layer: 'topcoat' },
+  { keywords: ['base coat', 'basecoat', 'body coat', 'mid coat'],      layer: 'base_coat' },
+  { keywords: ['intermediate'],                                        layer: 'intermediate' },
+];
+
+function inferLayerPosition(input: InferenceInput, taxonomyPath: string[]): { value: string | null; confidence: Confidence; source: string } {
+  // 1) Taxonomy rules — highest confidence.
+  for (const rule of LAYER_TAXONOMY_RULES) {
+    if (!rule.fragments) continue;
+    const matched = pathIncludesAny(taxonomyPath, rule.fragments);
+    if (matched) {
+      const layer = rule.smart ? rule.smart(input) : rule.layer;
+      return { value: layer, confidence: 'high', source: `taxonomy:${matched}` };
+    }
+  }
+  // 2) Name keyword rules — medium confidence. Combine name + description.
+  const haystack = `${input.name} ${input.description}`;
+  for (const rule of LAYER_NAME_KEYWORDS) {
+    if (!rule.keywords) continue;
+    const k = nameIncludesAny(haystack, rule.keywords);
+    if (k) return { value: rule.layer, confidence: 'medium', source: `name:${k}` };
+  }
+  return { value: null, confidence: 'none', source: '' };
+}
+
+// Apply the layer-position substrate override per spec:
+//   - primer / standalone / null → keep the structurally-inferred substrate
+//   - base_coat / intermediate    → ['Over Primer']
+//   - topcoat                     → ['Over Base Coat']  (or 'Over Primer' if
+//                                     name/desc explicitly says so)
+function applyLayerSubstrateOverride(
+  layer: string | null,
+  input: InferenceInput,
+  base: { value: string[]; confidence: Confidence; source: string },
+): { value: string[]; confidence: Confidence; source: string } {
+  if (layer === 'base_coat' || layer === 'intermediate') {
+    return { value: ['Over Primer'], confidence: 'high', source: `layer:${layer}` };
+  }
+  if (layer === 'topcoat') {
+    const haystack = `${input.name} ${input.description}`.toLowerCase();
+    const overPrimer = /over\s+primer/.test(haystack);
+    return { value: [overPrimer ? 'Over Primer' : 'Over Base Coat'], confidence: 'high', source: `layer:${layer}` };
+  }
+  return base;
+}
+
 // ---------- OVERALL confidence aggregation ----------
 function aggregateConfidence(per: { substrate: Confidence; humidity: Confidence; duty: Confidence; finish: Confidence }): Confidence {
   // Note on the "high" rule: the spec text says "all 4 high or medium AND ≥2
@@ -281,7 +382,10 @@ export function inferQualificationTags(
   product: InferenceInput,
   taxonomyPath: string[],
 ): InferenceResult {
-  const sub = inferSubstrate(product, taxonomyPath);
+  // Layer Position is computed FIRST because it overrides substrate.
+  const lay = inferLayerPosition(product, taxonomyPath);
+  const subBase = inferSubstrate(product, taxonomyPath);
+  const sub = applyLayerSubstrateOverride(lay.value, product, subBase);
   const hum = inferHumidity(product);
   const dut = inferDuty(product, taxonomyPath);
   const fin = inferFinish(product, taxonomyPath);
@@ -293,7 +397,8 @@ export function inferQualificationTags(
     humidity_tolerance: hum.value,
     duty_rating: dut.value,
     finish_type: fin.value,
-    confidence: { ...per, overall: aggregateConfidence(per) },
-    sources: { substrate: sub.source, humidity: hum.source, duty: dut.source, finish: fin.source },
+    layer_position: lay.value,
+    confidence: { ...per, layer_position: lay.confidence, overall: aggregateConfidence(per) },
+    sources: { substrate: sub.source, humidity: hum.source, duty: dut.source, finish: fin.source, layer_position: lay.source },
   };
 }
