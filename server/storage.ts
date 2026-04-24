@@ -553,7 +553,7 @@ export async function seedQualificationVocabularies(): Promise<void> {
     },
     {
       vocabType: 'duty',
-      values: ['Light', 'Medium', 'Heavy', 'Industrial', 'Antistatic', 'Antibacterial'],
+      values: ['Light', 'Medium', 'Heavy', 'Industrial', 'Antistatic', 'Antibacterial', 'Anti Chemicals (Harsh environments)'],
     },
     {
       vocabType: 'finish',

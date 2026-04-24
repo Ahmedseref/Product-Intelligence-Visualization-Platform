@@ -358,6 +358,71 @@ const StatCard: React.FC<{
 };
 
 // =============================================================================
+// Resizable column helpers — used by both the modal and main qualification
+// tables. Widths are persisted per-table in localStorage so the user's layout
+// survives reloads. Drag handles live in the right edge of every header cell.
+// =============================================================================
+
+type ColWidths = Record<string, number>;
+
+function useColumnWidths(storageKey: string, defaults: ColWidths) {
+  const [widths, setWidths] = useState<ColWidths>(() => {
+    if (typeof window === 'undefined') return defaults;
+    try {
+      const saved = window.localStorage.getItem(storageKey);
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (parsed && typeof parsed === 'object') return { ...defaults, ...parsed };
+      }
+    } catch { /* ignore corrupt storage */ }
+    return defaults;
+  });
+  useEffect(() => {
+    try { window.localStorage.setItem(storageKey, JSON.stringify(widths)); } catch { /* quota — ignore */ }
+  }, [storageKey, widths]);
+  const reset = useCallback(() => setWidths(defaults), [defaults, storageKey]);
+  return { widths, setWidths, reset };
+}
+
+// A small drag handle to drop into the right edge of any <th>. The parent
+// <th> must have `position: relative` and a numeric `width`/`minWidth` set.
+const ResizeHandle: React.FC<{
+  colKey: string;
+  currentWidth: number;
+  setWidths: React.Dispatch<React.SetStateAction<ColWidths>>;
+  minWidth?: number;
+}> = ({ colKey, currentWidth, setWidths, minWidth = 60 }) => {
+  const onMouseDown = useCallback((e: React.MouseEvent) => {
+    e.preventDefault();
+    e.stopPropagation(); // don't trigger sort handlers on the parent <th>
+    const startX = e.clientX;
+    const startW = currentWidth;
+    const onMove = (ev: MouseEvent) => {
+      const next = Math.max(minWidth, startW + (ev.clientX - startX));
+      setWidths(prev => ({ ...prev, [colKey]: next }));
+    };
+    const onUp = () => {
+      window.removeEventListener('mousemove', onMove);
+      window.removeEventListener('mouseup', onUp);
+      document.body.style.cursor = '';
+      document.body.style.userSelect = '';
+    };
+    window.addEventListener('mousemove', onMove);
+    window.addEventListener('mouseup', onUp);
+    document.body.style.cursor = 'col-resize';
+    document.body.style.userSelect = 'none';
+  }, [colKey, currentWidth, minWidth, setWidths]);
+  return (
+    <span
+      onMouseDown={onMouseDown}
+      onClick={(e) => e.stopPropagation()}
+      className="absolute top-0 right-0 h-full w-1.5 cursor-col-resize bg-transparent hover:bg-blue-400/50 active:bg-blue-500/70 transition-colors z-10"
+      title="Drag to resize column"
+    />
+  );
+};
+
+// =============================================================================
 // ReviewModal — Auto-Qualification Review modal (Fix 3)
 // =============================================================================
 // Extracted to its own component so the local filter / sort / quick-pill state
@@ -400,6 +465,12 @@ const ReviewModal: React.FC<ReviewModalProps> = ({ state, setState, vocab, syste
   const [needsLayerOnly, setNeedsLayerOnly] = useState(false);
   const [sortKey, setSortKey] = useState<ModalSortKey>('confidence');
   const [sortDir, setSortDir] = useState<SortDir>('desc');
+
+  // Resizable column widths for the modal table — persisted per-table.
+  const { widths: colW, setWidths: setColW } = useColumnWidths(
+    'qualification.modal.colWidths.v1',
+    { product: 220, taxonomy: 200, layer: 120, substrate: 150, humidity: 110, duty: 110, finish: 110, conf: 70 },
+  );
 
   // Reset selection-only filters when switching tabs so users always see rows.
   useEffect(() => {
@@ -634,10 +705,21 @@ const ReviewModal: React.FC<ReviewModalProps> = ({ state, setState, vocab, syste
               {filtersActive ? 'No products match the active filters.' : 'No products in this group.'}
             </div>
           ) : (
-            <table className="min-w-full text-xs">
+            <table className="text-xs" style={{ tableLayout: 'fixed', width: 28 + colW.product + colW.taxonomy + colW.layer + colW.substrate + colW.humidity + colW.duty + colW.finish + colW.conf }}>
+              <colgroup>
+                <col style={{ width: 28 }} />
+                <col style={{ width: colW.product }} />
+                <col style={{ width: colW.taxonomy }} />
+                <col style={{ width: colW.layer }} />
+                <col style={{ width: colW.substrate }} />
+                <col style={{ width: colW.humidity }} />
+                <col style={{ width: colW.duty }} />
+                <col style={{ width: colW.finish }} />
+                <col style={{ width: colW.conf }} />
+              </colgroup>
               <thead className="bg-slate-50 border-b border-slate-200 text-[10px] uppercase text-slate-500 sticky top-0">
                 <tr>
-                  <th className="px-2 py-1.5 text-left w-7">
+                  <th className="px-2 py-1.5 text-left">
                     <input
                       type="checkbox"
                       checked={allVisibleIncluded}
@@ -651,22 +733,38 @@ const ReviewModal: React.FC<ReviewModalProps> = ({ state, setState, vocab, syste
                       title="Select only the currently visible (filtered) rows"
                     />
                   </th>
-                  <th className="px-2 py-1.5 text-left cursor-pointer select-none hover:text-slate-700" onClick={() => toggleSort('name')}>
+                  <th className="relative px-2 py-1.5 text-left cursor-pointer select-none hover:text-slate-700" onClick={() => toggleSort('name')}>
                     Product{sortIndicator('name')}
+                    <ResizeHandle colKey="product" currentWidth={colW.product} setWidths={setColW} />
                   </th>
-                  <th className="px-2 py-1.5 text-left cursor-pointer select-none hover:text-slate-700" onClick={() => toggleSort('taxonomy')}>
+                  <th className="relative px-2 py-1.5 text-left cursor-pointer select-none hover:text-slate-700" onClick={() => toggleSort('taxonomy')}>
                     Taxonomy{sortIndicator('taxonomy')}
+                    <ResizeHandle colKey="taxonomy" currentWidth={colW.taxonomy} setWidths={setColW} />
                   </th>
                   {/* Fix 2: Layer Position is the FIRST data column in the modal too */}
-                  <th className="px-2 py-1.5 text-left w-[120px] cursor-pointer select-none hover:text-slate-700" onClick={() => toggleSort('layer_position')}>
+                  <th className="relative px-2 py-1.5 text-left cursor-pointer select-none hover:text-slate-700" onClick={() => toggleSort('layer_position')}>
                     Layer{sortIndicator('layer_position')}
+                    <ResizeHandle colKey="layer" currentWidth={colW.layer} setWidths={setColW} />
                   </th>
-                  <th className="px-2 py-1.5 text-left w-[150px]">Substrate</th>
-                  <th className="px-2 py-1.5 text-left w-[110px]">Humidity</th>
-                  <th className="px-2 py-1.5 text-left w-[100px]">Duty</th>
-                  <th className="px-2 py-1.5 text-left w-[110px]">Finish</th>
-                  <th className="px-2 py-1.5 text-center w-[70px] cursor-pointer select-none hover:text-slate-700" onClick={() => toggleSort('confidence')}>
+                  <th className="relative px-2 py-1.5 text-left">
+                    Substrate
+                    <ResizeHandle colKey="substrate" currentWidth={colW.substrate} setWidths={setColW} />
+                  </th>
+                  <th className="relative px-2 py-1.5 text-left">
+                    Humidity
+                    <ResizeHandle colKey="humidity" currentWidth={colW.humidity} setWidths={setColW} />
+                  </th>
+                  <th className="relative px-2 py-1.5 text-left">
+                    Duty
+                    <ResizeHandle colKey="duty" currentWidth={colW.duty} setWidths={setColW} />
+                  </th>
+                  <th className="relative px-2 py-1.5 text-left">
+                    Finish
+                    <ResizeHandle colKey="finish" currentWidth={colW.finish} setWidths={setColW} />
+                  </th>
+                  <th className="relative px-2 py-1.5 text-center cursor-pointer select-none hover:text-slate-700" onClick={() => toggleSort('confidence')}>
                     Conf.{sortIndicator('confidence')}
+                    <ResizeHandle colKey="conf" currentWidth={colW.conf} setWidths={setColW} minWidth={50} />
                   </th>
                 </tr>
               </thead>
@@ -839,6 +937,23 @@ const SystemBuilderQualification: React.FC<Props> = ({ products, treeNodes, onPr
   const [mainSortKey, setMainSortKey] = useState<MainSortKey>('name');
   const [mainSortDir, setMainSortDir] = useState<SortDir>('asc');
   const [mainQuickFilter, setMainQuickFilter] = useState<MainQuickFilter>('none');
+
+  // Resizable column widths for the main qualification table — persisted.
+  const { widths: mainColW, setWidths: setMainColW } = useColumnWidths(
+    'qualification.main.colWidths.v1',
+    {
+      product:   200,
+      taxonomy:  200,
+      layer:     120,
+      substrate: 140,
+      humidity:  110,
+      duty:      110,
+      finish:    110,
+      conf:      70,
+      ready:     55,
+      actions:   120,
+    },
+  );
 
   // Selected product IDs (for bulk actions)
   const [selected, setSelected] = useState<Set<string>>(new Set());
@@ -1756,10 +1871,32 @@ const SystemBuilderQualification: React.FC<Props> = ({ products, treeNodes, onPr
           </div>
         )}
         <div className="overflow-x-auto">
-          <table className="min-w-full text-xs">
+          <table
+            className="text-xs"
+            style={{
+              tableLayout: 'fixed',
+              width:
+                28 + mainColW.product + mainColW.taxonomy + mainColW.layer +
+                mainColW.substrate + mainColW.humidity + mainColW.duty +
+                mainColW.finish + mainColW.conf + mainColW.ready + mainColW.actions,
+            }}
+          >
+            <colgroup>
+              <col style={{ width: 28 }} />
+              <col style={{ width: mainColW.product }} />
+              <col style={{ width: mainColW.taxonomy }} />
+              <col style={{ width: mainColW.layer }} />
+              <col style={{ width: mainColW.substrate }} />
+              <col style={{ width: mainColW.humidity }} />
+              <col style={{ width: mainColW.duty }} />
+              <col style={{ width: mainColW.finish }} />
+              <col style={{ width: mainColW.conf }} />
+              <col style={{ width: mainColW.ready }} />
+              <col style={{ width: mainColW.actions }} />
+            </colgroup>
             <thead className="bg-slate-50 border-b border-slate-200 text-[10px] uppercase text-slate-500">
               <tr>
-                <th className="px-2 py-1.5 text-left w-7">
+                <th className="px-2 py-1.5 text-left">
                   <input
                     type="checkbox"
                     checked={
@@ -1770,18 +1907,48 @@ const SystemBuilderQualification: React.FC<Props> = ({ products, treeNodes, onPr
                     className="rounded text-blue-600"
                   />
                 </th>
-                <th className="px-2 py-1.5 text-left">Product</th>
-                <th className="px-2 py-1.5 text-left">Taxonomy</th>
+                <th className="relative px-2 py-1.5 text-left">
+                  Product
+                  <ResizeHandle colKey="product" currentWidth={mainColW.product} setWidths={setMainColW} />
+                </th>
+                <th className="relative px-2 py-1.5 text-left">
+                  Taxonomy
+                  <ResizeHandle colKey="taxonomy" currentWidth={mainColW.taxonomy} setWidths={setMainColW} />
+                </th>
                 {/* Fix 2: Layer Position is the FIRST qualification column — it
                     drives the conditional rendering of every column to its right. */}
-                <th className="px-2 py-1.5 text-left w-[120px]">Layer</th>
-                <th className="px-2 py-1.5 text-left w-[140px]">Substrate</th>
-                <th className="px-2 py-1.5 text-left w-[110px]">Humidity</th>
-                <th className="px-2 py-1.5 text-left w-[100px]">Duty</th>
-                <th className="px-2 py-1.5 text-left w-[110px]">Finish</th>
-                <th className="px-2 py-1.5 text-center w-[70px]" title="Auto-inference confidence (grey = manually set)">Conf.</th>
-                <th className="px-2 py-1.5 text-center w-[55px]">Ready</th>
-                <th className="px-2 py-1.5 text-right w-[120px]">Actions</th>
+                <th className="relative px-2 py-1.5 text-left">
+                  Layer
+                  <ResizeHandle colKey="layer" currentWidth={mainColW.layer} setWidths={setMainColW} />
+                </th>
+                <th className="relative px-2 py-1.5 text-left">
+                  Substrate
+                  <ResizeHandle colKey="substrate" currentWidth={mainColW.substrate} setWidths={setMainColW} />
+                </th>
+                <th className="relative px-2 py-1.5 text-left">
+                  Humidity
+                  <ResizeHandle colKey="humidity" currentWidth={mainColW.humidity} setWidths={setMainColW} />
+                </th>
+                <th className="relative px-2 py-1.5 text-left">
+                  Duty
+                  <ResizeHandle colKey="duty" currentWidth={mainColW.duty} setWidths={setMainColW} />
+                </th>
+                <th className="relative px-2 py-1.5 text-left">
+                  Finish
+                  <ResizeHandle colKey="finish" currentWidth={mainColW.finish} setWidths={setMainColW} />
+                </th>
+                <th className="relative px-2 py-1.5 text-center" title="Auto-inference confidence (grey = manually set)">
+                  Conf.
+                  <ResizeHandle colKey="conf" currentWidth={mainColW.conf} setWidths={setMainColW} minWidth={50} />
+                </th>
+                <th className="relative px-2 py-1.5 text-center">
+                  Ready
+                  <ResizeHandle colKey="ready" currentWidth={mainColW.ready} setWidths={setMainColW} minWidth={45} />
+                </th>
+                <th className="relative px-2 py-1.5 text-right">
+                  Actions
+                  <ResizeHandle colKey="actions" currentWidth={mainColW.actions} setWidths={setMainColW} minWidth={90} />
+                </th>
               </tr>
             </thead>
             <tbody>
