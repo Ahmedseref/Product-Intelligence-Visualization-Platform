@@ -445,9 +445,12 @@ interface ReviewModalProps {
   systemRelevantNodes: Array<{ node: TreeNode; path: string; count: number }>;
   batchSaving: boolean;
   saveBatch: (rowsToSave: AutoInferRow[], markReady: boolean) => Promise<void>;
+  // Pass the full product list so the modal search can also match against
+  // stock code and description (the row only carries name + taxonomy path).
+  products: Product[];
 }
 
-const ReviewModal: React.FC<ReviewModalProps> = ({ state, setState, vocab, systemRelevantNodes, batchSaving, saveBatch }) => {
+const ReviewModal: React.FC<ReviewModalProps> = ({ state, setState, vocab, systemRelevantNodes, batchSaving, saveBatch, products }) => {
   const all = state.rows;
   const skipped = all.filter(r => r.already_qualified);
   const eligible = all.filter(r => !r.already_qualified);
@@ -512,8 +515,18 @@ const ReviewModal: React.FC<ReviewModalProps> = ({ state, setState, vocab, syste
   // Apply filter bar + quick filters to the current tab's rows.
   const filtered = useMemo(() => {
     const term = searchTerm.trim().toLowerCase();
+    // Build a quick lookup so we can also match against stock code and
+    // description (the modal row only carries product_name + taxonomy_path).
+    const productById = new Map<string, Product>(products.map(p => [p.id, p]));
     return tabRows.filter(r => {
-      if (term && !r.product_name.toLowerCase().includes(term)) return false;
+      if (term) {
+        const p = productById.get(r.product_id);
+        const matches =
+          r.product_name.toLowerCase().includes(term) ||
+          (p?.stockCode || '').toLowerCase().includes(term) ||
+          (p?.description || '').toLowerCase().includes(term);
+        if (!matches) return false;
+      }
       if (taxonomyFilter && !r.taxonomy_path.toLowerCase().includes(taxonomyFilter.toLowerCase())) return false;
       if (substrateFilter === 'has' && r.edited.substrate_types.length === 0) return false;
       if (substrateFilter === 'none' && r.edited.substrate_types.length > 0) return false;
@@ -1164,9 +1177,12 @@ const SystemBuilderQualification: React.FC<Props> = ({ products, treeNodes, onPr
     const term = searchTerm.trim().toLowerCase();
     const base = products.filter(p => {
       if (term) {
+        // Search across product name, stock code and description so the
+        // user can find a product by any of those fields.
         const matches =
           p.name.toLowerCase().includes(term) ||
-          p.id.toLowerCase().includes(term);
+          (p.stockCode || '').toLowerCase().includes(term) ||
+          (p.description || '').toLowerCase().includes(term);
         if (!matches) return false;
       }
       if (nodeFilter && p.nodeId !== nodeFilter) return false;
@@ -1716,7 +1732,7 @@ const SystemBuilderQualification: React.FC<Props> = ({ products, treeNodes, onPr
             <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
             <input
               type="text"
-              placeholder="Search by product name or code…"
+              placeholder="Search by name, stock code or description…"
               value={searchTerm}
               onChange={e => setSearchTerm(e.target.value)}
               className="w-full pl-9 pr-3 py-2 text-sm border border-slate-200 rounded-md focus:ring-2 focus:ring-blue-500 outline-none"
@@ -2245,6 +2261,7 @@ const SystemBuilderQualification: React.FC<Props> = ({ products, treeNodes, onPr
           systemRelevantNodes={systemRelevantNodes}
           batchSaving={batchSaving}
           saveBatch={saveBatch}
+          products={products}
         />
       )}
 
