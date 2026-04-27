@@ -63,6 +63,25 @@ const SystemBuilder: React.FC<SystemBuilderProps> = ({ products, onProductUpdate
     acrylic: ['Primer', 'Acrylic Coat', 'Sealer'],
     generic: ['Primer', 'Main Coat'],
   };
+
+  // Map a layer-skeleton slot name (e.g. "Primer", "Base Coat", "Topcoat",
+  // "Sealer", "Body Coat") to the canonical layer_position value used by the
+  // qualification engine. This is what makes Step 3 actually filter different
+  // products into different layer slots: each layer infers its own position
+  // and only products tagged for that position are suggested.
+  //
+  // Returns null when the slot name doesn't clearly map to one of the five
+  // canonical values — in that case Step 3 falls back to no per-layer
+  // filtering for that slot (better to show too many than to show zero).
+  const inferLayerPositionFromSlotName = (slotName: string): string | null => {
+    const n = (slotName || '').toLowerCase().trim();
+    if (!n) return null;
+    if (/\bprimer\b|\bbond(?:ing)?\b/.test(n)) return 'primer';
+    if (/\btop\s*coat\b|\bsealer\b|\bfinish\b|\bclear\s*coat\b/.test(n)) return 'topcoat';
+    if (/\bintermediate\b|\bbuild\s*coat\b/.test(n)) return 'intermediate';
+    if (/\bbase\s*coat\b|\bbody\s*coat\b|\bscratch\s*coat\b|\bself.?level/.test(n)) return 'base_coat';
+    return null;
+  };
   const [quickSetup, setQuickSetup] = useState<QuickSetup>({
     name: '',
     materialType: 'epoxy',
@@ -98,7 +117,7 @@ const SystemBuilder: React.FC<SystemBuilderProps> = ({ products, onProductUpdate
   const [vocab, setVocab] = useState<{ substrate: { value: string; label: string }[]; humidity: { value: string; label: string }[]; duty: { value: string; label: string }[] }>({ substrate: [], humidity: [], duty: [] });
   // Map of productId -> qualification tag for system-ready products. Used to
   // filter the layer product search by substrate / humidity / duty.
-  const [tagsByProduct, setTagsByProduct] = useState<Record<string, { substrateTypes?: string[] | null; humidityTolerance?: string | null; dutyRating?: string | null; isSystemReady?: boolean | null }>>({});
+  const [tagsByProduct, setTagsByProduct] = useState<Record<string, { substrateTypes?: string[] | null; humidityTolerance?: string | null; dutyRating?: string | null; isSystemReady?: boolean | null; layerPosition?: string | null }>>({});
   // Whether the parameter header is expanded (true by default for visibility).
   const [paramHeaderOpen, setParamHeaderOpen] = useState(true);
   // Tracks per-system-session in-flight save state for the parameter header.
@@ -159,7 +178,7 @@ const SystemBuilder: React.FC<SystemBuilderProps> = ({ products, onProductUpdate
         const headers: HeadersInit = token ? { Authorization: `Bearer ${token}` } : {};
         const res = await fetch('/api/qualification-tags', { headers });
         if (!res.ok) return;
-        const rows: Array<{ productId: string; substrateTypes?: string[] | null; humidityTolerance?: string | null; dutyRating?: string | null; isSystemReady?: boolean | null }> = await res.json();
+        const rows: Array<{ productId: string; substrateTypes?: string[] | null; humidityTolerance?: string | null; dutyRating?: string | null; isSystemReady?: boolean | null; layerPosition?: string | null }> = await res.json();
         if (cancelled) return;
         const map: Record<string, typeof rows[number]> = {};
         for (const r of rows) map[r.productId] = r;
@@ -2010,11 +2029,30 @@ const SystemBuilder: React.FC<SystemBuilderProps> = ({ products, onProductUpdate
                 </div>
               )}
 
-              {/* STEP 3 — for each layer slot, list products that match the parameters from Step 1. */}
+              {/* STEP 3 — for each layer slot, list products that match BOTH:
+                    - the system-wide parameters from Step 1 (substrate / humidity / duty), AND
+                    - the layer position inferred from the slot name in Step 2.
+                  This is what makes each layer get a different product list — a
+                  "Primer" slot only suggests products tagged as primer, a
+                  "Topcoat" slot only suggests topcoat-tagged products, etc.
+                  Products that haven't been qualified for a layer position
+                  yet are still shown (legacy fallback) so the user is never
+                  blocked by un-tagged products. */}
               {quickStep === 3 && (
                 <div className="space-y-4">
-                  <p className="text-xs text-slate-500">Pick a default product for each layer (optional). Products are filtered by the parameters from Step 1; "All system-ready" products are shown when a parameter is left blank.</p>
+                  <p className="text-xs text-slate-500">Pick a default product for each layer (optional). Products are filtered by the parameters from Step 1 <em>and</em> the layer position inferred from each slot name in Step 2.</p>
                   {quickSetup.layers.map((slot, i) => {
+                    // Infer this slot's layer position from its name. Null = no
+                    // per-slot filter (slot name is custom or ambiguous).
+                    const slotPos = inferLayerPositionFromSlotName(slot.name);
+                    // Pretty label for the inferred-position pill.
+                    const slotPosLabel = slotPos
+                      ? slotPos === 'base_coat' ? 'Base Coat'
+                        : slotPos === 'topcoat' ? 'Topcoat'
+                        : slotPos === 'primer' ? 'Primer'
+                        : slotPos === 'intermediate' ? 'Intermediate'
+                        : 'Standalone'
+                      : null;
                     // Filter products that are system-ready and match the chosen parameters.
                     const matches = products.filter(p => {
                       const t = tagsByProduct[p.id];
@@ -2023,6 +2061,11 @@ const SystemBuilder: React.FC<SystemBuilderProps> = ({ products, onProductUpdate
                       if (quickSetup.substrate.length > 0 && !(t.substrateTypes || []).some(s => quickSetup.substrate.includes(s))) return false;
                       if (quickSetup.humidity && t.humidityTolerance && t.humidityTolerance !== quickSetup.humidity) return false;
                       if (quickSetup.duty && t.dutyRating && t.dutyRating !== quickSetup.duty) return false;
+                      // Per-layer filter — only enforced when both the slot name
+                      // mapped to a known position AND the product was actually
+                      // tagged with one. 'standalone' products are versatile
+                      // enough to fit any slot, so they always pass.
+                      if (slotPos && t.layerPosition && t.layerPosition !== slotPos && t.layerPosition !== 'standalone') return false;
                       return true;
                     });
                     return (
@@ -2031,11 +2074,21 @@ const SystemBuilder: React.FC<SystemBuilderProps> = ({ products, onProductUpdate
                           <div className="flex items-center gap-2">
                             <span className="w-5 h-5 rounded-full bg-indigo-100 text-indigo-700 flex items-center justify-center text-[10px] font-bold">{i + 1}</span>
                             <span className="text-sm font-semibold text-slate-700">{slot.name}</span>
+                            {slotPosLabel && (
+                              <span
+                                className="px-1.5 py-0.5 text-[10px] rounded bg-indigo-50 text-indigo-600 border border-indigo-100"
+                                title={`Filtering for products tagged as "${slotPosLabel}" in qualification`}
+                              >
+                                {slotPosLabel}
+                              </span>
+                            )}
                           </div>
                           <span className="text-[11px] text-slate-400">{matches.length} match{matches.length === 1 ? '' : 'es'}</span>
                         </div>
                         {matches.length === 0 ? (
-                          <p className="text-xs text-slate-400 italic">No system-ready products match these parameters. The layer will be created empty.</p>
+                          <p className="text-xs text-slate-400 italic">
+                            No system-ready products match {slotPosLabel ? `the "${slotPosLabel}" layer with` : ''} these parameters. The layer will be created empty.
+                          </p>
                         ) : (
                           <select value={slot.productId || ''} onChange={(e) => { const ls = [...quickSetup.layers]; ls[i] = { ...ls[i], productId: e.target.value || null }; setQuickSetup({ ...quickSetup, layers: ls }); }} className="w-full px-2 py-1.5 text-sm border border-slate-200 rounded">
                             <option value="">— skip (leave layer empty) —</option>
