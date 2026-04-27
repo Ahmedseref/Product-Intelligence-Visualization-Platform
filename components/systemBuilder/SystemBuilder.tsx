@@ -54,14 +54,17 @@ const SystemBuilder: React.FC<SystemBuilderProps> = ({ products, onProductUpdate
     substrate: string[];
     humidity: string;
     duty: string;
-    // Step 2: the system's primer is picked first and on its own. It is filtered
-    // only by the Step 1 parameters (substrate / humidity / duty) — never by
-    // material type, because using e.g. an Epoxy primer under a PU base + topcoat
-    // is a common, valid technique.
-    primerProductId: string | null;
-    // Step 3 layers: the post-primer layers (base coat, topcoat, etc). Primer
-    // is intentionally NOT in this list — it lives in primerProductId. On
-    // Create, the primer (if any) is prepended as layer #1.
+    // Step 2: the system's primer(s) are picked first and on their own. The
+    // pool is filtered only by the Step 1 parameters (substrate / humidity /
+    // duty) — never by material type, because using e.g. an Epoxy primer under
+    // a PU base + topcoat is a common, valid technique. Multiple primers can
+    // be selected when several products match (e.g. a bonding primer + a
+    // moisture-tolerant primer used together).
+    primerProductIds: string[];
+    // Step 3 layers: the post-primer layers (base coat, topcoat, etc). Primers
+    // are intentionally NOT in this list — they live in primerProductIds. On
+    // Create, each selected primer is prepended as its own layer in the order
+    // it was picked.
     layers: QuickLayerSlot[];
   };
   // Skeletons exclude "Primer" — primer is picked separately in Step 2 and is
@@ -117,7 +120,7 @@ const SystemBuilder: React.FC<SystemBuilderProps> = ({ products, onProductUpdate
     substrate: [],
     humidity: '',
     duty: '',
-    primerProductId: null,
+    primerProductIds: [],
     layers: QUICK_SKELETONS.epoxy.map(n => ({ name: n, productId: null })),
   });
   const [showAddLayer, setShowAddLayer] = useState(false);
@@ -945,7 +948,7 @@ const SystemBuilder: React.FC<SystemBuilderProps> = ({ products, onProductUpdate
                 onClick={() => {
                   // Phase 4: open Quick Setup wizard. Reset to a fresh state so
                   // it always starts on Step 1 with the default skeleton.
-                  setQuickSetup({ name: '', materialType: 'epoxy', substrate: [], humidity: '', duty: '', primerProductId: null, layers: QUICK_SKELETONS.epoxy.map(n => ({ name: n, productId: null })) });
+                  setQuickSetup({ name: '', materialType: 'epoxy', substrate: [], humidity: '', duty: '', primerProductIds: [], layers: QUICK_SKELETONS.epoxy.map(n => ({ name: n, productId: null })) });
                   setQuickStep(1);
                   setQuickSetupOpen(true);
                   // Pull the latest qualification tags so any product the user
@@ -2089,20 +2092,34 @@ const SystemBuilder: React.FC<SystemBuilderProps> = ({ products, onProductUpdate
                   }
                   return false;
                 });
-                const selectedPrimer = quickSetup.primerProductId
-                  ? products.find(p => p.id === quickSetup.primerProductId) || null
-                  : null;
+                // Preserve the order in which the user picked each primer —
+                // that's the order they'll be persisted as separate layers.
+                const selectedPrimers = quickSetup.primerProductIds
+                  .map(id => products.find(p => p.id === id))
+                  .filter((p): p is NonNullable<typeof p> => !!p);
+                const togglePrimer = (id: string) => {
+                  const cur = quickSetup.primerProductIds;
+                  setQuickSetup({
+                    ...quickSetup,
+                    primerProductIds: cur.includes(id) ? cur.filter(x => x !== id) : [...cur, id],
+                  });
+                };
                 return (
                   <div className="space-y-3">
                     <p className="text-xs text-slate-500">
-                      Pick the primer for this system. The list below is filtered by the parameters from Step&nbsp;1 — only system-ready products that look like primers (tagged or named) are shown.
+                      Pick one or more primers for this system. The list below is filtered by the parameters from Step&nbsp;1 — only system-ready products that look like primers (tagged or named) are shown. If you pick several, each becomes its own layer in the order you ticked them.
                     </p>
                     <div className="border border-slate-200 rounded-lg p-3">
                       <div className="flex items-center justify-between mb-2">
                         <div className="flex items-center gap-2">
                           <span className="w-5 h-5 rounded-full bg-indigo-100 text-indigo-700 flex items-center justify-center text-[10px] font-bold">1</span>
-                          <span className="text-sm font-semibold text-slate-700">Primer</span>
+                          <span className="text-sm font-semibold text-slate-700">Primer{selectedPrimers.length > 1 ? 's' : ''}</span>
                           <span className="px-1.5 py-0.5 text-[10px] rounded bg-indigo-50 text-indigo-600 border border-indigo-100">Primer</span>
+                          {selectedPrimers.length > 0 && (
+                            <span className="px-1.5 py-0.5 text-[10px] rounded bg-emerald-50 text-emerald-700 border border-emerald-100">
+                              {selectedPrimers.length} selected
+                            </span>
+                          )}
                         </div>
                         <span className="text-[11px] text-slate-400">{primerCandidates.length} match{primerCandidates.length === 1 ? '' : 'es'}</span>
                       </div>
@@ -2111,22 +2128,50 @@ const SystemBuilder: React.FC<SystemBuilderProps> = ({ products, onProductUpdate
                           No system-ready primers match these parameters. You can skip this step — the system will be created without a primer layer.
                         </p>
                       ) : (
-                        <select
-                          value={quickSetup.primerProductId || ''}
-                          onChange={(e) => setQuickSetup({ ...quickSetup, primerProductId: e.target.value || null })}
-                          className="w-full px-2 py-1.5 text-sm border border-slate-200 rounded"
-                        >
-                          <option value="">— skip primer (no primer layer) —</option>
-                          {primerCandidates.slice(0, 100).map(p => (
-                            <option key={p.id} value={p.id}>
-                              {p.name}{p.stockCode ? ` · ${p.stockCode}` : ''}
-                            </option>
-                          ))}
-                        </select>
+                        <div className="max-h-64 overflow-y-auto divide-y divide-slate-100 border border-slate-100 rounded">
+                          {primerCandidates.slice(0, 200).map(p => {
+                            const checked = quickSetup.primerProductIds.includes(p.id);
+                            const order = checked ? quickSetup.primerProductIds.indexOf(p.id) + 1 : null;
+                            return (
+                              <label
+                                key={p.id}
+                                className={`flex items-center gap-2 px-2 py-1.5 text-sm cursor-pointer hover:bg-slate-50 ${checked ? 'bg-indigo-50/40' : ''}`}
+                              >
+                                <input
+                                  type="checkbox"
+                                  checked={checked}
+                                  onChange={() => togglePrimer(p.id)}
+                                  className="w-3.5 h-3.5 accent-indigo-600"
+                                />
+                                {/* Pick order badge — makes it obvious which
+                                    primer becomes layer #1 vs #2 vs #3 etc. */}
+                                {order !== null && (
+                                  <span className="w-5 h-5 rounded-full bg-indigo-600 text-white flex items-center justify-center text-[10px] font-bold flex-shrink-0">
+                                    {order}
+                                  </span>
+                                )}
+                                <span className="flex-1 truncate text-slate-700">{p.name}</span>
+                                {p.stockCode && (
+                                  <span className="text-[11px] text-slate-400 flex-shrink-0">{p.stockCode}</span>
+                                )}
+                              </label>
+                            );
+                          })}
+                          {primerCandidates.length > 200 && (
+                            <p className="px-2 py-1 text-[11px] text-slate-400 italic bg-slate-50">
+                              Showing first 200 matches — narrow Step&nbsp;1 parameters to refine.
+                            </p>
+                          )}
+                        </div>
                       )}
-                      {selectedPrimer && (
+                      {selectedPrimers.length > 0 && (
                         <p className="mt-2 text-[11px] text-emerald-700">
-                          Selected: <strong>{selectedPrimer.name}</strong>
+                          Will be saved as {selectedPrimers.length === 1 ? 'a single primer layer' : `${selectedPrimers.length} consecutive primer layers`}: {selectedPrimers.map(p => p.name).join(' → ')}
+                        </p>
+                      )}
+                      {selectedPrimers.length === 0 && primerCandidates.length > 0 && (
+                        <p className="mt-2 text-[11px] text-slate-400">
+                          Tip: leave all unchecked to skip the primer entirely.
                         </p>
                       )}
                     </div>
@@ -2140,18 +2185,25 @@ const SystemBuilder: React.FC<SystemBuilderProps> = ({ products, onProductUpdate
                   always sees the full layer order. */}
               {quickStep === 3 && (
                 <div className="space-y-3">
-                  {/* Read-only primer reminder so the user knows it's already
-                      part of the system being built. */}
-                  {quickSetup.primerProductId && (() => {
-                    const sel = products.find(p => p.id === quickSetup.primerProductId);
-                    return (
-                      <div className="flex items-center gap-2 text-[11px] text-slate-500 bg-slate-50 border border-slate-200 rounded px-2 py-1">
-                        <span className="w-4 h-4 rounded-full bg-indigo-100 text-indigo-700 flex items-center justify-center text-[9px] font-bold">1</span>
-                        Primer: <strong className="text-slate-700">{sel?.name || '—'}</strong>
-                        <span className="ml-auto text-slate-400">(set in Step 2 — go back to change)</span>
-                      </div>
-                    );
-                  })()}
+                  {/* Read-only primer reminder so the user knows the primer
+                      layer(s) are already part of the system being built.
+                      One row per selected primer with its position number. */}
+                  {quickSetup.primerProductIds.length > 0 && (
+                    <div className="space-y-1">
+                      {quickSetup.primerProductIds.map((id, i) => {
+                        const sel = products.find(p => p.id === id);
+                        return (
+                          <div key={id} className="flex items-center gap-2 text-[11px] text-slate-500 bg-slate-50 border border-slate-200 rounded px-2 py-1">
+                            <span className="w-4 h-4 rounded-full bg-indigo-100 text-indigo-700 flex items-center justify-center text-[9px] font-bold">{i + 1}</span>
+                            Primer{quickSetup.primerProductIds.length > 1 ? ` ${i + 1}` : ''}: <strong className="text-slate-700">{sel?.name || '—'}</strong>
+                            {i === quickSetup.primerProductIds.length - 1 && (
+                              <span className="ml-auto text-slate-400">(set in Step 2 — go back to change)</span>
+                            )}
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
                   <div>
                     <label className="block text-xs font-semibold text-slate-600 mb-2">Material type — sets the suggested layer skeleton</label>
                     <div className="grid grid-cols-5 gap-2">
@@ -2172,11 +2224,12 @@ const SystemBuilder: React.FC<SystemBuilderProps> = ({ products, onProductUpdate
                     <div className="space-y-1.5">
                       {quickSetup.layers.map((slot, i) => (
                         <div key={i} className="flex items-center gap-2">
-                          {/* Slot index labels start at 2 because the primer
-                              (when set) takes slot #1. When no primer is set
-                              they start at 1 — see the index logic. */}
+                          {/* Slot index labels are offset by the number of
+                              selected primers — those occupy the first slots,
+                              so e.g. with 2 primers the first post-primer
+                              layer is shown as #3. */}
                           <span className="w-5 h-5 rounded-full bg-indigo-100 text-indigo-700 flex items-center justify-center text-[10px] font-bold">
-                            {i + 1 + (quickSetup.primerProductId ? 1 : 0)}
+                            {i + 1 + quickSetup.primerProductIds.length}
                           </span>
                           <input type="text" value={slot.name} onChange={(e) => { const ls = [...quickSetup.layers]; ls[i] = { ...ls[i], name: e.target.value }; setQuickSetup({ ...quickSetup, layers: ls }); }} className="flex-1 px-2 py-1 text-sm border border-slate-200 rounded" />
                           <button type="button" onClick={() => setQuickSetup({ ...quickSetup, layers: quickSetup.layers.filter((_, j) => j !== i) })} className="p-1 text-slate-400 hover:text-red-500"><Trash2 size={13} /></button>
@@ -2320,12 +2373,15 @@ const SystemBuilder: React.FC<SystemBuilderProps> = ({ products, onProductUpdate
                           systemDuty: quickSetup.duty || null,
                         } as any);
                         const newId = (created as any).systemId || (created as any).id;
-                        // Build the final layer list: primer (if chosen in
-                        // Step 2) is always layer #1, followed by the
-                        // post-primer layers from Step 3.
-                        const finalLayers: QuickLayerSlot[] = quickSetup.primerProductId
-                          ? [{ name: 'Primer', productId: quickSetup.primerProductId }, ...quickSetup.layers]
-                          : [...quickSetup.layers];
+                        // Build the final layer list: each primer chosen in
+                        // Step 2 becomes its own layer at the top in pick
+                        // order (Primer 1, Primer 2, …), then the post-primer
+                        // layers from Step 3 follow.
+                        const primerLayers: QuickLayerSlot[] = quickSetup.primerProductIds.map((id, i) => ({
+                          name: quickSetup.primerProductIds.length > 1 ? `Primer ${i + 1}` : 'Primer',
+                          productId: id,
+                        }));
+                        const finalLayers: QuickLayerSlot[] = [...primerLayers, ...quickSetup.layers];
                         for (let i = 0; i < finalLayers.length; i++) {
                           const slot = finalLayers[i];
                           const layer = await systemsApi.createLayer({ systemId: newId, layerName: slot.name, orderSequence: i + 1 });
