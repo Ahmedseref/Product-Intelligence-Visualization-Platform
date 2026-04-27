@@ -227,27 +227,33 @@ const SystemBuilder: React.FC<SystemBuilderProps> = ({ products, onProductUpdate
   }, [selectedSystemId]);
 
   // Load qualification tags for all system-ready products so the smart filter
-  // can run client-side. Re-fetched whenever the selected system changes (so a
-  // newly-tagged product becomes available without a hard refresh).
+  // can run client-side. Re-fetched whenever the selected system changes OR
+  // the Quick Setup wizard opens — so a product that was just tagged in the
+  // Qualification tab is immediately visible in the wizard's primer / per-layer
+  // pickers without a hard refresh.
+  const refreshQualificationTags = useCallback(async () => {
+    try {
+      const token = localStorage.getItem('auth_token');
+      const headers: HeadersInit = token ? { Authorization: `Bearer ${token}` } : {};
+      const res = await fetch('/api/qualification-tags', { headers });
+      if (!res.ok) return;
+      const rows: Array<{ productId: string; substrateTypes?: string[] | null; humidityTolerance?: string | null; dutyRating?: string | null; isSystemReady?: boolean | null; layerPosition?: string | null }> = await res.json();
+      const map: Record<string, typeof rows[number]> = {};
+      for (const r of rows) map[r.productId] = r;
+      setTagsByProduct(map);
+    } catch (err) {
+      console.error('Failed to load qualification tags:', err);
+    }
+  }, []);
+
   useEffect(() => {
     let cancelled = false;
     (async () => {
-      try {
-        const token = localStorage.getItem('auth_token');
-        const headers: HeadersInit = token ? { Authorization: `Bearer ${token}` } : {};
-        const res = await fetch('/api/qualification-tags', { headers });
-        if (!res.ok) return;
-        const rows: Array<{ productId: string; substrateTypes?: string[] | null; humidityTolerance?: string | null; dutyRating?: string | null; isSystemReady?: boolean | null; layerPosition?: string | null }> = await res.json();
-        if (cancelled) return;
-        const map: Record<string, typeof rows[number]> = {};
-        for (const r of rows) map[r.productId] = r;
-        setTagsByProduct(map);
-      } catch (err) {
-        console.error('Failed to load qualification tags:', err);
-      }
+      if (cancelled) return;
+      await refreshQualificationTags();
     })();
     return () => { cancelled = true; };
-  }, [selectedSystemId]);
+  }, [selectedSystemId, refreshQualificationTags]);
 
   // Compute the effective substrate to filter by, given precedence:
   //   layerSubstrateOverride > activeSectorContext override > systemSubstrate
@@ -942,6 +948,10 @@ const SystemBuilder: React.FC<SystemBuilderProps> = ({ products, onProductUpdate
                   setQuickSetup({ name: '', materialType: 'epoxy', substrate: [], humidity: '', duty: '', primerProductId: null, layers: QUICK_SKELETONS.epoxy.map(n => ({ name: n, productId: null })) });
                   setQuickStep(1);
                   setQuickSetupOpen(true);
+                  // Pull the latest qualification tags so any product the user
+                  // just tagged (e.g. set Layer Position = Primer) shows up
+                  // immediately in Step 2 / Step 4 without a hard refresh.
+                  refreshQualificationTags();
                 }}
                 className="p-1.5 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition-colors"
                 title="Quick Setup wizard (parameter-based new system)"
