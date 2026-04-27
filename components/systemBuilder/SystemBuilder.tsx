@@ -2107,7 +2107,7 @@ const SystemBuilder: React.FC<SystemBuilderProps> = ({ products, onProductUpdate
                 return (
                   <div className="space-y-3">
                     <p className="text-xs text-slate-500">
-                      Pick one or more primers for this system. The list below is filtered by the parameters from Step&nbsp;1 — only system-ready products that look like primers (tagged or named) are shown. If you pick several, each becomes its own layer in the order you ticked them.
+                      Pick one or more primers for this system. The list below is filtered by the parameters from Step&nbsp;1 — only system-ready products that look like primers (tagged or named) are shown. If you pick several, they all live on the <strong>same primer layer</strong> as alternatives — the first one you tick is the default, the others are swap-in options.
                     </p>
                     <div className="border border-slate-200 rounded-lg p-3">
                       <div className="flex items-center justify-between mb-2">
@@ -2166,7 +2166,9 @@ const SystemBuilder: React.FC<SystemBuilderProps> = ({ products, onProductUpdate
                       )}
                       {selectedPrimers.length > 0 && (
                         <p className="mt-2 text-[11px] text-emerald-700">
-                          Will be saved as {selectedPrimers.length === 1 ? 'a single primer layer' : `${selectedPrimers.length} consecutive primer layers`}: {selectedPrimers.map(p => p.name).join(' → ')}
+                          {selectedPrimers.length === 1
+                            ? <>Will be saved as the <strong>Primer</strong> layer with <strong>{selectedPrimers[0].name}</strong> as the default.</>
+                            : <>Will be saved as a single <strong>Primer</strong> layer with {selectedPrimers.length} alternatives — default: <strong>{selectedPrimers[0].name}</strong>; alternatives: {selectedPrimers.slice(1).map(p => p.name).join(', ')}.</>}
                         </p>
                       )}
                       {selectedPrimers.length === 0 && primerCandidates.length > 0 && (
@@ -2185,23 +2187,33 @@ const SystemBuilder: React.FC<SystemBuilderProps> = ({ products, onProductUpdate
                   always sees the full layer order. */}
               {quickStep === 3 && (
                 <div className="space-y-3">
-                  {/* Read-only primer reminder so the user knows the primer
-                      layer(s) are already part of the system being built.
-                      One row per selected primer with its position number. */}
+                  {/* Read-only primer reminder. All selected primers live on
+                      ONE Primer layer as alternatives, so we render them
+                      grouped under a single layer #1 row — the first one is
+                      flagged as the default. */}
                   {quickSetup.primerProductIds.length > 0 && (
-                    <div className="space-y-1">
-                      {quickSetup.primerProductIds.map((id, i) => {
-                        const sel = products.find(p => p.id === id);
-                        return (
-                          <div key={id} className="flex items-center gap-2 text-[11px] text-slate-500 bg-slate-50 border border-slate-200 rounded px-2 py-1">
-                            <span className="w-4 h-4 rounded-full bg-indigo-100 text-indigo-700 flex items-center justify-center text-[9px] font-bold">{i + 1}</span>
-                            Primer{quickSetup.primerProductIds.length > 1 ? ` ${i + 1}` : ''}: <strong className="text-slate-700">{sel?.name || '—'}</strong>
-                            {i === quickSetup.primerProductIds.length - 1 && (
-                              <span className="ml-auto text-slate-400">(set in Step 2 — go back to change)</span>
-                            )}
-                          </div>
-                        );
-                      })}
+                    <div className="bg-slate-50 border border-slate-200 rounded px-2 py-1.5 text-[11px] text-slate-500">
+                      <div className="flex items-center gap-2 mb-1">
+                        <span className="w-4 h-4 rounded-full bg-indigo-100 text-indigo-700 flex items-center justify-center text-[9px] font-bold">1</span>
+                        <span className="font-semibold text-slate-700">Primer layer</span>
+                        <span className="text-slate-400">·</span>
+                        <span>{quickSetup.primerProductIds.length} {quickSetup.primerProductIds.length === 1 ? 'product' : 'alternatives'}</span>
+                        <span className="ml-auto text-slate-400">(set in Step 2 — go back to change)</span>
+                      </div>
+                      <ul className="ml-6 space-y-0.5">
+                        {quickSetup.primerProductIds.map((id, i) => {
+                          const sel = products.find(p => p.id === id);
+                          return (
+                            <li key={id} className="flex items-center gap-2">
+                              <span className="text-slate-400">•</span>
+                              <span className="text-slate-700">{sel?.name || '—'}</span>
+                              {i === 0 && (
+                                <span className="px-1.5 py-0.5 text-[9px] rounded bg-emerald-50 text-emerald-700 border border-emerald-100">default</span>
+                              )}
+                            </li>
+                          );
+                        })}
+                      </ul>
                     </div>
                   )}
                   <div>
@@ -2373,21 +2385,30 @@ const SystemBuilder: React.FC<SystemBuilderProps> = ({ products, onProductUpdate
                           systemDuty: quickSetup.duty || null,
                         } as any);
                         const newId = (created as any).systemId || (created as any).id;
-                        // Build the final layer list: each primer chosen in
-                        // Step 2 becomes its own layer at the top in pick
-                        // order (Primer 1, Primer 2, …), then the post-primer
-                        // layers from Step 3 follow.
-                        const primerLayers: QuickLayerSlot[] = quickSetup.primerProductIds.map((id, i) => ({
-                          name: quickSetup.primerProductIds.length > 1 ? `Primer ${i + 1}` : 'Primer',
-                          productId: id,
-                        }));
-                        const finalLayers: QuickLayerSlot[] = [...primerLayers, ...quickSetup.layers];
-                        for (let i = 0; i < finalLayers.length; i++) {
-                          const slot = finalLayers[i];
-                          const layer = await systemsApi.createLayer({ systemId: newId, layerName: slot.name, orderSequence: i + 1 });
+                        // Layer #1 is a SINGLE "Primer" layer. Every primer
+                        // the user ticked in Step 2 is added as an alternative
+                        // product option on that one layer — they're
+                        // alternatives for the same slot, not separate layers.
+                        // The first one ticked becomes the default; the rest
+                        // are non-default alternatives the user can swap to.
+                        let layerOrder = 1;
+                        if (quickSetup.primerProductIds.length > 0) {
+                          const primerLayer = await systemsApi.createLayer({ systemId: newId, layerName: 'Primer', orderSequence: layerOrder++ });
+                          const primerLayerId = (primerLayer as any).layerId || (primerLayer as any).id;
+                          for (let i = 0; i < quickSetup.primerProductIds.length; i++) {
+                            await systemsApi.addProductOption({
+                              layerId: primerLayerId,
+                              productId: quickSetup.primerProductIds[i],
+                              isDefault: i === 0,
+                            });
+                          }
+                        }
+                        // Then the post-primer layers from Step 3, each as
+                        // their own layer with an optional default product.
+                        for (const slot of quickSetup.layers) {
+                          const layer = await systemsApi.createLayer({ systemId: newId, layerName: slot.name, orderSequence: layerOrder++ });
                           const layerId = (layer as any).layerId || (layer as any).id;
                           if (slot.productId) {
-                            // Mark the chosen product as the layer's default.
                             await systemsApi.addProductOption({ layerId, productId: slot.productId, isDefault: true });
                           }
                         }
