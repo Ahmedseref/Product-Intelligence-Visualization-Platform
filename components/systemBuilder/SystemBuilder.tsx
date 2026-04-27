@@ -49,7 +49,9 @@ const SystemBuilder: React.FC<SystemBuilderProps> = ({ products, onProductUpdate
   type QuickSetup = {
     name: string;
     materialType: 'epoxy' | 'pu' | 'polyurea' | 'acrylic' | 'generic';
-    substrate: string;
+    // Multi-select — products can list several substrate types, so the wizard
+    // mirrors that. Empty array means "any substrate" for the Step 3 filter.
+    substrate: string[];
     humidity: string;
     duty: string;
     layers: QuickLayerSlot[];
@@ -64,7 +66,7 @@ const SystemBuilder: React.FC<SystemBuilderProps> = ({ products, onProductUpdate
   const [quickSetup, setQuickSetup] = useState<QuickSetup>({
     name: '',
     materialType: 'epoxy',
-    substrate: '',
+    substrate: [],
     humidity: '',
     duty: '',
     layers: QUICK_SKELETONS.epoxy.map(n => ({ name: n, productId: null })),
@@ -859,7 +861,7 @@ const SystemBuilder: React.FC<SystemBuilderProps> = ({ products, onProductUpdate
                 onClick={() => {
                   // Phase 4: open Quick Setup wizard. Reset to a fresh state so
                   // it always starts on Step 1 with the default skeleton.
-                  setQuickSetup({ name: '', materialType: 'epoxy', substrate: '', humidity: '', duty: '', layers: QUICK_SKELETONS.epoxy.map(n => ({ name: n, productId: null })) });
+                  setQuickSetup({ name: '', materialType: 'epoxy', substrate: [], humidity: '', duty: '', layers: QUICK_SKELETONS.epoxy.map(n => ({ name: n, productId: null })) });
                   setQuickStep(1);
                   setQuickSetupOpen(true);
                 }}
@@ -1917,11 +1919,44 @@ const SystemBuilder: React.FC<SystemBuilderProps> = ({ products, onProductUpdate
                   </div>
                   <div className="grid grid-cols-3 gap-2">
                     <div>
-                      <label className="block text-xs font-semibold text-slate-600 mb-1">Substrate</label>
-                      <select value={quickSetup.substrate} onChange={(e) => setQuickSetup({ ...quickSetup, substrate: e.target.value })} className="w-full px-2 py-1.5 text-sm border border-slate-200 rounded-lg">
-                        <option value="">— any —</option>
-                        {vocab.substrate.map(v => <option key={v.value} value={v.value}>{v.label}</option>)}
-                      </select>
+                      <label className="block text-xs font-semibold text-slate-600 mb-1">
+                        Substrate
+                        {quickSetup.substrate.length > 0 && (
+                          <span className="ml-1 text-[10px] font-normal text-slate-400">({quickSetup.substrate.length} selected)</span>
+                        )}
+                      </label>
+                      {/* Multi-select pills — products can carry several
+                          substrate types, so picking more than one widens the
+                          Step 3 product filter (matches ANY of the chosen). */}
+                      <div className="border border-slate-200 rounded-lg p-1.5 bg-white max-h-28 overflow-y-auto flex flex-wrap gap-1">
+                        {vocab.substrate.length === 0 ? (
+                          <span className="text-[11px] text-slate-400 italic px-1">No substrates configured</span>
+                        ) : vocab.substrate.map(v => {
+                          const selected = quickSetup.substrate.includes(v.value);
+                          return (
+                            <button
+                              key={v.value}
+                              type="button"
+                              onClick={() => {
+                                const next = selected
+                                  ? quickSetup.substrate.filter(s => s !== v.value)
+                                  : [...quickSetup.substrate, v.value];
+                                setQuickSetup({ ...quickSetup, substrate: next });
+                              }}
+                              className={`px-2 py-0.5 text-[11px] rounded-full border transition-colors ${
+                                selected
+                                  ? 'bg-indigo-600 border-indigo-600 text-white'
+                                  : 'bg-white border-slate-200 text-slate-600 hover:border-indigo-300'
+                              }`}
+                            >
+                              {v.label}
+                            </button>
+                          );
+                        })}
+                      </div>
+                      {quickSetup.substrate.length === 0 && (
+                        <p className="mt-1 text-[10px] text-slate-400">— any —</p>
+                      )}
                     </div>
                     <div>
                       <label className="block text-xs font-semibold text-slate-600 mb-1">Humidity</label>
@@ -1984,7 +2019,8 @@ const SystemBuilder: React.FC<SystemBuilderProps> = ({ products, onProductUpdate
                     const matches = products.filter(p => {
                       const t = tagsByProduct[p.id];
                       if (!t || !t.isSystemReady) return false;
-                      if (quickSetup.substrate && !(t.substrateTypes || []).includes(quickSetup.substrate)) return false;
+                      // Multi-substrate: keep the product if it lists ANY of the selected substrates.
+                      if (quickSetup.substrate.length > 0 && !(t.substrateTypes || []).some(s => quickSetup.substrate.includes(s))) return false;
                       if (quickSetup.humidity && t.humidityTolerance && t.humidityTolerance !== quickSetup.humidity) return false;
                       if (quickSetup.duty && t.dutyRating && t.dutyRating !== quickSetup.duty) return false;
                       return true;
@@ -2044,7 +2080,13 @@ const SystemBuilder: React.FC<SystemBuilderProps> = ({ products, onProductUpdate
                       try {
                         const created = await systemsApi.createSystem({
                           name: quickSetup.name.trim(),
-                          systemSubstrate: quickSetup.substrate || null,
+                          // The system header carries a single substrate.
+                          // If the user selected exactly one, persist it.
+                          // If they selected multiple, leave it null — the wizard
+                          // already used the multi-selection to filter Step 3
+                          // products, and the user can refine the system header
+                          // afterwards in the regular editor.
+                          systemSubstrate: quickSetup.substrate.length === 1 ? quickSetup.substrate[0] : null,
                           systemHumidity: quickSetup.humidity || null,
                           systemDuty: quickSetup.duty || null,
                         } as any);
