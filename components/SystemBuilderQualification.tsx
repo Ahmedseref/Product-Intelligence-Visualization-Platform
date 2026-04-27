@@ -123,6 +123,13 @@ type ModalConfidenceFilter = 'all' | 'high' | 'medium' | 'low' | 'none';
 // Finish is hidden completely for primers.
 const isFinishHidden = (lp: string): boolean => lp === 'primer';
 
+// Humidity tolerance is irrelevant for layers that don't sit directly on the
+// substrate — base coats, intermediate coats and topcoats are applied on top
+// of another coat, so they never face the substrate's moisture. Primers and
+// standalone coats DO touch the substrate, so humidity stays editable.
+const isHumidityHidden = (lp: string): boolean =>
+  lp === 'base_coat' || lp === 'intermediate' || lp === 'topcoat';
+
 // Substrate becomes a fixed read-only pill (or 2-option choice for topcoat).
 const isSubstrateFixed = (lp: string): boolean =>
   lp === 'base_coat' || lp === 'intermediate' || lp === 'topcoat';
@@ -495,6 +502,7 @@ const ReviewModal: React.FC<ReviewModalProps> = ({ state, setState, vocab, syste
           else if (lp === 'primer' || lp === 'standalone')
             nextEdited.substrate_types = nextEdited.substrate_types.filter(s => s !== 'Over Primer' && s !== 'Over Base Coat');
           if (isFinishHidden(lp)) nextEdited.finish_type = '';
+          if (isHumidityHidden(lp)) nextEdited.humidity_tolerance = '';
         }
         return { ...r, edited: nextEdited, included: patch.included ?? r.included };
       }),
@@ -516,8 +524,9 @@ const ReviewModal: React.FC<ReviewModalProps> = ({ state, setState, vocab, syste
       if (unresolvedOnly) {
         const lp = r.edited.layer_position;
         const finishOk = isFinishHidden(lp) || !!r.edited.finish_type;
+        const humidityOk = isHumidityHidden(lp) || !!r.edited.humidity_tolerance;
         const subOk = r.edited.substrate_types.length > 0;
-        const allFilled = subOk && !!r.edited.humidity_tolerance && !!r.edited.duty_rating && finishOk && !!lp;
+        const allFilled = subOk && humidityOk && !!r.edited.duty_rating && finishOk && !!lp;
         if (allFilled) return false;
       }
       return true;
@@ -833,12 +842,21 @@ const ReviewModal: React.FC<ReviewModalProps> = ({ state, setState, vocab, syste
                         <SourceBadge source={r.sources.substrate} />
                       </td>
                       <td className="px-2 py-1.5">
-                        <SingleSelect
-                          options={vocab?.humidity || []}
-                          value={r.edited.humidity_tolerance}
-                          onChange={v => updateModalRow(r.product_id, { humidity_tolerance: v })}
-                        />
-                        <SourceBadge source={r.sources.humidity} />
+                        {isHumidityHidden(lp) ? (
+                          <span
+                            className="inline-block px-1.5 py-0.5 text-[10px] text-slate-400 italic"
+                            title="Humidity tolerance only applies to layers that touch the substrate (primer / standalone)"
+                          >N/A</span>
+                        ) : (
+                          <>
+                            <SingleSelect
+                              options={vocab?.humidity || []}
+                              value={r.edited.humidity_tolerance}
+                              onChange={v => updateModalRow(r.product_id, { humidity_tolerance: v })}
+                            />
+                            <SourceBadge source={r.sources.humidity} />
+                          </>
+                        )}
                       </td>
                       <td className="px-2 py-1.5">
                         <SingleSelect
@@ -1266,6 +1284,9 @@ const SystemBuilderQualification: React.FC<Props> = ({ products, treeNodes, onPr
         if (isFinishHidden(lp)) {
           next.finishType = '';
         }
+        if (isHumidityHidden(lp)) {
+          next.humidityTolerance = '';
+        }
       }
       return { ...prev, [productId]: next };
     });
@@ -1284,12 +1305,13 @@ const SystemBuilderQualification: React.FC<Props> = ({ products, treeNodes, onPr
         ? computeFixedSubstrate(lp, r.substrateTypes)
         : (r.substrateTypes.length > 0 ? r.substrateTypes : null);
       const finishPersist = isFinishHidden(lp) ? null : (r.finishType || null);
+      const humidityPersist = isHumidityHidden(lp) ? null : (r.humidityTolerance || null);
 
       const body = {
         productId,
         layerPosition: lp || null,
         substrateTypes: substratePersist,
-        humidityTolerance: r.humidityTolerance || null,
+        humidityTolerance: humidityPersist,
         dutyRating: r.dutyRating || null,
         finishType: finishPersist,
         isSystemReady: r.isSystemReady,
@@ -1423,15 +1445,19 @@ const SystemBuilderQualification: React.FC<Props> = ({ products, treeNodes, onPr
       const data: { results: AutoInferRow[] } = await res.json();
       const r = data.results[0];
       if (!r) throw new Error('No result returned');
+      // Apply Fix 2 conditional rules to the suggested values too — if the
+      // suggested layer position implies humidity is N/A or finish is hidden,
+      // never seed those fields with stale guesses.
+      const suggestedLp = r.suggested.layer_position || '';
       setRows(prev => ({
         ...prev,
         [productId]: {
           ...(prev[productId] || emptyRow()),
-          layerPosition: r.suggested.layer_position || '',
+          layerPosition: suggestedLp,
           substrateTypes: r.suggested.substrate_types || [],
-          humidityTolerance: r.suggested.humidity_tolerance || '',
+          humidityTolerance: isHumidityHidden(suggestedLp) ? '' : (r.suggested.humidity_tolerance || ''),
           dutyRating: r.suggested.duty_rating || '',
-          finishType: r.suggested.finish_type || '',
+          finishType: isFinishHidden(suggestedLp) ? '' : (r.suggested.finish_type || ''),
           dirty: true,
           saving: false,
           savedFlash: false,
@@ -1461,11 +1487,12 @@ const SystemBuilderQualification: React.FC<Props> = ({ products, treeNodes, onPr
           ? computeFixedSubstrate(lp, r.edited.substrate_types)
           : r.edited.substrate_types;
         const finish = isFinishHidden(lp) ? null : (r.edited.finish_type || null);
+        const humidity = isHumidityHidden(lp) ? null : (r.edited.humidity_tolerance || null);
         return {
           product_id: r.product_id,
           layer_position: lp || null,
           substrate_types: substrate,
-          humidity_tolerance: r.edited.humidity_tolerance || null,
+          humidity_tolerance: humidity,
           duty_rating: r.edited.duty_rating || null,
           finish_type: finish,
           is_system_ready: markReady,
@@ -2085,13 +2112,23 @@ const SystemBuilderQualification: React.FC<Props> = ({ products, treeNodes, onPr
                         );
                       })()}
                     </td>
+                    {/* Humidity — N/A for layers that don't touch the substrate
+                        (base coats, intermediate coats, topcoats). Same conditional
+                        pattern as Finish for primers. */}
                     <td className="px-2 py-1.5 align-top">
-                      <SingleSelect
-                        options={vocab?.humidity || []}
-                        value={r.humidityTolerance}
-                        onChange={v => updateRow(p.id, { humidityTolerance: v })}
-                        disabled={r.saving}
-                      />
+                      {isHumidityHidden(r.layerPosition) ? (
+                        <span
+                          className="inline-block px-1.5 py-0.5 text-[10px] text-slate-400 italic"
+                          title="Humidity tolerance only applies to layers that touch the substrate (primer / standalone)"
+                        >N/A</span>
+                      ) : (
+                        <SingleSelect
+                          options={vocab?.humidity || []}
+                          value={r.humidityTolerance}
+                          onChange={v => updateRow(p.id, { humidityTolerance: v })}
+                          disabled={r.saving}
+                        />
+                      )}
                     </td>
                     <td className="px-2 py-1.5 align-top">
                       <SingleSelect
