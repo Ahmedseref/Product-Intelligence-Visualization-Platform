@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { SystemData, SystemFull, SystemLayer, SystemProductOption, Product, Sector, CustomField, TreeNode, Supplier, User } from '../../types';
 import { systemsApi } from '../../client/api';
 import { useEscapeKey } from '../../hooks/useEscapeKey';
@@ -82,6 +82,24 @@ const SystemBuilder: React.FC<SystemBuilderProps> = ({ products, onProductUpdate
     if (/\bbase\s*coat\b|\bbody\s*coat\b|\bscratch\s*coat\b|\bself.?level/.test(n)) return 'base_coat';
     return null;
   };
+
+  // Material-type → keyword regex map. Used by Step 3 of the wizard to make
+  // sure that when the user picks the "PU" skeleton in Step 2, only
+  // PU/Polyurethane products show up under each layer slot — never an Epoxy
+  // primer. Keywords are matched against the product's full taxonomy path
+  // (sector > category > subcategory > group names) AND the product name.
+  // 'generic' intentionally has no filter so it serves as the "any material"
+  // escape hatch.
+  //
+  // 'pu' must be word-boundary-matched (\bpu\b) so it doesn't accidentally
+  // match the middle of unrelated words like "Pump" or "Pure".
+  const MATERIAL_KEYWORDS: Record<QuickSetup['materialType'], RegExp | null> = {
+    epoxy: /\bepoxy\b|\bepox\b/i,
+    pu: /\bpu\b|\bpolyurethane\b/i,
+    polyurea: /\bpolyurea\b/i,
+    acrylic: /\bacrylic\b/i,
+    generic: null,
+  };
   const [quickSetup, setQuickSetup] = useState<QuickSetup>({
     name: '',
     materialType: 'epoxy',
@@ -132,6 +150,35 @@ const SystemBuilder: React.FC<SystemBuilderProps> = ({ products, onProductUpdate
 
   useEscapeKey(showHistory ? () => setShowHistory(false) : null);
   useEscapeKey(detailsProduct ? () => setDetailsProduct(null) : null);
+
+  // Build a one-time map of "productId -> lowercased searchable string"
+  // composed of the product's full taxonomy path plus its own name. The
+  // wizard's Step 3 material-type filter (epoxy / pu / polyurea / acrylic)
+  // matches against this string with a word-boundary regex, so that picking
+  // "PU" only suggests products living under a PU/Polyurethane node or whose
+  // own name contains the keyword. Re-computed only when products or the
+  // taxonomy actually change.
+  const productMaterialPath = useMemo(() => {
+    const nodeById = new Map<string, TreeNode>();
+    for (const n of treeNodes) nodeById.set(n.id, n);
+    const result: Record<string, string> = {};
+    for (const p of products) {
+      const parts: string[] = [];
+      let cur: TreeNode | undefined = nodeById.get(p.nodeId);
+      // Defensive depth guard against accidental cycles in the taxonomy.
+      let depth = 0;
+      while (cur && depth < 50) {
+        parts.push(cur.name);
+        cur = cur.parentId ? nodeById.get(cur.parentId) : undefined;
+        depth++;
+      }
+      // Include the product name + supplier so a brand-named product like
+      // "EpoFloor 200" still matches even if its taxonomy node is generic.
+      parts.push(p.name || '', p.supplier || '');
+      result[p.id] = parts.join(' ').toLowerCase();
+    }
+    return result;
+  }, [products, treeNodes]);
 
   // Load qualification vocabularies (substrate / humidity / duty). We re-fetch
   // whenever the selected system changes so we always run in an authenticated
@@ -2040,11 +2087,19 @@ const SystemBuilder: React.FC<SystemBuilderProps> = ({ products, onProductUpdate
                   blocked by un-tagged products. */}
               {quickStep === 3 && (
                 <div className="space-y-4">
-                  <p className="text-xs text-slate-500">Pick a default product for each layer (optional). Products are filtered by the parameters from Step 1 <em>and</em> the layer position inferred from each slot name in Step 2.</p>
+                  <p className="text-xs text-slate-500">
+                    Pick a default product for each layer (optional). Products are filtered by the parameters from Step 1 <em>and</em> the layer position inferred from each slot name in Step 2
+                    {quickSetup.materialType !== 'generic' && (
+                      <> — only <strong>{quickSetup.materialType === 'pu' ? 'PU/Polyurethane' : quickSetup.materialType[0].toUpperCase() + quickSetup.materialType.slice(1)}</strong> products (matched by taxonomy or name) are shown.</>
+                    )}
+                  </p>
                   {quickSetup.layers.map((slot, i) => {
                     // Infer this slot's layer position from its name. Null = no
                     // per-slot filter (slot name is custom or ambiguous).
                     const slotPos = inferLayerPositionFromSlotName(slot.name);
+                    // Material-type filter — applied uniformly across all slots
+                    // so picking PU never lets an Epoxy primer through.
+                    const materialRegex = MATERIAL_KEYWORDS[quickSetup.materialType];
                     // Pretty label for the inferred-position pill.
                     const slotPosLabel = slotPos
                       ? slotPos === 'base_coat' ? 'Base Coat'
@@ -2066,6 +2121,14 @@ const SystemBuilder: React.FC<SystemBuilderProps> = ({ products, onProductUpdate
                       // tagged with one. 'standalone' products are versatile
                       // enough to fit any slot, so they always pass.
                       if (slotPos && t.layerPosition && t.layerPosition !== slotPos && t.layerPosition !== 'standalone') return false;
+                      // Material-type filter — keeps the suggestions chemistry-
+                      // correct. Picking PU must never surface Epoxy primers,
+                      // and vice versa. Match against the precomputed
+                      // taxonomy-path-plus-name string.
+                      if (materialRegex) {
+                        const haystack = productMaterialPath[p.id] || '';
+                        if (!materialRegex.test(haystack)) return false;
+                      }
                       return true;
                     });
                     return (
