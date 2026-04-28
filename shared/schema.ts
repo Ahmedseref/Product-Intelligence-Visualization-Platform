@@ -331,6 +331,12 @@ export const proformas = pgTable("proformas", {
   // column ids match the id field on customColumns entries. The required
   // columns ('product' / Description and 'quantity' / Qty) cannot be hidden.
   hiddenColumns: jsonb("hidden_columns").default([]),
+  // Display order for ALL columns (built-in + custom). The user reorders
+  // columns via drag-and-drop in the editor; this array holds the resulting
+  // order as a flat list of column ids. When empty/missing, the legacy
+  // ordering (built-ins in their canonical order, custom columns by their
+  // orderIndex) is used so old proformas still render correctly.
+  columnOrder: jsonb("column_order").default([]),
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow(),
 });

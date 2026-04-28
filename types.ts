@@ -309,6 +309,13 @@ export interface ProformaCustomColumn {
 // and 'quantity' are required and never appear in this set.
 export type ProformaHideableBuiltin = 'unit' | 'unitPrice' | 'total';
 
+// Display order for ALL columns (built-in + custom) in a proforma's items
+// table. Each entry is a column id — built-in ids ('product', 'unitPrice',
+// 'customPrice', 'quantity', 'total') or the id of a ProformaCustomColumn.
+// Persisted on the proforma so the user's drag-and-drop ordering survives
+// reloads and is mirrored in the preview / PDF / Excel exports.
+export type ProformaColumnOrder = string[];
+
 export interface ProformaFinancialData {
   id: number;
   proformaId: string;

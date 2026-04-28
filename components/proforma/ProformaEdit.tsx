@@ -1,5 +1,5 @@
-import React, { useState, useEffect, useCallback } from 'react';
-import { Plus, Trash2, Search, X, ArrowLeft, Save, Type, Hash, Pencil, Columns3, Eye, EyeOff, Check } from 'lucide-react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import { Plus, Trash2, Search, X, ArrowLeft, Save, Type, Hash, Pencil, Columns3, Eye, EyeOff, Check, GripVertical } from 'lucide-react';
 import { api } from '../../client/api';
 import { Product, ProformaData, ProformaSettingsData, ProformaItemData, ProformaCustomColumn, ProformaHideableBuiltin } from '../../types';
 import CustomerSelector from './CustomerSelector';
@@ -62,14 +62,19 @@ const ProformaEdit: React.FC<ProformaEditProps> = ({ proformaId, products, onSav
   // ('unit' / 'unitPrice' / 'total' — note 'customPrice' is editor-only and
   // is always shown while editing) and ids of custom columns.
   const [hiddenColumns, setHiddenColumns] = useState<string[]>([]);
+  // Display order for ALL columns (built-in + custom), as a flat list of
+  // column ids. The user reorders columns via drag-and-drop in the columns
+  // panel; this array is the source of truth for both the editor and the
+  // preview. Empty until loaded — see the load + sync effects below.
+  const [columnOrder, setColumnOrder] = useState<string[]>([]);
+  // Indices used by the drag-and-drop column reorder UI.
+  const [dragColIndex, setDragColIndex] = useState<number | null>(null);
+  const [dragOverColIndex, setDragOverColIndex] = useState<number | null>(null);
   // Toggle for the "Columns" management panel.
   const [showColumnsPanel, setShowColumnsPanel] = useState(false);
   // Pending values for the "Add column" form inside the panel.
   const [newColName, setNewColName] = useState('');
   const [newColType, setNewColType] = useState<'text' | 'number'>('text');
-  // Insert position for the new column. Stores the column id of the anchor
-  // and which side of it ('left' | 'right'). Default = right of 'total' (end).
-  const [newColPos, setNewColPos] = useState<{ relativeTo: string; side: 'left' | 'right' }>({ relativeTo: 'total', side: 'right' });
   // Inline rename state for an existing custom column.
   const [renameColId, setRenameColId] = useState<string | null>(null);
   const [renameColName, setRenameColName] = useState('');
@@ -116,6 +121,14 @@ const ProformaEdit: React.FC<ProformaEditProps> = ({ proformaId, products, onSav
         ? ((pf as any).hiddenColumns as string[])
         : [];
       setHiddenColumns(hidden);
+      // Restore the user's drag-and-drop column ordering. Older proformas
+      // saved before this feature shipped won't have one — in that case we
+      // leave the array empty and the sync effect below will compute a
+      // sensible default from the legacy ordering.
+      const savedOrder: string[] = Array.isArray((pf as any).columnOrder)
+        ? ((pf as any).columnOrder as string[])
+        : [];
+      setColumnOrder(savedOrder);
 
       const items: ProformaItemData[] = pf.items || [];
       const mapped: EditItem[] = items.map((item: any) => {
@@ -199,40 +212,15 @@ const ProformaEdit: React.FC<ProformaEditProps> = ({ proformaId, products, onSav
   // Custom columns — add / rename / delete + per-row value updates
   // ---------------------------------------------------------------------------
 
-  // Returns the customColumns array sorted ascending by orderIndex. The order
-  // of insertion into the source array isn't trustworthy, so we always sort
-  // before rendering.
-  const sortedColumns = [...customColumns].sort((a, b) => a.orderIndex - b.orderIndex);
-
-  // Compute the orderIndex for a brand-new column inserted on a given side of
-  // an anchor column. We reserve "slots" 0..N for the built-in columns by
-  // assigning each built-in a virtual integer position, then place the new
-  // custom column halfway between its anchor and the next column on that side.
+  // Built-in column slot table — only used to seed the legacy `slot` field on
+  // the column descriptors below for backward compatibility. The actual
+  // display order is now driven entirely by `columnOrder`.
   const builtinSlot: Record<BuiltInColumnId, number> = {
     product: 1000,
     unitPrice: 2000,
     customPrice: 3000,
     quantity: 4000,
     total: 5000,
-  };
-  const slotForColumn = (id: string): number => {
-    if ((builtinSlot as Record<string, number>)[id] !== undefined) return builtinSlot[id as BuiltInColumnId];
-    const c = customColumns.find(x => x.id === id);
-    return c ? c.orderIndex : 0;
-  };
-  const computeNewOrderIndex = (relativeTo: string, side: 'left' | 'right'): number => {
-    const anchor = slotForColumn(relativeTo);
-    // Find the nearest existing column on the chosen side (built-in or custom).
-    const allSlots = [
-      ...Object.values(builtinSlot),
-      ...customColumns.map(c => c.orderIndex),
-    ].sort((a, b) => a - b);
-    if (side === 'left') {
-      const prev = [...allSlots].reverse().find(s => s < anchor);
-      return prev === undefined ? anchor - 100 : (prev + anchor) / 2;
-    }
-    const next = allSlots.find(s => s > anchor);
-    return next === undefined ? anchor + 100 : (anchor + next) / 2;
   };
 
   const confirmAddColumn = () => {
@@ -242,14 +230,18 @@ const ProformaEdit: React.FC<ProformaEditProps> = ({ proformaId, products, onSav
       id: newColumnId(),
       name,
       type: newColType,
-      orderIndex: computeNewOrderIndex(newColPos.relativeTo, newColPos.side),
+      // orderIndex is kept on the model for backward compatibility but the
+      // real ordering source is `columnOrder`. We give the new column a slot
+      // past the last known one so legacy renderers (if any) place it last.
+      orderIndex: Math.max(0, ...customColumns.map(c => c.orderIndex)) + 100,
     };
     setCustomColumns(prev => [...prev, col]);
+    // Append the new column to the visual order. The user can immediately
+    // drag it to wherever they want — that's the whole point of the new
+    // drag-and-drop reorder UI replacing the old "After X" dropdown.
+    setColumnOrder(prev => [...prev, col.id]);
     setNewColName('');
     setNewColType('text');
-    // Default the next add to "right of the column we just inserted" so
-    // adding several columns in a row places them in the order the user types.
-    setNewColPos({ relativeTo: col.id, side: 'right' });
   };
 
   // Toggle whether a column id is hidden. Refuses to hide the two required
@@ -299,6 +291,75 @@ const ProformaEdit: React.FC<ProformaEditProps> = ({ proformaId, products, onSav
   };
 
   // ---------------------------------------------------------------------------
+  // Column reorder via drag-and-drop. Replaces the old "Beginning of table /
+  // After X" position dropdown — users now grab a column row by its handle
+  // and drop it where they want it. The order is stored in `columnOrder`
+  // (a flat list of all column ids) and persisted with the proforma.
+  // ---------------------------------------------------------------------------
+
+  // Canonical built-in column id list — kept in one place so the sync effect
+  // and the legacy fallback ordering stay in agreement.
+  const BUILTIN_IDS: BuiltInColumnId[] = ['product', 'unitPrice', 'customPrice', 'quantity', 'total'];
+
+  // Keep `columnOrder` in sync with the actual columns that exist:
+  //   * remove ids that no longer correspond to a built-in or custom column
+  //   * append any column id that's missing (e.g. older proformas with no
+  //     saved order at all, or after a custom column was just added)
+  // Built-ins are appended in their canonical order so first-time loads of
+  // legacy proformas land in the same order they used to render in.
+  useEffect(() => {
+    const validIds = new Set<string>([
+      ...BUILTIN_IDS,
+      ...customColumns.map(c => c.id),
+    ]);
+    const filtered = columnOrder.filter(id => validIds.has(id));
+    // Append anything missing — built-ins first (canonical), then customs in
+    // their stored orderIndex order so legacy proformas keep their layout.
+    const seen = new Set(filtered);
+    const missing: string[] = [];
+    for (const id of BUILTIN_IDS) if (!seen.has(id)) missing.push(id);
+    for (const c of [...customColumns].sort((a, b) => a.orderIndex - b.orderIndex)) {
+      if (!seen.has(c.id)) missing.push(c.id);
+    }
+    if (filtered.length !== columnOrder.length || missing.length > 0) {
+      setColumnOrder([...filtered, ...missing]);
+    }
+    // We intentionally depend only on the column *identity* lists — not on
+    // columnOrder itself — to avoid an infinite loop. The setState above is
+    // gated by an actual difference check.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [customColumns]);
+
+  const handleColDragStart = (index: number) => setDragColIndex(index);
+  const handleColDragOver = (e: React.DragEvent, index: number) => {
+    e.preventDefault();
+    setDragOverColIndex(index);
+  };
+  // The actual reorder happens in onDrop (fires only when the user releases
+  // over a valid row inside this list). onDragEnd is reserved purely for
+  // clearing the visual drag state — that way dropping *outside* the list
+  // cancels cleanly, and we never apply the reorder twice (drop + dragend
+  // would both fire on a successful drop with stale state if we shared one
+  // handler, since React's state updates are async).
+  const handleColDrop = (e: React.DragEvent, dropIndex: number) => {
+    e.preventDefault();
+    if (dragColIndex !== null && dragColIndex !== dropIndex) {
+      setColumnOrder(prev => {
+        const next = [...prev];
+        const [moved] = next.splice(dragColIndex, 1);
+        next.splice(dropIndex, 0, moved);
+        return next;
+      });
+    }
+    setDragColIndex(null);
+    setDragOverColIndex(null);
+  };
+  const handleColDragEnd = () => {
+    setDragColIndex(null);
+    setDragOverColIndex(null);
+  };
+
+  // ---------------------------------------------------------------------------
   // Computed column lists for rendering. tableColumns includes everything
   // (used by the Columns panel — show/hide checkboxes need to list hidden
   // columns too). visibleColumns drops anything in hiddenColumns and is what
@@ -325,7 +386,11 @@ const ProformaEdit: React.FC<ProformaEditProps> = ({ proformaId, products, onSav
     { id: 'total',       label: 'Total',        kind: 'builtin', builtinId: 'total',       align: 'right',  slot: builtinSlot.total },
   ];
 
-  const tableColumns: TableColumn[] = [
+  // Build the full column descriptor list (built-ins + customs) and order it
+  // by the user-controlled `columnOrder`. Any id not present in columnOrder
+  // (shouldn't happen because the sync effect guarantees completeness, but
+  // we're defensive) is appended at the end so we never lose a column.
+  const allColumnDescriptors: TableColumn[] = [
     ...builtinColumnDescriptors,
     ...customColumns.map<TableColumn>(c => ({
       id: c.id,
@@ -335,7 +400,22 @@ const ProformaEdit: React.FC<ProformaEditProps> = ({ proformaId, products, onSav
       align: c.type === 'number' ? 'right' : 'left',
       slot: c.orderIndex,
     })),
-  ].sort((a, b) => a.slot - b.slot);
+  ];
+  const tableColumns: TableColumn[] = useMemo(() => {
+    const byId = new Map(allColumnDescriptors.map(c => [c.id, c]));
+    const ordered: TableColumn[] = [];
+    for (const id of columnOrder) {
+      const c = byId.get(id);
+      if (c) { ordered.push(c); byId.delete(id); }
+    }
+    // Anything not in columnOrder yet — append in stable input order.
+    for (const c of allColumnDescriptors) {
+      if (byId.has(c.id)) ordered.push(c);
+    }
+    return ordered;
+    // allColumnDescriptors is recomputed every render but its contents are
+    // a pure function of customColumns; recomputing is cheap.
+  }, [columnOrder, customColumns]);
 
   const visibleColumns: TableColumn[] = tableColumns.filter(c => !hiddenColumns.includes(c.id));
 
@@ -363,6 +443,13 @@ const ProformaEdit: React.FC<ProformaEditProps> = ({ proformaId, products, onSav
         // so we don't carry orphaned visibility settings forever.
         hiddenColumns: hiddenColumns.filter(id =>
           id === 'unit' || id === 'unitPrice' || id === 'total' ||
+          customColumns.some(c => c.id === id)
+        ),
+        // Persist the user's drag-and-drop column ordering. The sync effect
+        // already keeps `columnOrder` clean, but we filter again here to be
+        // defensive against any race between state updates and Save.
+        columnOrder: columnOrder.filter(id =>
+          (BUILTIN_IDS as string[]).includes(id) ||
           customColumns.some(c => c.id === id)
         ),
       });
@@ -633,64 +720,72 @@ const ProformaEdit: React.FC<ProformaEditProps> = ({ proformaId, products, onSav
             </div>
           )}
 
-          {/* Columns panel — show/hide toggles, add new column, manage existing custom columns. */}
+          {/* Columns panel — unified drag-and-drop list of every column with
+              show/hide, rename, type-toggle, delete inline. The old position
+              dropdown is gone: users just drop new columns where they want
+              them. */}
           {showColumnsPanel && (
             <div className="border border-blue-200 bg-blue-50/40 rounded-xl p-4 space-y-4">
               <div>
-                <h4 className="text-xs font-semibold text-slate-700 uppercase tracking-wide mb-2">Show / hide columns</h4>
-                <div className="grid grid-cols-2 md:grid-cols-3 gap-1.5">
-                  {tableColumns.map(col => {
+                <div className="flex items-center justify-between mb-2">
+                  <h4 className="text-xs font-semibold text-slate-700 uppercase tracking-wide">Columns</h4>
+                  <span className="text-[10px] text-slate-500">Drag to reorder</span>
+                </div>
+                <div className="space-y-1.5">
+                  {tableColumns.map((col, index) => {
                     const isHidden = hiddenColumns.includes(col.id);
                     const isRequired = col.id === 'product' || col.id === 'quantity';
                     const isEditorOnly = col.id === 'customPrice';
+                    const isCustom = col.kind === 'custom';
+                    const isDragging = dragColIndex === index;
+                    const isDragOver = dragOverColIndex === index && dragColIndex !== null && dragColIndex !== index;
                     return (
-                      <button
+                      <div
                         key={col.id}
-                        type="button"
-                        disabled={isRequired || isEditorOnly}
-                        onClick={() => toggleColumnVisibility(col.id)}
-                        title={
-                          isRequired ? 'This column is required and can\'t be hidden'
-                          : isEditorOnly ? 'This column only appears in the editor'
-                          : isHidden ? 'Show this column' : 'Hide this column'
-                        }
-                        className={`flex items-center gap-2 px-2.5 py-1.5 text-xs rounded-lg border text-left transition-colors ${
-                          isRequired || isEditorOnly
-                            ? 'bg-slate-50 border-slate-200 text-slate-400 cursor-not-allowed'
-                            : isHidden
-                              ? 'bg-white border-slate-200 text-slate-400 hover:border-slate-300'
-                              : 'bg-white border-blue-300 text-slate-700 hover:bg-blue-50'
+                        draggable
+                        onDragStart={() => handleColDragStart(index)}
+                        onDragOver={(e) => handleColDragOver(e, index)}
+                        onDragEnd={handleColDragEnd}
+                        onDrop={(e) => handleColDrop(e, index)}
+                        className={`flex items-center gap-2 bg-white border rounded-lg px-2.5 py-1.5 cursor-grab active:cursor-grabbing select-none transition-all ${
+                          isDragging
+                            ? 'border-blue-400 opacity-60 scale-[0.99]'
+                            : isDragOver
+                              ? 'border-blue-300 border-dashed bg-blue-50/60'
+                              : isHidden
+                                ? 'border-slate-200'
+                                : 'border-slate-200 hover:border-slate-300'
                         }`}
                       >
-                        {isRequired || isEditorOnly
-                          ? <Check className="w-3.5 h-3.5 flex-shrink-0 text-slate-300" />
-                          : isHidden
-                            ? <EyeOff className="w-3.5 h-3.5 flex-shrink-0" />
-                            : <Eye className="w-3.5 h-3.5 flex-shrink-0 text-blue-500" />}
-                        <span className="truncate">{col.label}</span>
-                        {col.kind === 'custom' && (
-                          <span className={`ml-auto text-[10px] font-medium px-1.5 py-0.5 rounded ${
-                            col.customCol!.type === 'number' ? 'bg-amber-100 text-amber-700' : 'bg-slate-100 text-slate-600'
-                          }`}>
-                            {col.customCol!.type === 'number' ? '#' : 'T'}
-                          </span>
-                        )}
-                      </button>
-                    );
-                  })}
-                </div>
-                <p className="text-[10px] text-slate-400 mt-1.5">
-                  "Description of Goods" and "Quantity" are required. "Custom Price" only appears here in the editor.
-                </p>
-              </div>
-
-              {customColumns.length > 0 && (
-                <div>
-                  <h4 className="text-xs font-semibold text-slate-700 uppercase tracking-wide mb-2">Custom columns</h4>
-                  <div className="space-y-1.5">
-                    {sortedColumns.map(col => (
-                      <div key={col.id} className="flex items-center gap-2 bg-white border border-slate-200 rounded-lg px-2.5 py-1.5">
-                        {renameColId === col.id ? (
+                        <div className="text-slate-300 hover:text-slate-500 transition-colors flex-shrink-0">
+                          <GripVertical className="w-4 h-4" />
+                        </div>
+                        {/* Show / hide toggle. Disabled for required columns and the editor-only Custom Price. */}
+                        <button
+                          type="button"
+                          disabled={isRequired || isEditorOnly}
+                          onClick={() => toggleColumnVisibility(col.id)}
+                          title={
+                            isRequired ? "This column is required and can't be hidden"
+                            : isEditorOnly ? 'This column only appears in the editor'
+                            : isHidden ? 'Show this column' : 'Hide this column'
+                          }
+                          className={`p-1 rounded flex-shrink-0 ${
+                            isRequired || isEditorOnly
+                              ? 'text-slate-300 cursor-not-allowed'
+                              : isHidden
+                                ? 'text-slate-400 hover:text-slate-700'
+                                : 'text-blue-500 hover:bg-blue-50'
+                          }`}
+                        >
+                          {isRequired || isEditorOnly
+                            ? <Check className="w-3.5 h-3.5" />
+                            : isHidden
+                              ? <EyeOff className="w-3.5 h-3.5" />
+                              : <Eye className="w-3.5 h-3.5" />}
+                        </button>
+                        {/* Name — clickable to rename for custom columns; plain text for built-ins. */}
+                        {isCustom && renameColId === col.id ? (
                           <input
                             autoFocus
                             value={renameColName}
@@ -700,49 +795,65 @@ const ProformaEdit: React.FC<ProformaEditProps> = ({ proformaId, products, onSav
                               if (e.key === 'Enter') commitRenameColumn();
                               if (e.key === 'Escape') { setRenameColId(null); setRenameColName(''); }
                             }}
+                            // Stop the input from being treated as a drag handle so users can select text inside it.
+                            onMouseDown={e => e.stopPropagation()}
                             className="flex-1 text-xs px-2 py-1 border border-blue-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500/20"
                           />
-                        ) : (
+                        ) : isCustom ? (
                           <button
                             type="button"
                             onClick={() => startRenameColumn(col.id)}
-                            className="flex-1 flex items-center gap-1.5 text-xs text-slate-700 hover:text-blue-600 group text-left"
+                            className="flex-1 flex items-center gap-1.5 text-xs text-slate-700 hover:text-blue-600 group text-left min-w-0"
                           >
-                            <span className="truncate">{col.name}</span>
-                            <Pencil className="w-3 h-3 opacity-0 group-hover:opacity-100 text-slate-400" />
+                            <span className={`truncate ${isHidden ? 'text-slate-400' : ''}`}>{col.label}</span>
+                            <Pencil className="w-3 h-3 opacity-0 group-hover:opacity-100 text-slate-400 flex-shrink-0" />
                           </button>
+                        ) : (
+                          <span className={`flex-1 text-xs truncate ${isHidden ? 'text-slate-400' : 'text-slate-700'}`}>
+                            {col.label}
+                            {isEditorOnly && <span className="ml-2 text-[10px] text-slate-400">(editor only)</span>}
+                            {isRequired && <span className="ml-2 text-[10px] text-slate-400">(required)</span>}
+                          </span>
                         )}
-                        <div className="flex items-center bg-slate-100 rounded p-0.5">
-                          <button
-                            type="button"
-                            onClick={() => setCustomColumnType(col.id, 'text')}
-                            title="Text column"
-                            className={`p-1 rounded ${col.type === 'text' ? 'bg-white shadow-sm text-slate-700' : 'text-slate-400 hover:text-slate-600'}`}
-                          >
-                            <Type className="w-3 h-3" />
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => setCustomColumnType(col.id, 'number')}
-                            title="Number column"
-                            className={`p-1 rounded ${col.type === 'number' ? 'bg-white shadow-sm text-slate-700' : 'text-slate-400 hover:text-slate-600'}`}
-                          >
-                            <Hash className="w-3 h-3" />
-                          </button>
-                        </div>
-                        <button
-                          type="button"
-                          onClick={() => deleteCustomColumn(col.id)}
-                          title="Delete column"
-                          className="p-1 text-slate-300 hover:text-red-500"
-                        >
-                          <Trash2 className="w-3.5 h-3.5" />
-                        </button>
+                        {/* Type-toggle + delete — custom columns only. */}
+                        {isCustom && (
+                          <>
+                            <div className="flex items-center bg-slate-100 rounded p-0.5 flex-shrink-0">
+                              <button
+                                type="button"
+                                onClick={() => setCustomColumnType(col.id, 'text')}
+                                title="Text column"
+                                className={`p-1 rounded ${col.customCol!.type === 'text' ? 'bg-white shadow-sm text-slate-700' : 'text-slate-400 hover:text-slate-600'}`}
+                              >
+                                <Type className="w-3 h-3" />
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => setCustomColumnType(col.id, 'number')}
+                                title="Number column"
+                                className={`p-1 rounded ${col.customCol!.type === 'number' ? 'bg-white shadow-sm text-slate-700' : 'text-slate-400 hover:text-slate-600'}`}
+                              >
+                                <Hash className="w-3 h-3" />
+                              </button>
+                            </div>
+                            <button
+                              type="button"
+                              onClick={() => deleteCustomColumn(col.id)}
+                              title="Delete column"
+                              className="p-1 text-slate-300 hover:text-red-500 flex-shrink-0"
+                            >
+                              <Trash2 className="w-3.5 h-3.5" />
+                            </button>
+                          </>
+                        )}
                       </div>
-                    ))}
-                  </div>
+                    );
+                  })}
                 </div>
-              )}
+                <p className="text-[10px] text-slate-400 mt-1.5">
+                  "Product" and "Quantity" are required. "Custom Price" only appears here in the editor. Drag the handle on the left to reorder.
+                </p>
+              </div>
 
               <div>
                 <h4 className="text-xs font-semibold text-slate-700 uppercase tracking-wide mb-2">Add a column</h4>
@@ -753,9 +864,9 @@ const ProformaEdit: React.FC<ProformaEditProps> = ({ proformaId, products, onSav
                     onChange={e => setNewColName(e.target.value)}
                     onKeyDown={e => { if (e.key === 'Enter') confirmAddColumn(); }}
                     placeholder="Column name (e.g. HS Code)"
-                    className="md:col-span-4 px-2.5 py-1.5 border border-slate-200 rounded-lg text-xs focus:outline-none focus:ring-2 focus:ring-blue-500/20"
+                    className="md:col-span-6 px-2.5 py-1.5 border border-slate-200 rounded-lg text-xs focus:outline-none focus:ring-2 focus:ring-blue-500/20"
                   />
-                  <div className="md:col-span-3 flex bg-slate-100 rounded-lg p-0.5">
+                  <div className="md:col-span-4 flex bg-slate-100 rounded-lg p-0.5">
                     <button
                       type="button"
                       onClick={() => setNewColType('text')}
@@ -775,19 +886,6 @@ const ProformaEdit: React.FC<ProformaEditProps> = ({ proformaId, products, onSav
                       <Hash className="w-3 h-3" /> Number
                     </button>
                   </div>
-                  <select
-                    value={`${newColPos.relativeTo}::${newColPos.side}`}
-                    onChange={e => {
-                      const [relativeTo, side] = e.target.value.split('::');
-                      setNewColPos({ relativeTo, side: side as 'left' | 'right' });
-                    }}
-                    className="md:col-span-3 px-2.5 py-1.5 border border-slate-200 rounded-lg text-xs bg-white focus:outline-none focus:ring-2 focus:ring-blue-500/20"
-                  >
-                    <option value={`product::left`}>Beginning of table</option>
-                    {tableColumns.map(col => (
-                      <option key={col.id} value={`${col.id}::right`}>After "{col.label}"</option>
-                    ))}
-                  </select>
                   <button
                     type="button"
                     onClick={confirmAddColumn}
@@ -798,7 +896,7 @@ const ProformaEdit: React.FC<ProformaEditProps> = ({ proformaId, products, onSav
                   </button>
                 </div>
                 <p className="text-[10px] text-slate-400 mt-1.5">
-                  Text columns accept any input; number columns only accept digits and decimals.
+                  Text columns accept any input; number columns only accept digits and decimals. New columns appear at the end — drag them up to reposition.
                 </p>
               </div>
             </div>

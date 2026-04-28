@@ -321,7 +321,20 @@ const ProformaPreview: React.FC<ProformaPreviewProps> = ({ proformaId, onBack })
   const hiddenCols: string[] = Array.isArray((proforma as any).hiddenColumns)
     ? ((proforma as any).hiddenColumns as string[])
     : [];
+  // The user's drag-and-drop column ordering from the editor. When present
+  // it's the source of truth for both the editor and this preview, so what
+  // the user arranges on screen is exactly what the PDF / Excel exports show.
+  // Older proformas saved before the drag-and-drop feature won't have it —
+  // we fall back to the legacy slot-based sort below.
+  const savedColumnOrder: string[] = Array.isArray((proforma as any).columnOrder)
+    ? ((proforma as any).columnOrder as string[])
+    : [];
 
+  // Note: the editor exposes a "Custom Price" column that isn't part of the
+  // preview (it's editor-only) — the preview's built-ins map a single 'qty'
+  // builtinId rather than splitting customPrice/quantity. We map the editor
+  // 'quantity' id onto the preview's 'quantity' descriptor (same id), and
+  // simply ignore 'customPrice' if it shows up in columnOrder.
   const previewBuiltinDescriptors: PreviewColumn[] = [
     { id: 'product',   label: 'DESCRIPTION OF GOODS', kind: 'builtin', builtinId: 'product',   align: 'left',   slot: previewBuiltinSlot.product },
     { id: 'unitPrice', label: 'UNIT PRICE',           kind: 'builtin', builtinId: 'unitPrice', align: 'right',  widthClass: 'w-[100px]', slot: previewBuiltinSlot.unitPrice },
@@ -330,7 +343,7 @@ const ProformaPreview: React.FC<ProformaPreviewProps> = ({ proformaId, onBack })
     { id: 'total',     label: 'TOTAL',                kind: 'builtin', builtinId: 'total',     align: 'right',  widthClass: 'w-[110px]', slot: previewBuiltinSlot.total },
   ];
 
-  const previewColumns: PreviewColumn[] = [
+  const allPreviewCols: PreviewColumn[] = [
     ...previewBuiltinDescriptors,
     ...allCustomCols.map<PreviewColumn>(c => ({
       id: c.id,
@@ -340,9 +353,42 @@ const ProformaPreview: React.FC<ProformaPreviewProps> = ({ proformaId, onBack })
       align: c.type === 'number' ? 'right' : 'left',
       slot: c.orderIndex,
     })),
-  ]
-    .filter(c => !hiddenCols.includes(c.id))
-    .sort((a, b) => a.slot - b.slot);
+  ];
+
+  // Apply the user's drag-and-drop ordering when available; otherwise fall
+  // back to the legacy slot-based sort so older proformas keep their layout.
+  const previewColumns: PreviewColumn[] = (() => {
+    const visible = allPreviewCols.filter(c => !hiddenCols.includes(c.id));
+    if (savedColumnOrder.length === 0) {
+      return [...visible].sort((a, b) => a.slot - b.slot);
+    }
+    // Split visible columns into two groups:
+    //   * "ordered" — columns whose id appears in the editor's saved
+    //     columnOrder (their final position is fully under the user's
+    //     control via drag-and-drop).
+    //   * "extras" — columns that exist in the preview but not in the
+    //     editor's columnOrder (today this is just the preview-only `unit`
+    //     column). These keep their canonical position by being inserted
+    //     by slot, so adding columnOrder doesn't accidentally relocate
+    //     `unit` to the end of the row.
+    const orderSet = new Set(savedColumnOrder);
+    const extras = visible.filter(c => !orderSet.has(c.id));
+    const orderedById = new Map(visible.filter(c => orderSet.has(c.id)).map(c => [c.id, c]));
+    const ordered: PreviewColumn[] = [];
+    for (const id of savedColumnOrder) {
+      const c = orderedById.get(id);
+      if (c) ordered.push(c);
+    }
+    // Insert each extra column at the position of the first ordered column
+    // whose slot is greater than the extra's slot — i.e. preserve relative
+    // slot order. If none qualifies, append at the end.
+    for (const extra of extras) {
+      const insertAt = ordered.findIndex(c => c.slot > extra.slot);
+      if (insertAt === -1) ordered.push(extra);
+      else ordered.splice(insertAt, 0, extra);
+    }
+    return ordered;
+  })();
 
   // Format a value coming from item.customValues for display. Number columns
   // are formatted with thousands separators when the value parses as a
