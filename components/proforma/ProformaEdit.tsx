@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { Plus, Trash2, Search, X, ArrowLeft, Save } from 'lucide-react';
+import { Plus, Trash2, Search, X, ArrowLeft, Save, MoreVertical, Type, Hash, ArrowLeftCircle, ArrowRightCircle, Pencil } from 'lucide-react';
 import { api } from '../../client/api';
-import { Product, ProformaData, ProformaSettingsData, ProformaItemData } from '../../types';
+import { Product, ProformaData, ProformaSettingsData, ProformaItemData, ProformaCustomColumn } from '../../types';
 import CustomerSelector from './CustomerSelector';
 import { useRefreshContext } from '../../client/contexts/RefreshContext';
 
@@ -19,8 +19,20 @@ interface EditItem {
   customPrice?: number | null;
   customName?: string | null;
   customDescription?: string | null;
+  // Per-row values for the user-defined customColumns. Stored as strings so
+  // partial input (like "12.") is preserved while typing in number columns.
+  customValues: Record<string, string>;
   isNew?: boolean;
 }
+
+// IDs of the built-in columns. Custom columns are inserted relative to one of
+// these (or another custom column) using "left" / "right" anchors.
+type BuiltInColumnId = 'product' | 'unitPrice' | 'customPrice' | 'quantity' | 'total';
+
+// Generate a stable id for a new custom column. Doesn't need to be globally
+// unique — only unique within the proforma's customColumns array.
+const newColumnId = (): string =>
+  `col_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 7)}`;
 
 const CURRENCIES = ['USD', 'EUR', 'GBP', 'TRY', 'AED', 'SAR', 'CNY', 'JPY'];
 
@@ -43,6 +55,18 @@ const ProformaEdit: React.FC<ProformaEditProps> = ({ proformaId, products, onSav
   const [status, setStatus] = useState('draft');
   const [editItems, setEditItems] = useState<EditItem[]>([]);
   const [removedItemIds, setRemovedItemIds] = useState<number[]>([]);
+  // User-defined extra columns for the items table. Persisted on the proforma.
+  // Position relative to the built-in columns is computed from orderIndex.
+  const [customColumns, setCustomColumns] = useState<ProformaCustomColumn[]>([]);
+  // Anchor for the "add column" popover — which column the user clicked the
+  // "+" on, and which side. Null when no popover is open.
+  const [addColAnchor, setAddColAnchor] = useState<{ relativeTo: string; side: 'left' | 'right' } | null>(null);
+  // Pending values for the new column popover.
+  const [newColName, setNewColName] = useState('');
+  const [newColType, setNewColType] = useState<'text' | 'number'>('text');
+  // Inline rename state for an existing custom column.
+  const [renameColId, setRenameColId] = useState<string | null>(null);
+  const [renameColName, setRenameColName] = useState('');
   const [productSearch, setProductSearch] = useState('');
   const [showProductDropdown, setShowProductDropdown] = useState(false);
   const [submitting, setSubmitting] = useState(false);
@@ -76,6 +100,12 @@ const ProformaEdit: React.FC<ProformaEditProps> = ({ proformaId, products, onSav
       setCustomerCountry(pf.customerCountry || '');
       setCustomerContact(pf.customerContact || '');
       setStatus(pf.status || 'draft');
+      // Load any user-defined columns saved on this proforma. Fall back to []
+      // so older proformas (created before this feature shipped) still work.
+      const cols: ProformaCustomColumn[] = Array.isArray((pf as any).customColumns)
+        ? ((pf as any).customColumns as ProformaCustomColumn[])
+        : [];
+      setCustomColumns(cols);
 
       const items: ProformaItemData[] = pf.items || [];
       const mapped: EditItem[] = items.map((item: any) => {
@@ -96,6 +126,11 @@ const ProformaEdit: React.FC<ProformaEditProps> = ({ proformaId, products, onSav
           customPrice: item.customPrice,
           customName: item.customName,
           customDescription: item.customDescription,
+          // Coerce stored values to strings so the input fields can render
+          // them directly. Missing keys default to ''.
+          customValues: item.customValues && typeof item.customValues === 'object'
+            ? Object.fromEntries(Object.entries(item.customValues as Record<string, unknown>).map(([k, v]) => [k, v == null ? '' : String(v)]))
+            : {},
         };
       });
       setEditItems(mapped);
@@ -122,7 +157,9 @@ const ProformaEdit: React.FC<ProformaEditProps> = ({ proformaId, products, onSav
 
   const addProduct = (product: Product) => {
     if (editItems.some(i => i.product.id === product.id)) return;
-    setEditItems(prev => [...prev, { product, quantity: 1, isNew: true }]);
+    // customValues starts empty — it'll be filled in as the user types into
+    // any user-defined custom column cells for this row.
+    setEditItems(prev => [...prev, { product, quantity: 1, isNew: true, customValues: {} }]);
     setProductSearch('');
     setShowProductDropdown(false);
   };
@@ -148,6 +185,101 @@ const ProformaEdit: React.FC<ProformaEditProps> = ({ proformaId, products, onSav
     ));
   };
 
+  // ---------------------------------------------------------------------------
+  // Custom columns — add / rename / delete + per-row value updates
+  // ---------------------------------------------------------------------------
+
+  // Returns the customColumns array sorted ascending by orderIndex. The order
+  // of insertion into the source array isn't trustworthy, so we always sort
+  // before rendering.
+  const sortedColumns = [...customColumns].sort((a, b) => a.orderIndex - b.orderIndex);
+
+  // Compute the orderIndex for a brand-new column inserted on a given side of
+  // an anchor column. We reserve "slots" 0..N for the built-in columns by
+  // assigning each built-in a virtual integer position, then place the new
+  // custom column halfway between its anchor and the next column on that side.
+  const builtinSlot: Record<BuiltInColumnId, number> = {
+    product: 1000,
+    unitPrice: 2000,
+    customPrice: 3000,
+    quantity: 4000,
+    total: 5000,
+  };
+  const slotForColumn = (id: string): number => {
+    if ((builtinSlot as Record<string, number>)[id] !== undefined) return builtinSlot[id as BuiltInColumnId];
+    const c = customColumns.find(x => x.id === id);
+    return c ? c.orderIndex : 0;
+  };
+  const computeNewOrderIndex = (relativeTo: string, side: 'left' | 'right'): number => {
+    const anchor = slotForColumn(relativeTo);
+    // Find the nearest existing column on the chosen side (built-in or custom).
+    const allSlots = [
+      ...Object.values(builtinSlot),
+      ...customColumns.map(c => c.orderIndex),
+    ].sort((a, b) => a - b);
+    if (side === 'left') {
+      const prev = [...allSlots].reverse().find(s => s < anchor);
+      return prev === undefined ? anchor - 100 : (prev + anchor) / 2;
+    }
+    const next = allSlots.find(s => s > anchor);
+    return next === undefined ? anchor + 100 : (anchor + next) / 2;
+  };
+
+  const openAddColumn = (relativeTo: string, side: 'left' | 'right') => {
+    setAddColAnchor({ relativeTo, side });
+    setNewColName('');
+    setNewColType('text');
+  };
+
+  const confirmAddColumn = () => {
+    if (!addColAnchor) return;
+    const name = newColName.trim();
+    if (!name) return;
+    const col: ProformaCustomColumn = {
+      id: newColumnId(),
+      name,
+      type: newColType,
+      orderIndex: computeNewOrderIndex(addColAnchor.relativeTo, addColAnchor.side),
+    };
+    setCustomColumns(prev => [...prev, col]);
+    setAddColAnchor(null);
+    setNewColName('');
+    setNewColType('text');
+  };
+
+  const deleteCustomColumn = (id: string) => {
+    if (!confirm('Delete this column? All values entered in it will be removed from every row.')) return;
+    setCustomColumns(prev => prev.filter(c => c.id !== id));
+    // Drop the values from each row so we don't carry orphaned data.
+    setEditItems(prev => prev.map(it => {
+      const next = { ...it.customValues };
+      delete next[id];
+      return { ...it, customValues: next };
+    }));
+  };
+
+  const startRenameColumn = (id: string) => {
+    const col = customColumns.find(c => c.id === id);
+    if (!col) return;
+    setRenameColId(id);
+    setRenameColName(col.name);
+  };
+
+  const commitRenameColumn = () => {
+    if (!renameColId) return;
+    const name = renameColName.trim();
+    if (!name) { setRenameColId(null); return; }
+    setCustomColumns(prev => prev.map(c => c.id === renameColId ? { ...c, name } : c));
+    setRenameColId(null);
+    setRenameColName('');
+  };
+
+  const updateCustomValue = (idx: number, columnId: string, value: string) => {
+    setEditItems(prev => prev.map((item, i) =>
+      i === idx ? { ...item, customValues: { ...item.customValues, [columnId]: value } } : item
+    ));
+  };
+
   const handleSave = async () => {
     if (editItems.length === 0) { setError('Add at least one product.'); return; }
     setSubmitting(true);
@@ -165,11 +297,25 @@ const ProformaEdit: React.FC<ProformaEditProps> = ({ proformaId, products, onSav
         paymentTerms: paymentTerms.trim() || null,
         deliveryTerms: deliveryTerms.trim() || null,
         status,
+        // Persist the user-defined columns alongside the proforma. The server
+        // stores it as JSONB (see proformas.customColumns).
+        customColumns: customColumns,
       });
 
       for (const id of removedItemIds) {
         await api.deleteProformaItem(id);
       }
+
+      // Build the customValues map for an item — drop any keys that no longer
+      // map to an existing column so we never persist orphaned values.
+      const knownColumnIds = new Set(customColumns.map(c => c.id));
+      const cleanValues = (vals: Record<string, string>): Record<string, string> => {
+        const out: Record<string, string> = {};
+        for (const [k, v] of Object.entries(vals || {})) {
+          if (knownColumnIds.has(k)) out[k] = v;
+        }
+        return out;
+      };
 
       for (let idx = 0; idx < editItems.length; idx++) {
         const item = editItems[idx];
@@ -180,6 +326,7 @@ const ProformaEdit: React.FC<ProformaEditProps> = ({ proformaId, products, onSav
             customPrice: item.customPrice,
             customName: item.customName,
             customDescription: item.customDescription,
+            customValues: cleanValues(item.customValues),
             sortOrder: idx,
           });
         } else if (item.id) {
@@ -188,6 +335,7 @@ const ProformaEdit: React.FC<ProformaEditProps> = ({ proformaId, products, onSav
             customPrice: item.customPrice,
             customName: item.customName,
             customDescription: item.customDescription,
+            customValues: cleanValues(item.customValues),
             sortOrder: idx,
           });
         }

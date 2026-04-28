@@ -289,6 +289,20 @@ export interface ProformaItemData {
   productCurrency?: string;
   productStockCode?: string;
   productSupplier?: string;
+  // Per-row values for the proforma's user-defined custom columns. Keyed by
+  // column id (see ProformaCustomColumn). Stored as strings; the Edit/Preview
+  // components parse numeric columns lazily so partial input is preserved.
+  customValues?: Record<string, string> | null;
+}
+
+// One user-added column on the proforma items table. The user picks the name
+// and the data type; position relative to the built-in columns is computed
+// from orderIndex (smaller = further left, larger = further right).
+export interface ProformaCustomColumn {
+  id: string;
+  name: string;
+  type: 'text' | 'number';
+  orderIndex: number;
 }
 
 export interface ProformaFinancialData {

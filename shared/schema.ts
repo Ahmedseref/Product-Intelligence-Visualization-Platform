@@ -320,6 +320,12 @@ export const proformas = pgTable("proformas", {
   paymentTerms: text("payment_terms"),
   deliveryTerms: text("delivery_terms"),
   date: timestamp("date").defaultNow(),
+  // User-defined extra columns for the items table. Each entry is
+  //   { id: string; name: string; type: 'text' | 'number'; orderIndex: number }
+  // and is rendered both in the editor and in the preview, in ascending
+  // orderIndex order. Default columns (Description, Qty, Unit, Unit Price,
+  // Total) are NOT in this list — only the user's additions.
+  customColumns: jsonb("custom_columns").default([]),
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow(),
 });
@@ -332,6 +338,10 @@ export const proformaItems = pgTable("proforma_items", {
   customDescription: text("custom_description"),
   customPrice: real("custom_price"),
   quantity: real("quantity").notNull().default(1),
+  // Per-row values for the proforma's customColumns. Keyed by column id from
+  // proformas.customColumns. Stored values are always strings — number columns
+  // parse on read so we never lose a partial entry like "12." while typing.
+  customValues: jsonb("custom_values").default({}),
   sortOrder: integer("sort_order").default(0),
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow(),
