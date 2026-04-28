@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { Plus, Trash2, Search, X, ArrowLeft, Save, MoreVertical, Type, Hash, ArrowLeftCircle, ArrowRightCircle, Pencil } from 'lucide-react';
+import { Plus, Trash2, Search, X, ArrowLeft, Save, Type, Hash, Pencil, Columns3, Eye, EyeOff, Check } from 'lucide-react';
 import { api } from '../../client/api';
-import { Product, ProformaData, ProformaSettingsData, ProformaItemData, ProformaCustomColumn } from '../../types';
+import { Product, ProformaData, ProformaSettingsData, ProformaItemData, ProformaCustomColumn, ProformaHideableBuiltin } from '../../types';
 import CustomerSelector from './CustomerSelector';
 import { useRefreshContext } from '../../client/contexts/RefreshContext';
 
@@ -58,12 +58,18 @@ const ProformaEdit: React.FC<ProformaEditProps> = ({ proformaId, products, onSav
   // User-defined extra columns for the items table. Persisted on the proforma.
   // Position relative to the built-in columns is computed from orderIndex.
   const [customColumns, setCustomColumns] = useState<ProformaCustomColumn[]>([]);
-  // Anchor for the "add column" popover — which column the user clicked the
-  // "+" on, and which side. Null when no popover is open.
-  const [addColAnchor, setAddColAnchor] = useState<{ relativeTo: string; side: 'left' | 'right' } | null>(null);
-  // Pending values for the new column popover.
+  // IDs of columns the user has chosen to hide. Includes both built-in ids
+  // ('unit' / 'unitPrice' / 'total' — note 'customPrice' is editor-only and
+  // is always shown while editing) and ids of custom columns.
+  const [hiddenColumns, setHiddenColumns] = useState<string[]>([]);
+  // Toggle for the "Columns" management panel.
+  const [showColumnsPanel, setShowColumnsPanel] = useState(false);
+  // Pending values for the "Add column" form inside the panel.
   const [newColName, setNewColName] = useState('');
   const [newColType, setNewColType] = useState<'text' | 'number'>('text');
+  // Insert position for the new column. Stores the column id of the anchor
+  // and which side of it ('left' | 'right'). Default = right of 'total' (end).
+  const [newColPos, setNewColPos] = useState<{ relativeTo: string; side: 'left' | 'right' }>({ relativeTo: 'total', side: 'right' });
   // Inline rename state for an existing custom column.
   const [renameColId, setRenameColId] = useState<string | null>(null);
   const [renameColName, setRenameColName] = useState('');
@@ -106,6 +112,10 @@ const ProformaEdit: React.FC<ProformaEditProps> = ({ proformaId, products, onSav
         ? ((pf as any).customColumns as ProformaCustomColumn[])
         : [];
       setCustomColumns(cols);
+      const hidden: string[] = Array.isArray((pf as any).hiddenColumns)
+        ? ((pf as any).hiddenColumns as string[])
+        : [];
+      setHiddenColumns(hidden);
 
       const items: ProformaItemData[] = pf.items || [];
       const mapped: EditItem[] = items.map((item: any) => {
@@ -225,26 +235,34 @@ const ProformaEdit: React.FC<ProformaEditProps> = ({ proformaId, products, onSav
     return next === undefined ? anchor + 100 : (anchor + next) / 2;
   };
 
-  const openAddColumn = (relativeTo: string, side: 'left' | 'right') => {
-    setAddColAnchor({ relativeTo, side });
-    setNewColName('');
-    setNewColType('text');
-  };
-
   const confirmAddColumn = () => {
-    if (!addColAnchor) return;
     const name = newColName.trim();
     if (!name) return;
     const col: ProformaCustomColumn = {
       id: newColumnId(),
       name,
       type: newColType,
-      orderIndex: computeNewOrderIndex(addColAnchor.relativeTo, addColAnchor.side),
+      orderIndex: computeNewOrderIndex(newColPos.relativeTo, newColPos.side),
     };
     setCustomColumns(prev => [...prev, col]);
-    setAddColAnchor(null);
     setNewColName('');
     setNewColType('text');
+    // Default the next add to "right of the column we just inserted" so
+    // adding several columns in a row places them in the order the user types.
+    setNewColPos({ relativeTo: col.id, side: 'right' });
+  };
+
+  // Toggle whether a column id is hidden. Refuses to hide the two required
+  // columns ('product' / Description and 'quantity' / Qty) which would leave
+  // the table meaningless.
+  const toggleColumnVisibility = (id: string) => {
+    if (id === 'product' || id === 'quantity') return;
+    setHiddenColumns(prev => prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id]);
+  };
+
+  // Toggle the type of an existing custom column. Used by the column panel.
+  const setCustomColumnType = (id: string, type: 'text' | 'number') => {
+    setCustomColumns(prev => prev.map(c => c.id === id ? { ...c, type } : c));
   };
 
   const deleteCustomColumn = (id: string) => {
@@ -280,6 +298,47 @@ const ProformaEdit: React.FC<ProformaEditProps> = ({ proformaId, products, onSav
     ));
   };
 
+  // ---------------------------------------------------------------------------
+  // Computed column lists for rendering. tableColumns includes everything
+  // (used by the Columns panel — show/hide checkboxes need to list hidden
+  // columns too). visibleColumns drops anything in hiddenColumns and is what
+  // the actual <thead>/<tbody>/<tfoot> map over.
+  // ---------------------------------------------------------------------------
+
+  // One descriptor per column we know about, in render order.
+  type TableColumn = {
+    id: string;                       // 'product' | 'unitPrice' | ... or custom column id
+    label: string;                    // header text
+    kind: 'builtin' | 'custom';
+    builtinId?: BuiltInColumnId;
+    customCol?: ProformaCustomColumn;
+    align: 'left' | 'right' | 'center';
+    widthClass?: string;              // optional Tailwind width class
+    slot: number;                     // for ordering against custom columns
+  };
+
+  const builtinColumnDescriptors: TableColumn[] = [
+    { id: 'product',     label: 'Product',      kind: 'builtin', builtinId: 'product',     align: 'left',   slot: builtinSlot.product },
+    { id: 'unitPrice',   label: 'Unit Price',   kind: 'builtin', builtinId: 'unitPrice',   align: 'right',  slot: builtinSlot.unitPrice },
+    { id: 'customPrice', label: 'Custom Price', kind: 'builtin', builtinId: 'customPrice', align: 'right',  widthClass: 'w-28', slot: builtinSlot.customPrice },
+    { id: 'quantity',    label: 'Quantity',     kind: 'builtin', builtinId: 'quantity',    align: 'center', widthClass: 'w-24', slot: builtinSlot.quantity },
+    { id: 'total',       label: 'Total',        kind: 'builtin', builtinId: 'total',       align: 'right',  slot: builtinSlot.total },
+  ];
+
+  const tableColumns: TableColumn[] = [
+    ...builtinColumnDescriptors,
+    ...customColumns.map<TableColumn>(c => ({
+      id: c.id,
+      label: c.name,
+      kind: 'custom',
+      customCol: c,
+      align: c.type === 'number' ? 'right' : 'left',
+      slot: c.orderIndex,
+    })),
+  ].sort((a, b) => a.slot - b.slot);
+
+  const visibleColumns: TableColumn[] = tableColumns.filter(c => !hiddenColumns.includes(c.id));
+
   const handleSave = async () => {
     if (editItems.length === 0) { setError('Add at least one product.'); return; }
     setSubmitting(true);
@@ -298,8 +357,14 @@ const ProformaEdit: React.FC<ProformaEditProps> = ({ proformaId, products, onSav
         deliveryTerms: deliveryTerms.trim() || null,
         status,
         // Persist the user-defined columns alongside the proforma. The server
-        // stores it as JSONB (see proformas.customColumns).
+        // stores it as JSONB (see proformas.customColumns / hiddenColumns).
         customColumns: customColumns,
+        // Drop any hidden ids that no longer correspond to an existing column
+        // so we don't carry orphaned visibility settings forever.
+        hiddenColumns: hiddenColumns.filter(id =>
+          id === 'unit' || id === 'unitPrice' || id === 'total' ||
+          customColumns.some(c => c.id === id)
+        ),
       });
 
       for (const id of removedItemIds) {
@@ -544,16 +609,223 @@ const ProformaEdit: React.FC<ProformaEditProps> = ({ proformaId, products, onSav
             )}
           </div>
 
+          {/* Column management toolbar — opens a panel for show/hide,
+              add/rename/delete custom columns, and switch column type. */}
           {editItems.length > 0 && (
-            <div className="border border-slate-200 rounded-xl overflow-hidden">
+            <div className="flex items-center justify-between">
+              <div className="text-xs text-slate-400">
+                {customColumns.length > 0 && (
+                  <span>{customColumns.length} custom column{customColumns.length !== 1 ? 's' : ''}</span>
+                )}
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowColumnsPanel(v => !v)}
+                className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-lg border transition-colors ${
+                  showColumnsPanel
+                    ? 'bg-blue-50 border-blue-200 text-blue-700'
+                    : 'bg-white border-slate-200 text-slate-600 hover:bg-slate-50'
+                }`}
+              >
+                <Columns3 className="w-3.5 h-3.5" />
+                Columns
+              </button>
+            </div>
+          )}
+
+          {/* Columns panel — show/hide toggles, add new column, manage existing custom columns. */}
+          {showColumnsPanel && (
+            <div className="border border-blue-200 bg-blue-50/40 rounded-xl p-4 space-y-4">
+              <div>
+                <h4 className="text-xs font-semibold text-slate-700 uppercase tracking-wide mb-2">Show / hide columns</h4>
+                <div className="grid grid-cols-2 md:grid-cols-3 gap-1.5">
+                  {tableColumns.map(col => {
+                    const isHidden = hiddenColumns.includes(col.id);
+                    const isRequired = col.id === 'product' || col.id === 'quantity';
+                    const isEditorOnly = col.id === 'customPrice';
+                    return (
+                      <button
+                        key={col.id}
+                        type="button"
+                        disabled={isRequired || isEditorOnly}
+                        onClick={() => toggleColumnVisibility(col.id)}
+                        title={
+                          isRequired ? 'This column is required and can\'t be hidden'
+                          : isEditorOnly ? 'This column only appears in the editor'
+                          : isHidden ? 'Show this column' : 'Hide this column'
+                        }
+                        className={`flex items-center gap-2 px-2.5 py-1.5 text-xs rounded-lg border text-left transition-colors ${
+                          isRequired || isEditorOnly
+                            ? 'bg-slate-50 border-slate-200 text-slate-400 cursor-not-allowed'
+                            : isHidden
+                              ? 'bg-white border-slate-200 text-slate-400 hover:border-slate-300'
+                              : 'bg-white border-blue-300 text-slate-700 hover:bg-blue-50'
+                        }`}
+                      >
+                        {isRequired || isEditorOnly
+                          ? <Check className="w-3.5 h-3.5 flex-shrink-0 text-slate-300" />
+                          : isHidden
+                            ? <EyeOff className="w-3.5 h-3.5 flex-shrink-0" />
+                            : <Eye className="w-3.5 h-3.5 flex-shrink-0 text-blue-500" />}
+                        <span className="truncate">{col.label}</span>
+                        {col.kind === 'custom' && (
+                          <span className={`ml-auto text-[10px] font-medium px-1.5 py-0.5 rounded ${
+                            col.customCol!.type === 'number' ? 'bg-amber-100 text-amber-700' : 'bg-slate-100 text-slate-600'
+                          }`}>
+                            {col.customCol!.type === 'number' ? '#' : 'T'}
+                          </span>
+                        )}
+                      </button>
+                    );
+                  })}
+                </div>
+                <p className="text-[10px] text-slate-400 mt-1.5">
+                  "Description of Goods" and "Quantity" are required. "Custom Price" only appears here in the editor.
+                </p>
+              </div>
+
+              {customColumns.length > 0 && (
+                <div>
+                  <h4 className="text-xs font-semibold text-slate-700 uppercase tracking-wide mb-2">Custom columns</h4>
+                  <div className="space-y-1.5">
+                    {sortedColumns.map(col => (
+                      <div key={col.id} className="flex items-center gap-2 bg-white border border-slate-200 rounded-lg px-2.5 py-1.5">
+                        {renameColId === col.id ? (
+                          <input
+                            autoFocus
+                            value={renameColName}
+                            onChange={e => setRenameColName(e.target.value)}
+                            onBlur={commitRenameColumn}
+                            onKeyDown={e => {
+                              if (e.key === 'Enter') commitRenameColumn();
+                              if (e.key === 'Escape') { setRenameColId(null); setRenameColName(''); }
+                            }}
+                            className="flex-1 text-xs px-2 py-1 border border-blue-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500/20"
+                          />
+                        ) : (
+                          <button
+                            type="button"
+                            onClick={() => startRenameColumn(col.id)}
+                            className="flex-1 flex items-center gap-1.5 text-xs text-slate-700 hover:text-blue-600 group text-left"
+                          >
+                            <span className="truncate">{col.name}</span>
+                            <Pencil className="w-3 h-3 opacity-0 group-hover:opacity-100 text-slate-400" />
+                          </button>
+                        )}
+                        <div className="flex items-center bg-slate-100 rounded p-0.5">
+                          <button
+                            type="button"
+                            onClick={() => setCustomColumnType(col.id, 'text')}
+                            title="Text column"
+                            className={`p-1 rounded ${col.type === 'text' ? 'bg-white shadow-sm text-slate-700' : 'text-slate-400 hover:text-slate-600'}`}
+                          >
+                            <Type className="w-3 h-3" />
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => setCustomColumnType(col.id, 'number')}
+                            title="Number column"
+                            className={`p-1 rounded ${col.type === 'number' ? 'bg-white shadow-sm text-slate-700' : 'text-slate-400 hover:text-slate-600'}`}
+                          >
+                            <Hash className="w-3 h-3" />
+                          </button>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => deleteCustomColumn(col.id)}
+                          title="Delete column"
+                          className="p-1 text-slate-300 hover:text-red-500"
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              <div>
+                <h4 className="text-xs font-semibold text-slate-700 uppercase tracking-wide mb-2">Add a column</h4>
+                <div className="grid grid-cols-1 md:grid-cols-12 gap-2">
+                  <input
+                    type="text"
+                    value={newColName}
+                    onChange={e => setNewColName(e.target.value)}
+                    onKeyDown={e => { if (e.key === 'Enter') confirmAddColumn(); }}
+                    placeholder="Column name (e.g. HS Code)"
+                    className="md:col-span-4 px-2.5 py-1.5 border border-slate-200 rounded-lg text-xs focus:outline-none focus:ring-2 focus:ring-blue-500/20"
+                  />
+                  <div className="md:col-span-3 flex bg-slate-100 rounded-lg p-0.5">
+                    <button
+                      type="button"
+                      onClick={() => setNewColType('text')}
+                      className={`flex-1 flex items-center justify-center gap-1 px-2 py-1 text-xs rounded ${
+                        newColType === 'text' ? 'bg-white shadow-sm text-slate-700 font-medium' : 'text-slate-500'
+                      }`}
+                    >
+                      <Type className="w-3 h-3" /> Text
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setNewColType('number')}
+                      className={`flex-1 flex items-center justify-center gap-1 px-2 py-1 text-xs rounded ${
+                        newColType === 'number' ? 'bg-white shadow-sm text-slate-700 font-medium' : 'text-slate-500'
+                      }`}
+                    >
+                      <Hash className="w-3 h-3" /> Number
+                    </button>
+                  </div>
+                  <select
+                    value={`${newColPos.relativeTo}::${newColPos.side}`}
+                    onChange={e => {
+                      const [relativeTo, side] = e.target.value.split('::');
+                      setNewColPos({ relativeTo, side: side as 'left' | 'right' });
+                    }}
+                    className="md:col-span-3 px-2.5 py-1.5 border border-slate-200 rounded-lg text-xs bg-white focus:outline-none focus:ring-2 focus:ring-blue-500/20"
+                  >
+                    <option value={`product::left`}>Beginning of table</option>
+                    {tableColumns.map(col => (
+                      <option key={col.id} value={`${col.id}::right`}>After "{col.label}"</option>
+                    ))}
+                  </select>
+                  <button
+                    type="button"
+                    onClick={confirmAddColumn}
+                    disabled={!newColName.trim()}
+                    className="md:col-span-2 flex items-center justify-center gap-1 px-3 py-1.5 text-xs font-medium bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+                  >
+                    <Plus className="w-3.5 h-3.5" /> Add
+                  </button>
+                </div>
+                <p className="text-[10px] text-slate-400 mt-1.5">
+                  Text columns accept any input; number columns only accept digits and decimals.
+                </p>
+              </div>
+            </div>
+          )}
+
+          {editItems.length > 0 && (
+            <div className="border border-slate-200 rounded-xl overflow-x-auto">
               <table className="w-full text-sm">
                 <thead className="bg-slate-50">
                   <tr>
-                    <th className="text-left px-4 py-2.5 text-xs font-semibold text-slate-500">Product</th>
-                    <th className="text-right px-4 py-2.5 text-xs font-semibold text-slate-500">Unit Price</th>
-                    <th className="text-right px-4 py-2.5 text-xs font-semibold text-slate-500 w-28">Custom Price</th>
-                    <th className="text-center px-4 py-2.5 text-xs font-semibold text-slate-500 w-24">Quantity</th>
-                    <th className="text-right px-4 py-2.5 text-xs font-semibold text-slate-500">Total</th>
+                    {visibleColumns.map(col => (
+                      <th
+                        key={col.id}
+                        className={`px-4 py-2.5 text-xs font-semibold text-slate-500 ${
+                          col.align === 'right' ? 'text-right' : col.align === 'center' ? 'text-center' : 'text-left'
+                        } ${col.widthClass || ''}`}
+                      >
+                        {col.label}
+                        {col.kind === 'custom' && (
+                          <span className={`ml-1 text-[9px] font-medium px-1 py-0.5 rounded align-middle ${
+                            col.customCol!.type === 'number' ? 'bg-amber-100 text-amber-700' : 'bg-slate-100 text-slate-500'
+                          }`}>
+                            {col.customCol!.type === 'number' ? '#' : 'T'}
+                          </span>
+                        )}
+                      </th>
+                    ))}
                     <th className="px-4 py-2.5 w-8" />
                   </tr>
                 </thead>
@@ -563,37 +835,78 @@ const ProformaEdit: React.FC<ProformaEditProps> = ({ proformaId, products, onSav
                     const lineTotal = effectivePrice * item.quantity;
                     return (
                       <tr key={`${item.product.id}-${idx}`} className="hover:bg-slate-50/50">
-                        <td className="px-4 py-3">
-                          <div className="font-medium text-slate-800">{item.product.name}</div>
-                          <div className="text-xs text-slate-400 font-mono">{item.product.stockCode || item.product.id}</div>
-                          {item.isNew && <span className="text-[10px] font-semibold text-green-600 bg-green-50 px-1.5 py-0.5 rounded-full">NEW</span>}
-                        </td>
-                        <td className="px-4 py-3 text-right text-slate-500 text-xs">
-                          {item.product.currency || currency} {(item.product.price || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                        </td>
-                        <td className="px-4 py-3 text-right">
-                          <input
-                            type="number"
-                            step="any"
-                            value={item.customPrice ?? ''}
-                            onChange={e => updateCustomPrice(idx, e.target.value)}
-                            placeholder="—"
-                            className="w-24 text-right px-2 py-1 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/20"
-                          />
-                        </td>
-                        <td className="px-4 py-3 text-center">
-                          <input
-                            type="number"
-                            min="0.001"
-                            step="any"
-                            value={item.quantity}
-                            onChange={e => updateQty(idx, parseFloat(e.target.value) || 1)}
-                            className="w-20 text-center px-2 py-1 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/20"
-                          />
-                        </td>
-                        <td className="px-4 py-3 text-right font-semibold text-slate-700">
-                          {currency} {lineTotal.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                        </td>
+                        {visibleColumns.map(col => {
+                          // Render the right cell content for each column kind.
+                          if (col.kind === 'builtin') {
+                            switch (col.builtinId) {
+                              case 'product':
+                                return (
+                                  <td key={col.id} className="px-4 py-3">
+                                    <div className="font-medium text-slate-800">{item.product.name}</div>
+                                    <div className="text-xs text-slate-400 font-mono">{item.product.stockCode || item.product.id}</div>
+                                    {item.isNew && <span className="text-[10px] font-semibold text-green-600 bg-green-50 px-1.5 py-0.5 rounded-full">NEW</span>}
+                                  </td>
+                                );
+                              case 'unitPrice':
+                                return (
+                                  <td key={col.id} className="px-4 py-3 text-right text-slate-500 text-xs">
+                                    {item.product.currency || currency} {(item.product.price || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                                  </td>
+                                );
+                              case 'customPrice':
+                                return (
+                                  <td key={col.id} className="px-4 py-3 text-right">
+                                    <input
+                                      type="number"
+                                      step="any"
+                                      value={item.customPrice ?? ''}
+                                      onChange={e => updateCustomPrice(idx, e.target.value)}
+                                      placeholder="—"
+                                      className="w-24 text-right px-2 py-1 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/20"
+                                    />
+                                  </td>
+                                );
+                              case 'quantity':
+                                return (
+                                  <td key={col.id} className="px-4 py-3 text-center">
+                                    <input
+                                      type="number"
+                                      min="0.001"
+                                      step="any"
+                                      value={item.quantity}
+                                      onChange={e => updateQty(idx, parseFloat(e.target.value) || 1)}
+                                      className="w-20 text-center px-2 py-1 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/20"
+                                    />
+                                  </td>
+                                );
+                              case 'total':
+                                return (
+                                  <td key={col.id} className="px-4 py-3 text-right font-semibold text-slate-700">
+                                    {currency} {lineTotal.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                                  </td>
+                                );
+                            }
+                          }
+                          // Custom column input cell. Number columns use type=number
+                          // so mobile keyboards open the numeric keypad, but the
+                          // value is still stored as a string.
+                          const cc = col.customCol!;
+                          const value = item.customValues[cc.id] ?? '';
+                          return (
+                            <td key={col.id} className={`px-4 py-3 ${cc.type === 'number' ? 'text-right' : 'text-left'}`}>
+                              <input
+                                type={cc.type === 'number' ? 'number' : 'text'}
+                                step={cc.type === 'number' ? 'any' : undefined}
+                                value={value}
+                                onChange={e => updateCustomValue(idx, cc.id, e.target.value)}
+                                placeholder="—"
+                                className={`w-full min-w-[80px] px-2 py-1 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/20 ${
+                                  cc.type === 'number' ? 'text-right' : 'text-left'
+                                }`}
+                              />
+                            </td>
+                          );
+                        })}
                         <td className="px-4 py-3 text-center">
                           <button onClick={() => removeItem(idx)} className="p-1 text-slate-300 hover:text-red-500 transition-colors">
                             <Trash2 className="w-4 h-4" />
@@ -605,7 +918,12 @@ const ProformaEdit: React.FC<ProformaEditProps> = ({ proformaId, products, onSav
                 </tbody>
                 <tfoot className="bg-slate-50 border-t border-slate-200">
                   <tr>
-                    <td colSpan={4} className="px-4 py-3 text-right text-sm font-semibold text-slate-600">Subtotal</td>
+                    {/* Subtotal label spans every visible column except the
+                        last one, which carries the total amount. The trailing
+                        actions cell stays unbacked. */}
+                    <td colSpan={Math.max(1, visibleColumns.length - 1)} className="px-4 py-3 text-right text-sm font-semibold text-slate-600">
+                      Subtotal
+                    </td>
                     <td className="px-4 py-3 text-right text-base font-bold text-slate-800">
                       {currency} {grandTotal.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                     </td>

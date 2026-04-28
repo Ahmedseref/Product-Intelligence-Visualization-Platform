@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { ArrowLeft, Edit2, RotateCcw, Plus, Trash2, CheckCircle, X, Printer, FileSpreadsheet, FileText, Search, ChevronDown, ChevronUp, Save, Pencil } from 'lucide-react';
 import { api } from '../../client/api';
-import { ProformaData, ProformaItemData, ProformaSettingsData, ProformaFinancialData, CustomerFieldData } from '../../types';
+import { ProformaData, ProformaItemData, ProformaSettingsData, ProformaFinancialData, CustomerFieldData, ProformaCustomColumn } from '../../types';
 import FinancialsEditor, { computeFinancials } from './FinancialsEditor';
 import { useRefreshContext } from '../../client/contexts/RefreshContext';
 
@@ -289,6 +289,73 @@ const ProformaPreview: React.FC<ProformaPreviewProps> = ({ proformaId, onBack })
   const items: ProformaItemData[] = proforma.items || [];
   const customerFields: CustomerFieldData[] = proforma.customerFields || [];
   const currency = proforma.currency || settings.defaultCurrency || 'USD';
+
+  // ---------------------------------------------------------------------------
+  // Column model for the items table — mirrors the structure used by the
+  // editor (ProformaEdit.tsx). The preview doesn't show the editor-only
+  // 'customPrice' column; instead the custom price (if any) is shown in
+  // place of the unit price as before.
+  // ---------------------------------------------------------------------------
+  type PreviewColumn = {
+    id: string;
+    label: string;
+    kind: 'builtin' | 'custom';
+    builtinId?: 'product' | 'qty' | 'unit' | 'unitPrice' | 'total';
+    customCol?: ProformaCustomColumn;
+    align: 'left' | 'right' | 'center';
+    widthClass?: string;
+    slot: number;
+  };
+
+  // Built-in column slots. These match ProformaEdit's slots so a custom
+  // column inserted "after Quantity" in the editor lands in the same place
+  // here. The editor's 'customPrice' slot (3000) sits between unitPrice
+  // (2000) and quantity (4000); since the preview doesn't render it, any
+  // custom column placed at slot 3000 just appears between unitPrice and qty
+  // in the preview, which is intuitive.
+  const previewBuiltinSlot = { product: 1000, unitPrice: 2000, qty: 4000, unit: 4500, total: 5000 };
+
+  const allCustomCols: ProformaCustomColumn[] = Array.isArray((proforma as any).customColumns)
+    ? ((proforma as any).customColumns as ProformaCustomColumn[])
+    : [];
+  const hiddenCols: string[] = Array.isArray((proforma as any).hiddenColumns)
+    ? ((proforma as any).hiddenColumns as string[])
+    : [];
+
+  const previewBuiltinDescriptors: PreviewColumn[] = [
+    { id: 'product',   label: 'DESCRIPTION OF GOODS', kind: 'builtin', builtinId: 'product',   align: 'left',   slot: previewBuiltinSlot.product },
+    { id: 'unitPrice', label: 'UNIT PRICE',           kind: 'builtin', builtinId: 'unitPrice', align: 'right',  widthClass: 'w-[100px]', slot: previewBuiltinSlot.unitPrice },
+    { id: 'quantity',  label: 'QTY',                  kind: 'builtin', builtinId: 'qty',       align: 'center', widthClass: 'w-[70px]',  slot: previewBuiltinSlot.qty },
+    { id: 'unit',      label: 'UNIT',                 kind: 'builtin', builtinId: 'unit',      align: 'center', widthClass: 'w-[50px]',  slot: previewBuiltinSlot.unit },
+    { id: 'total',     label: 'TOTAL',                kind: 'builtin', builtinId: 'total',     align: 'right',  widthClass: 'w-[110px]', slot: previewBuiltinSlot.total },
+  ];
+
+  const previewColumns: PreviewColumn[] = [
+    ...previewBuiltinDescriptors,
+    ...allCustomCols.map<PreviewColumn>(c => ({
+      id: c.id,
+      label: c.name.toUpperCase(),
+      kind: 'custom',
+      customCol: c,
+      align: c.type === 'number' ? 'right' : 'left',
+      slot: c.orderIndex,
+    })),
+  ]
+    .filter(c => !hiddenCols.includes(c.id))
+    .sort((a, b) => a.slot - b.slot);
+
+  // Format a value coming from item.customValues for display. Number columns
+  // are formatted with thousands separators when the value parses as a
+  // number; otherwise the raw string is shown.
+  const formatCustomValue = (col: ProformaCustomColumn, raw: string): string => {
+    if (raw === '' || raw == null) return '';
+    if (col.type === 'number') {
+      const n = Number(raw);
+      if (Number.isFinite(n)) return n.toLocaleString(undefined, { maximumFractionDigits: 4 });
+    }
+    return String(raw);
+  };
+
   const subtotal = items.reduce((sum, item) => {
     const price = item.customPrice ?? item.productPrice ?? 0;
     return sum + price * item.quantity;
@@ -508,18 +575,23 @@ const ProformaPreview: React.FC<ProformaPreviewProps> = ({ proformaId, onBack })
           <table className="w-full text-xs border-collapse">
             <thead>
               <tr className="border-b-2 border-slate-800 bg-slate-50">
-                <th className="text-left px-3 py-2 font-bold text-slate-700 border-r border-slate-300">DESCRIPTION OF GOODS</th>
-                <th className="text-center px-2 py-2 font-bold text-slate-700 border-r border-slate-300 w-[70px]">QTY</th>
-                <th className="text-center px-2 py-2 font-bold text-slate-700 border-r border-slate-300 w-[50px]">UNIT</th>
-                <th className="text-right px-3 py-2 font-bold text-slate-700 border-r border-slate-300 w-[100px]">UNIT PRICE</th>
-                <th className="text-right px-3 py-2 font-bold text-slate-700 w-[110px]">TOTAL</th>
+                {previewColumns.map((col, i) => (
+                  <th
+                    key={col.id}
+                    className={`px-3 py-2 font-bold text-slate-700 ${
+                      col.align === 'right' ? 'text-right' : col.align === 'center' ? 'text-center' : 'text-left'
+                    } ${col.widthClass || ''} ${i < previewColumns.length - 1 ? 'border-r border-slate-300' : ''}`}
+                  >
+                    {col.label}
+                  </th>
+                ))}
                 {!pdfCapturing && <th className="w-[60px] print:hidden" />}
               </tr>
             </thead>
             <tbody>
               {items.length === 0 && (
                 <tr>
-                  <td colSpan={6} className="py-6 text-center text-slate-400 text-sm">No products in this proforma</td>
+                  <td colSpan={previewColumns.length + (pdfCapturing ? 0 : 1)} className="py-6 text-center text-slate-400 text-sm">No products in this proforma</td>
                 </tr>
               )}
               {items.map((item) => {
@@ -529,35 +601,71 @@ const ProformaPreview: React.FC<ProformaPreviewProps> = ({ proformaId, onBack })
                 const lineTotal = displayPrice * item.quantity;
                 const hasOverride = ['name', 'description', 'price'].some(f => isOverridden(item, f));
                 const isSav = saving === item.id;
+                const cv = (item.customValues || {}) as Record<string, string>;
 
                 return (
                   <tr key={item.id} className={`${isSav ? 'opacity-60' : ''} border-b border-slate-200 hover:bg-slate-50/50 transition-colors`}>
-                    <td className="px-3 py-2 border-r border-slate-300">
-                      <EditableCell item={item} field="name" displayValue={displayName} />
-                      {displayDesc && (
-                        <div className="mt-0.5">
-                          <EditableCell item={item} field="description" displayValue={displayDesc} />
-                        </div>
-                      )}
-                      {item.productStockCode && (
-                        <div className="text-[10px] font-mono text-slate-400 px-1 mt-0.5">{item.productStockCode}</div>
-                      )}
-                    </td>
-                    <td className="px-2 py-2 text-center border-r border-slate-300">
-                      <EditableCell item={item} field="quantity" displayValue={item.quantity} isNum />
-                    </td>
-                    <td className="px-2 py-2 text-center text-slate-600 border-r border-slate-300">
-                      {item.productUnit || 'pc'}
-                    </td>
-                    <td className="px-3 py-2 text-right border-r border-slate-300 text-slate-800">
-                      <div className="flex items-center justify-end gap-1">
-                        <span className="text-sm">{currency}</span>
-                        <EditableCell item={item} field="price" displayValue={displayPrice} isNum />
-                      </div>
-                    </td>
-                    <td className="px-3 py-2 text-right font-semibold text-slate-800">
-                      {currency} {fmt(lineTotal)}
-                    </td>
+                    {previewColumns.map((col, i) => {
+                      const borderClass = i < previewColumns.length - 1 ? 'border-r border-slate-300' : '';
+                      if (col.kind === 'builtin') {
+                        switch (col.builtinId) {
+                          case 'product':
+                            return (
+                              <td key={col.id} className={`px-3 py-2 ${borderClass}`}>
+                                <EditableCell item={item} field="name" displayValue={displayName} />
+                                {displayDesc && (
+                                  <div className="mt-0.5">
+                                    <EditableCell item={item} field="description" displayValue={displayDesc} />
+                                  </div>
+                                )}
+                                {item.productStockCode && (
+                                  <div className="text-[10px] font-mono text-slate-400 px-1 mt-0.5">{item.productStockCode}</div>
+                                )}
+                              </td>
+                            );
+                          case 'qty':
+                            return (
+                              <td key={col.id} className={`px-2 py-2 text-center ${borderClass}`}>
+                                <EditableCell item={item} field="quantity" displayValue={item.quantity} isNum />
+                              </td>
+                            );
+                          case 'unit':
+                            return (
+                              <td key={col.id} className={`px-2 py-2 text-center text-slate-600 ${borderClass}`}>
+                                {item.productUnit || 'pc'}
+                              </td>
+                            );
+                          case 'unitPrice':
+                            return (
+                              <td key={col.id} className={`px-3 py-2 text-right text-slate-800 ${borderClass}`}>
+                                <div className="flex items-center justify-end gap-1">
+                                  <span className="text-sm">{currency}</span>
+                                  <EditableCell item={item} field="price" displayValue={displayPrice} isNum />
+                                </div>
+                              </td>
+                            );
+                          case 'total':
+                            return (
+                              <td key={col.id} className={`px-3 py-2 text-right font-semibold text-slate-800 ${borderClass}`}>
+                                {currency} {fmt(lineTotal)}
+                              </td>
+                            );
+                        }
+                      }
+                      // Custom column — read-only display in the preview.
+                      const cc = col.customCol!;
+                      const raw = cv[cc.id] ?? '';
+                      return (
+                        <td
+                          key={col.id}
+                          className={`px-3 py-2 text-slate-700 ${borderClass} ${
+                            col.align === 'right' ? 'text-right' : col.align === 'center' ? 'text-center' : 'text-left'
+                          }`}
+                        >
+                          {formatCustomValue(cc, raw) || <span className="text-slate-300">—</span>}
+                        </td>
+                      );
+                    })}
                     {!pdfCapturing && (
                       <td className="px-2 py-2 print:hidden">
                         <div className="flex items-center gap-0.5 justify-center">
@@ -583,11 +691,12 @@ const ProformaPreview: React.FC<ProformaPreviewProps> = ({ proformaId, onBack })
                 );
               })}
             </tbody>
-            {/* Totals */}
+            {/* Totals — the label spans every visible column except the last,
+                which carries the amount. */}
             <tfoot>
               {calcSteps.length > 0 && (
                 <tr className="border-t-2 border-slate-300 bg-slate-50/50">
-                  <td colSpan={4} className="px-3 py-2 text-right text-xs font-bold text-slate-700 uppercase">
+                  <td colSpan={Math.max(1, previewColumns.length - 1)} className="px-3 py-2 text-right text-xs font-bold text-slate-700 uppercase">
                     SUBTOTAL {effectiveDeliveryTerms}{proforma.portOfLoading ? ` ${proforma.portOfLoading}` : ''}{proforma.countryOfOrigin ? `, ${proforma.countryOfOrigin}` : ''}
                   </td>
                   <td className="px-3 py-2 text-right text-sm font-bold text-slate-700">
@@ -598,7 +707,7 @@ const ProformaPreview: React.FC<ProformaPreviewProps> = ({ proformaId, onBack })
               )}
               {calcSteps.map((step) => (
                 <tr key={step.id} className="border-t border-dashed border-slate-200">
-                  <td colSpan={4} className="px-3 py-1.5 text-right text-xs text-slate-900 uppercase font-medium">
+                  <td colSpan={Math.max(1, previewColumns.length - 1)} className="px-3 py-1.5 text-right text-xs text-slate-900 uppercase font-medium">
                     {step.name}
                     {step.valueType === 'percentage' && ` (${step.value}%)`}
                   </td>
@@ -609,7 +718,7 @@ const ProformaPreview: React.FC<ProformaPreviewProps> = ({ proformaId, onBack })
                 </tr>
               ))}
               <tr className="border-t-2 border-slate-800 bg-slate-50">
-                <td colSpan={4} className="px-3 py-3 text-right text-xs font-bold text-slate-900 uppercase">
+                <td colSpan={Math.max(1, previewColumns.length - 1)} className="px-3 py-3 text-right text-xs font-bold text-slate-900 uppercase">
                   {calcSteps.length > 0
                     ? `TOTAL ${effectiveDeliveryTerms || 'CIF'}${proforma.finalPlaceOfDelivery ? ` ${proforma.finalPlaceOfDelivery}` : ''}${proforma.placeOfDestination ? `, ${proforma.placeOfDestination}` : ''}`
                     : `TOTAL ${effectiveDeliveryTerms}${proforma.portOfLoading ? ` ${proforma.portOfLoading}` : ''}`

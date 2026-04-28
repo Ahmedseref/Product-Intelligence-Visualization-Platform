@@ -326,6 +326,11 @@ export const proformas = pgTable("proformas", {
   // orderIndex order. Default columns (Description, Qty, Unit, Unit Price,
   // Total) are NOT in this list — only the user's additions.
   customColumns: jsonb("custom_columns").default([]),
+  // Array of column ids that should be hidden in both the editor and the
+  // preview. Built-in column ids: 'unit', 'unitPrice', 'total'. Custom
+  // column ids match the id field on customColumns entries. The required
+  // columns ('product' / Description and 'quantity' / Qty) cannot be hidden.
+  hiddenColumns: jsonb("hidden_columns").default([]),
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow(),
 });

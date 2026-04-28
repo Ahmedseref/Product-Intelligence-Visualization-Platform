@@ -305,6 +305,10 @@ export interface ProformaCustomColumn {
   orderIndex: number;
 }
 
+// Built-in column ids that the user is allowed to hide. 'product' (description)
+// and 'quantity' are required and never appear in this set.
+export type ProformaHideableBuiltin = 'unit' | 'unitPrice' | 'total';
+
 export interface ProformaFinancialData {
   id: number;
   proformaId: string;
