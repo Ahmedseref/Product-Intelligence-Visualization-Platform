@@ -94,6 +94,12 @@ const SystemBuilder: React.FC<SystemBuilderProps> = ({ products, onProductUpdate
     if (/\btop\s*coat\b|\bsealer\b|\bfinish\b|\bclear\s*coat\b/.test(n)) return 'topcoat';
     if (/\bintermediate\b|\bbuild\s*coat\b/.test(n)) return 'intermediate';
     if (/\bbase\s*coat\b|\bbody\s*coat\b|\bscratch\s*coat\b|\bself.?level/.test(n)) return 'base_coat';
+    // Material-named generic coat slots like "Polyurea Coat", "Epoxy Coat",
+    // "PU Coat", "Acrylic Coat" — these sit above the primer the user picks
+    // in Step 2, so they're effectively base coats. Mirrors the engine's
+    // smart "coat-without-position-qualifier → base_coat" rule and keeps
+    // the layer pill visible so the user understands the filtering.
+    if (/\b(polyurea|epoxy|pu|polyurethane|acrylic)\s+coat\b/.test(n)) return 'base_coat';
     return null;
   };
 
@@ -2262,7 +2268,7 @@ const SystemBuilder: React.FC<SystemBuilderProps> = ({ products, onProductUpdate
               {quickStep === 4 && (
                 <div className="space-y-4">
                   <p className="text-xs text-slate-500">
-                    Pick a default product for each layer (optional). Products are filtered by the parameters from Step 1 <em>and</em> the layer position inferred from each slot name in Step 2
+                    Pick a default product for each layer (optional). Products are filtered by the parameters from Step 1 <em>and</em> the layer position inferred from each slot name in Step 3
                     {quickSetup.materialType !== 'generic' && (
                       <> — only <strong>{quickSetup.materialType === 'pu' ? 'PU/Polyurethane' : quickSetup.materialType[0].toUpperCase() + quickSetup.materialType.slice(1)}</strong> products (matched by taxonomy or name) are shown.</>
                     )}
@@ -2286,8 +2292,30 @@ const SystemBuilder: React.FC<SystemBuilderProps> = ({ products, onProductUpdate
                     const matches = products.filter(p => {
                       const t = tagsByProduct[p.id];
                       if (!t || !t.isSystemReady) return false;
-                      // Multi-substrate: keep the product if it lists ANY of the selected substrates.
-                      if (quickSetup.substrate.length > 0 && !(t.substrateTypes || []).some(s => quickSetup.substrate.includes(s))) return false;
+                      // Substrate filter — the user's Step 1 substrate (e.g.
+                      // Concrete) describes what the SYSTEM sits on, which
+                      // really only constrains substrate-touching products
+                      // (primers and standalone). Layered products (base
+                      // coats / intermediates / topcoats) are always tagged
+                      // with internal substrates like 'Over Primer' / 'Over
+                      // Base Coat' — they sit on the primer the user picks
+                      // in Step 2, not on Concrete. So a product whose
+                      // substrate list is purely layered should always pass
+                      // the user's substrate filter; only products with at
+                      // least one "real" substrate need to match.
+                      if (quickSetup.substrate.length > 0) {
+                        const subs = t.substrateTypes || [];
+                        const layeredOnly = subs.length > 0 && subs.every(s => s === 'Over Primer' || s === 'Over Base Coat');
+                        // Belt-and-braces: only treat the product as "layered"
+                        // for substrate-bypass purposes when its layer_position
+                        // also confirms it (or the slot itself does). Prevents
+                        // a mis-tagged primer with substrate=['Over Primer']
+                        // from sneaking through the substrate gate.
+                        const layeredPos = t.layerPosition === 'base_coat' || t.layerPosition === 'intermediate' || t.layerPosition === 'topcoat';
+                        const layeredSlot = slotPos === 'base_coat' || slotPos === 'intermediate' || slotPos === 'topcoat';
+                        if (!(layeredOnly && (layeredPos || layeredSlot))
+                            && !subs.some(s => quickSetup.substrate.includes(s))) return false;
+                      }
                       if (quickSetup.humidity && t.humidityTolerance && t.humidityTolerance !== quickSetup.humidity) return false;
                       if (quickSetup.duty && t.dutyRating && t.dutyRating !== quickSetup.duty) return false;
                       // Per-layer filter — only enforced when both the slot name
