@@ -548,18 +548,12 @@ export async function seedQualificationVocabularies(): Promise<void> {
       values: ['Concrete', 'Steel', 'Metal', 'Wood', 'Screed', 'Asphalt', 'Ceramic', 'Existing Coating', 'Over Primer', 'Over Base Coat'],
     },
     {
-      // The qualification engine emits one of three humidity tolerance
-      // labels — 'Standard', 'Moisture-Tolerant', 'Underwater'. The closed-
-      // list UI <select> can only render values that exist in this vocab,
-      // so these three MUST be seeded or inferred values render blank.
-      // The percentage-range labels below are kept for users who prefer to
-      // tag products by measured substrate moisture; the seed is additive
-      // so both sets coexist.
+      // Single source of truth: percentage-range labels keyed to measured
+      // substrate moisture. The qualification engine maps its inferred
+      // categories (standard/moisture-tolerant/underwater) into these same
+      // labels so the closed-list UI <select> always has a matching value.
       vocabType: 'humidity',
       values: [
-        'Standard',
-        'Moisture-Tolerant',
-        'Underwater',
         'Dry (0–4%)',
         'Slightly Damp (4–6%)',
         'Damp / High Moisture (6–8%)',

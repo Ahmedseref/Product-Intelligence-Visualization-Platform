@@ -169,25 +169,37 @@ const HUMIDITY_SPECIFIC = {
   generic: ['damp', 'humid', 'moisture'],
 };
 
+// The closed-list humidity vocab uses percentage-range labels keyed to
+// measured substrate moisture. The engine's three internal buckets map
+// onto those labels so inferred values always render in the UI <select>:
+//   underwater         -> 'Wet (>8%)'
+//   moisture-tolerant  -> 'Damp / High Moisture (6–8%)'
+//   standard fallback  -> 'Dry (0–4%)'
+const HUMIDITY_LABEL = {
+  underwater:       'Wet (>8%)',
+  moistureTolerant: 'Damp / High Moisture (6–8%)',
+  standard:         'Dry (0–4%)',
+} as const;
+
 function inferHumidity(input: InferenceInput): { value: string | null; confidence: Confidence; source: string } {
   // Underwater wins over moisture-tolerant when both appear.
   const underwaterInName = nameIncludesAny(input.name, HUMIDITY_SPECIFIC.underwater);
-  if (underwaterInName) return { value: 'Underwater', confidence: 'high', source: `name:${underwaterInName}` };
+  if (underwaterInName) return { value: HUMIDITY_LABEL.underwater, confidence: 'high', source: `name:${underwaterInName}` };
   const underwaterInDesc = nameIncludesAny(input.description, HUMIDITY_SPECIFIC.underwater);
-  if (underwaterInDesc) return { value: 'Underwater', confidence: 'medium', source: `description:${underwaterInDesc}` };
+  if (underwaterInDesc) return { value: HUMIDITY_LABEL.underwater, confidence: 'medium', source: `description:${underwaterInDesc}` };
 
   const mtName = nameIncludesAny(input.name, HUMIDITY_SPECIFIC.moistureTolerant);
-  if (mtName) return { value: 'Moisture-Tolerant', confidence: 'high', source: `name:${mtName}` };
+  if (mtName) return { value: HUMIDITY_LABEL.moistureTolerant, confidence: 'high', source: `name:${mtName}` };
   const mtDesc = nameIncludesAny(input.description, HUMIDITY_SPECIFIC.moistureTolerant);
-  if (mtDesc) return { value: 'Moisture-Tolerant', confidence: 'medium', source: `description:${mtDesc}` };
+  if (mtDesc) return { value: HUMIDITY_LABEL.moistureTolerant, confidence: 'medium', source: `description:${mtDesc}` };
 
   const genName = nameIncludesAny(input.name, HUMIDITY_SPECIFIC.generic);
-  if (genName) return { value: 'Moisture-Tolerant', confidence: 'high', source: `name:${genName}` };
+  if (genName) return { value: HUMIDITY_LABEL.moistureTolerant, confidence: 'high', source: `name:${genName}` };
   const genDesc = nameIncludesAny(input.description, HUMIDITY_SPECIFIC.generic);
-  if (genDesc) return { value: 'Moisture-Tolerant', confidence: 'medium', source: `description:${genDesc}` };
+  if (genDesc) return { value: HUMIDITY_LABEL.moistureTolerant, confidence: 'medium', source: `description:${genDesc}` };
 
-  // Fallback — every product is at least 'Standard' humidity unless noted.
-  return { value: 'Standard', confidence: 'low', source: 'fallback:default' };
+  // Fallback — every product is at least 'Dry (0–4%)' unless noted.
+  return { value: HUMIDITY_LABEL.standard, confidence: 'low', source: 'fallback:default' };
 }
 
 // ---------- DUTY rules ----------

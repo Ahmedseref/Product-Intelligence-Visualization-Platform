@@ -222,30 +222,30 @@ test('keyword "steel" in name (no taxonomy match) → adds Steel substrate', () 
   assert.equal(result.confidence.substrate, 'medium');
 });
 
-test('humidity keyword "submerged" → Underwater (high confidence)', () => {
+test('humidity keyword "submerged" → Wet (>8%) (high confidence)', () => {
   const result = inferQualificationTags(
     product({ name: 'WaterTank Submerged Coating', nodeId: 'leaf' }),
     path('Generic'),
   );
-  assert.equal(result.humidity_tolerance, 'Underwater');
+  assert.equal(result.humidity_tolerance, 'Wet (>8%)');
   assert.equal(result.confidence.humidity, 'high');
 });
 
-test('humidity keyword "moisture tolerant" in description → Moisture-Tolerant (medium)', () => {
+test('humidity keyword "moisture tolerant" in description → Damp / High Moisture (6–8%) (medium)', () => {
   const result = inferQualificationTags(
     product({ name: 'Generic Coating', description: 'A moisture tolerant primer for damp surfaces.', nodeId: 'leaf' }),
     path('Generic'),
   );
-  assert.equal(result.humidity_tolerance, 'Moisture-Tolerant');
+  assert.equal(result.humidity_tolerance, 'Damp / High Moisture (6–8%)');
   assert.equal(result.confidence.humidity, 'medium');
 });
 
-test('no humidity signal at all → defaults to Standard (low)', () => {
+test('no humidity signal at all → defaults to Dry (0–4%) (low)', () => {
   const result = inferQualificationTags(
     product({ name: 'Plain Coating', nodeId: 'leaf' }),
     path('Generic'),
   );
-  assert.equal(result.humidity_tolerance, 'Standard');
+  assert.equal(result.humidity_tolerance, 'Dry (0–4%)');
   assert.equal(result.confidence.humidity, 'low');
 });
 
@@ -258,7 +258,7 @@ test('no humidity signal at all → defaults to Standard (low)', () => {
 // ['Over Primer']. To preserve the original spec test (substrate=[Concrete,
 // Steel]) we use a name that triggers the smart rule's primer branch.
 
-test('SPEC: Polyurea Waterproofing primer → substrate=[Concrete,Steel], duty=Heavy, humidity=Standard, overall=high', () => {
+test('SPEC: Polyurea Waterproofing primer → substrate=[Concrete,Steel], duty=Heavy, humidity=Dry (0–4%), overall=high', () => {
   const result = inferQualificationTags(
     product({ name: 'PolyureaSeal HD Primer', nodeId: 'pw-leaf' }),
     path('Construction', 'Construction Chemicals', 'Waterproofing', 'PW', 'Polyurea Waterproofing'),
@@ -270,7 +270,7 @@ test('SPEC: Polyurea Waterproofing primer → substrate=[Concrete,Steel], duty=H
     ['Concrete', 'Steel'],
   );
   assert.equal(result.duty_rating, 'Heavy');
-  assert.equal(result.humidity_tolerance, 'Standard');
+  assert.equal(result.humidity_tolerance, 'Dry (0–4%)');
   assert.equal(result.confidence.overall, 'high');
 });
 
