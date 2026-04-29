@@ -810,8 +810,66 @@ const SystemBuilder: React.FC<SystemBuilderProps> = ({ products, onProductUpdate
   // Returns null when no smart filter applies for any reason.
   const activeLayer = showAddProduct ? fullSystem?.layers.find(l => l.layerId === showAddProduct) : null;
   const effectiveSubstrate = activeLayer ? getEffectiveSubstrate(activeLayer.layerSubstrateOverride) : null;
-  const smartFilterActive = !showAllProductsInSearch && systemHasAnyParams && !!showAddProduct;
+
+  // Infer the active layer's position (primer / base_coat / intermediate /
+  // topcoat / standalone) from its name so the alternatives picker can refuse
+  // to suggest a Primer product in a Base Coat slot, etc. Same heuristic the
+  // wizard uses on slot names — keeps behaviour consistent.
+  const activeLayerPos = activeLayer ? inferLayerPositionFromSlotName(activeLayer.layerName) : null;
+  const activeLayerPosLabel = activeLayerPos
+    ? activeLayerPos === 'base_coat'    ? 'Base Coat'
+      : activeLayerPos === 'topcoat'    ? 'Topcoat'
+      : activeLayerPos === 'primer'     ? 'Primer'
+      : activeLayerPos === 'intermediate' ? 'Intermediate'
+      : 'Standalone'
+    : null;
+
+  // Infer the system's material chemistry (epoxy / pu / polyurea / acrylic)
+  // from products already chosen across all layers. We never persist
+  // materialType on the system, so the most reliable source of truth is the
+  // chemistry of products the user has already accepted. If every chosen
+  // product matches the same material keyword, we lock the alternatives
+  // picker to that material — preventing a PU coat from showing up in an
+  // Epoxy system. When the system has no products yet (or mixes chemistries)
+  // we leave the material filter off.
+  const activeMaterialRegex = React.useMemo(() => {
+    if (!fullSystem) return null;
+    const ids = new Set<string>();
+    for (const l of fullSystem.layers) for (const o of l.productOptions) ids.add(o.productId);
+    if (ids.size === 0) return null;
+    const matched: Array<keyof typeof MATERIAL_KEYWORDS> = [];
+    for (const id of ids) {
+      const haystack = productMaterialPath[id] || '';
+      let foundAny = false;
+      for (const [mat, rx] of Object.entries(MATERIAL_KEYWORDS) as Array<[keyof typeof MATERIAL_KEYWORDS, RegExp | null]>) {
+        if (rx && rx.test(haystack)) { matched.push(mat); foundAny = true; break; }
+      }
+      // Any unclassifiable product → bail out: don't risk over-filtering.
+      if (!foundAny) return null;
+    }
+    const uniq = Array.from(new Set(matched));
+    return uniq.length === 1 ? MATERIAL_KEYWORDS[uniq[0]] : null;
+  }, [fullSystem, productMaterialPath]);
+  // The material name we actually locked to (for the banner). Recomputed
+  // alongside the regex.
+  const activeMaterialLabel = React.useMemo(() => {
+    if (!activeMaterialRegex) return null;
+    for (const [mat, rx] of Object.entries(MATERIAL_KEYWORDS) as Array<[keyof typeof MATERIAL_KEYWORDS, RegExp | null]>) {
+      if (rx === activeMaterialRegex) {
+        return mat === 'pu' ? 'PU/Polyurethane' : mat[0].toUpperCase() + mat.slice(1);
+      }
+    }
+    return null;
+  }, [activeMaterialRegex]);
+
+  // The smart filter is now active whenever a layer is open and the user
+  // hasn't opted out — we no longer require a system-level parameter,
+  // because layer-position alone (e.g. "no primers in a base coat slot") is
+  // a useful filter on its own.
+  const smartFilterActive = !showAllProductsInSearch && !!showAddProduct;
   const filterSummary = smartFilterActive ? [
+    activeLayerPosLabel ? `layer: ${activeLayerPosLabel}` : null,
+    activeMaterialLabel ? `material: ${activeMaterialLabel}` : null,
     effectiveSubstrate ? `substrate: ${effectiveSubstrate}` : null,
     fullSystem?.systemHumidity ? `humidity: ${fullSystem.systemHumidity}` : null,
     fullSystem?.systemDuty ? `duty: ${fullSystem.systemDuty}` : null,
@@ -827,18 +885,38 @@ const SystemBuilder: React.FC<SystemBuilderProps> = ({ products, onProductUpdate
         return matchesAdvancedSearch(searchableText, parsed);
       });
     }
-    // Step 2: smart qualification filter (only when an open layer exists,
-    // user hasn't opted out, and the system actually defines parameters).
+    // Step 2: smart qualification filter (only when an open layer exists and
+    // the user hasn't opted out via "Show all").
     if (!smartFilterActive) return pool;
     return pool.filter((p) => {
       const tag = tagsByProduct[p.id];
       if (!tag || !tag.isSystemReady) return false;
+      // Layer-position filter — refuse to suggest a Primer product in a
+      // Base Coat slot, etc. 'standalone' products are versatile so they
+      // always pass; products without a layer_position tag are also kept
+      // (legacy fallback so users aren't blocked by un-tagged data).
+      if (activeLayerPos && tag.layerPosition && tag.layerPosition !== activeLayerPos && tag.layerPosition !== 'standalone') return false;
+      // Substrate filter — same layer-aware logic as the wizard's Step 4:
+      // products whose substrate is purely 'Over Primer'/'Over Base Coat'
+      // are layered products and shouldn't be filtered against the system's
+      // structural substrate (which only describes what the SYSTEM sits on).
       if (effectiveSubstrate) {
         const subs = tag.substrateTypes || [];
-        if (!subs.includes(effectiveSubstrate)) return false;
+        const layeredOnly = subs.length > 0 && subs.every(s => s === 'Over Primer' || s === 'Over Base Coat');
+        const layeredPos = tag.layerPosition === 'base_coat' || tag.layerPosition === 'intermediate' || tag.layerPosition === 'topcoat';
+        const layeredSlot = activeLayerPos === 'base_coat' || activeLayerPos === 'intermediate' || activeLayerPos === 'topcoat';
+        const isLayered = layeredOnly && (layeredPos || layeredSlot);
+        if (!isLayered && !subs.includes(effectiveSubstrate)) return false;
       }
       if (fullSystem?.systemHumidity && tag.humidityTolerance !== fullSystem.systemHumidity) return false;
       if (fullSystem?.systemDuty && tag.dutyRating !== fullSystem.systemDuty) return false;
+      // Material-chemistry filter — once the system has any chosen products
+      // and they all share a single material, lock alternatives to that
+      // chemistry.
+      if (activeMaterialRegex) {
+        const haystack = productMaterialPath[p.id] || '';
+        if (!activeMaterialRegex.test(haystack)) return false;
+      }
       return true;
     });
   })();
@@ -1476,24 +1554,26 @@ const SystemBuilder: React.FC<SystemBuilderProps> = ({ products, onProductUpdate
 
                       {showAddProduct === layer.layerId && (
                         <div className="px-3 py-2 bg-white border-b border-slate-100 border-l-4 border-l-green-400">
-                          {/* Smart filter banner — only visible when system has params and the user hasn't opted out */}
-                          {systemHasAnyParams && (
-                            <div className={`mb-2 flex items-center justify-between gap-2 px-2 py-1 rounded-lg border text-[11px] ${smartFilterActive ? 'bg-indigo-50 border-indigo-200 text-indigo-700' : 'bg-slate-50 border-slate-200 text-slate-500'}`}>
-                              <span className="flex items-center gap-1.5 truncate">
-                                <ShieldCheck size={12} />
-                                {smartFilterActive
-                                  ? <>Smart filter on — {filterSummary || 'system-ready only'}</>
-                                  : <>Smart filter off — showing all products</>}
-                              </span>
-                              <button
-                                type="button"
-                                onClick={() => setShowAllProductsInSearch(v => !v)}
-                                className="px-1.5 py-0.5 rounded text-[10px] font-semibold bg-white border border-current hover:opacity-80"
-                              >
-                                {smartFilterActive ? 'Show all' : 'Apply filter'}
-                              </button>
-                            </div>
-                          )}
+                          {/* Smart filter banner — visible whenever the search panel is open
+                              so the user can always see what's being filtered AND has a way
+                              to opt out via "Show all". The filter itself activates on layer
+                              open (layer-position alone is a useful filter even without
+                              system-level params). */}
+                          <div className={`mb-2 flex items-center justify-between gap-2 px-2 py-1 rounded-lg border text-[11px] ${smartFilterActive ? 'bg-indigo-50 border-indigo-200 text-indigo-700' : 'bg-slate-50 border-slate-200 text-slate-500'}`}>
+                            <span className="flex items-center gap-1.5 truncate">
+                              <ShieldCheck size={12} />
+                              {smartFilterActive
+                                ? <>Smart filter on — {filterSummary || 'system-ready only'}</>
+                                : <>Smart filter off — showing all products</>}
+                            </span>
+                            <button
+                              type="button"
+                              onClick={() => setShowAllProductsInSearch(v => !v)}
+                              className="px-1.5 py-0.5 rounded text-[10px] font-semibold bg-white border border-current hover:opacity-80"
+                            >
+                              {smartFilterActive ? 'Show all' : 'Apply filter'}
+                            </button>
+                          </div>
                           {/* Per-layer substrate override picker. Empty = inherit from sector/system. */}
                           {systemHasAnyParams && vocab.substrate.length > 0 && (
                             <div className="mb-2 flex items-center gap-2 text-[11px] text-slate-500">
