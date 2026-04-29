@@ -73,8 +73,20 @@ interface RowState {
 }
 
 type StatusFilter = 'all' | 'ready' | 'unqualified';
-// Sort key applied to the main qualification table (Fix 4)
-type MainSortKey = 'name' | 'taxonomy' | 'confidence' | 'ready';
+// Sort key applied to the main qualification table (Fix 4). Every column
+// that displays a value is sortable — clicking a header toggles direction
+// or switches to that column. Multi-value cells (substrate, etc.) sort by
+// their first value alphabetically with empty cells sinking to the bottom.
+type MainSortKey =
+  | 'name'
+  | 'taxonomy'
+  | 'layer_position'
+  | 'substrate'
+  | 'humidity'
+  | 'duty'
+  | 'finish'
+  | 'confidence'
+  | 'ready';
 // Quick filter pill states for the main table
 type MainQuickFilter = 'none' | 'needs_layer' | 'missing_substrate' | 'missing_duty' | 'missing_finish';
 
@@ -969,6 +981,22 @@ const SystemBuilderQualification: React.FC<Props> = ({ products, treeNodes, onPr
   const [mainSortDir, setMainSortDir] = useState<SortDir>('asc');
   const [mainQuickFilter, setMainQuickFilter] = useState<MainQuickFilter>('none');
 
+  // Click-sort handler for the main table — toggles direction when the same
+  // header is clicked again, otherwise switches to that column with its
+  // natural default direction. (asc for text, desc for "best-first" rankings
+  // like confidence and system-ready.)
+  const toggleMainSort = (k: MainSortKey) => {
+    if (mainSortKey === k) {
+      setMainSortDir(d => (d === 'asc' ? 'desc' : 'asc'));
+    } else {
+      setMainSortKey(k);
+      setMainSortDir(k === 'confidence' || k === 'ready' ? 'desc' : 'asc');
+    }
+  };
+  // Tiny ▲/▼ glyph beside the active header — invisible on inactive headers.
+  const mainSortGlyph = (k: MainSortKey) =>
+    mainSortKey === k ? (mainSortDir === 'asc' ? ' ▲' : ' ▼') : '';
+
   // Resizable column widths for the main qualification table — persisted.
   const { widths: mainColW, setWidths: setMainColW } = useColumnWidths(
     'qualification.main.colWidths.v1',
@@ -1217,20 +1245,72 @@ const SystemBuilderQualification: React.FC<Props> = ({ products, treeNodes, onPr
     // as the lowest rank so it sinks to the bottom.
     const confRank: Record<string, number> = { high: 4, medium: 3, low: 2, none: 1 };
     const score = (id: string) => confRank[rowConfidence[id] || ''] || 0;
+    // Direction-aware string comparator that ALWAYS sinks empty values to
+    // the bottom — so toggling asc↔desc flips the non-empty order without
+    // ever pulling blanks to the top.
+    const dirSafeStr = (a: string, b: string, dir: SortDir): number => {
+      const ae = !a, be = !b;
+      if (ae && be) return 0;
+      if (ae) return 1;
+      if (be) return -1;
+      const cmp = a.localeCompare(b);
+      return dir === 'asc' ? cmp : -cmp;
+    };
+    // Same as above but compares two values via a numeric rank map so we can
+    // honor a domain-specific order (e.g. coating sequence) instead of the
+    // lexical default. Unknown values rank just before "empty".
+    const dirSafeRank = (a: string, b: string, dir: SortDir, rank: Record<string, number>): number => {
+      const ae = !a, be = !b;
+      if (ae && be) return 0;
+      if (ae) return 1;
+      if (be) return -1;
+      const cmp = (rank[a] ?? 98) - (rank[b] ?? 98);
+      return dir === 'asc' ? cmp : -cmp;
+    };
+    // Coating-process order: primers go down first, topcoats finish, with
+    // standalone products sitting outside the layered sequence.
+    const layerRank: Record<string, number> = {
+      primer: 1, base_coat: 2, intermediate: 3, topcoat: 4, standalone: 5,
+    };
     const sorted = [...base].sort((a, b) => {
-      let cmp = 0;
+      const ra = rows[a.id];
+      const rb = rows[b.id];
       switch (mainSortKey) {
-        case 'name':       cmp = a.name.localeCompare(b.name); break;
-        case 'taxonomy':   cmp = nodePath(a.nodeId).localeCompare(nodePath(b.nodeId)); break;
-        case 'confidence': cmp = score(b.id) - score(a.id); break;
-        case 'ready': {
-          const ar = rows[a.id]?.isSystemReady ? 1 : 0;
-          const br = rows[b.id]?.isSystemReady ? 1 : 0;
-          cmp = br - ar;
-          break;
+        // Name and taxonomy never have "empty" rows in practice, so a plain
+        // localeCompare with global direction flip is fine.
+        case 'name':
+          return mainSortDir === 'asc'
+            ? a.name.localeCompare(b.name)
+            : b.name.localeCompare(a.name);
+        case 'taxonomy': {
+          const pa = nodePath(a.nodeId), pb = nodePath(b.nodeId);
+          return mainSortDir === 'asc' ? pa.localeCompare(pb) : pb.localeCompare(pa);
         }
+        // Qualification fields: blanks always sink, dir flips non-empty order.
+        case 'layer_position':
+          return dirSafeRank(ra?.layerPosition || '', rb?.layerPosition || '', mainSortDir, layerRank);
+        case 'substrate':
+          return dirSafeStr(ra?.substrateTypes?.[0] || '', rb?.substrateTypes?.[0] || '', mainSortDir);
+        case 'humidity':
+          return dirSafeStr(ra?.humidityTolerance || '', rb?.humidityTolerance || '', mainSortDir);
+        case 'duty':
+          return dirSafeStr(ra?.dutyRating || '', rb?.dutyRating || '', mainSortDir);
+        case 'finish':
+          return dirSafeStr(ra?.finishType || '', rb?.finishType || '', mainSortDir);
+        // Best-first rankings: default desc (= high/ready first), asc flips.
+        case 'confidence': {
+          const cmp = score(b.id) - score(a.id);
+          return mainSortDir === 'desc' ? cmp : -cmp;
+        }
+        case 'ready': {
+          const ar = ra?.isSystemReady ? 1 : 0;
+          const br = rb?.isSystemReady ? 1 : 0;
+          const cmp = br - ar;
+          return mainSortDir === 'desc' ? cmp : -cmp;
+        }
+        default:
+          return 0;
       }
-      return mainSortDir === 'asc' ? cmp : -cmp;
     });
     return sorted;
   }, [products, searchTerm, nodeFilter, statusFilter, layerFilter, confidenceFilter, mainQuickFilter, rows, rowConfidence, nodePath, mainSortKey, mainSortDir]);
@@ -1806,28 +1886,15 @@ const SystemBuilderQualification: React.FC<Props> = ({ products, treeNodes, onPr
             <option value="none">None</option>
           </select>
 
-          {/* Fix 4: sort */}
-          <div className="flex items-center gap-1 text-xs text-slate-500">
+          {/* Sort hint — sorting itself is now driven by clicking column
+              headers (see <thead> below), so the toolbar only shows the
+              currently active key. */}
+          <div className="flex items-center gap-1 text-xs text-slate-500" title="Click any column header to sort by that field. Click again to flip direction.">
             <ArrowUpDown size={12} />
-            <span>Sort:</span>
-            <select
-              value={mainSortKey}
-              onChange={e => setMainSortKey(e.target.value as MainSortKey)}
-              className="px-2 py-1.5 text-xs border border-slate-200 rounded-md bg-white"
-            >
-              <option value="name">Product name</option>
-              <option value="taxonomy">Taxonomy</option>
-              <option value="confidence">Confidence</option>
-              <option value="ready">System-ready</option>
-            </select>
-            <button
-              type="button"
-              onClick={() => setMainSortDir(d => d === 'asc' ? 'desc' : 'asc')}
-              className="px-2 py-1.5 text-xs border border-slate-200 rounded-md bg-white hover:bg-slate-50"
-              title={`Direction: ${mainSortDir === 'asc' ? 'ascending' : 'descending'}`}
-            >
-              {mainSortDir === 'asc' ? '↑ A→Z' : '↓ Z→A'}
-            </button>
+            <span>
+              Sort: <span className="text-slate-700 font-medium">{mainSortKey.replace('_', ' ')}</span>
+              <span className="text-slate-400"> ({mainSortDir === 'asc' ? 'asc' : 'desc'})</span>
+            </span>
           </div>
 
           <div className="text-xs text-slate-500 ml-auto whitespace-nowrap">
@@ -1950,42 +2017,82 @@ const SystemBuilderQualification: React.FC<Props> = ({ products, treeNodes, onPr
                     className="rounded text-blue-600"
                   />
                 </th>
-                <th className="relative px-2 py-1.5 text-left">
-                  Product
+                {/* Click-sort: every value-bearing header toggles the active
+                    sort key/direction. ResizeHandle keeps its own pointer
+                    events so dragging the right edge to resize never
+                    accidentally fires the sort click. */}
+                <th
+                  className="relative px-2 py-1.5 text-left cursor-pointer select-none hover:bg-slate-100"
+                  onClick={() => toggleMainSort('name')}
+                  title="Click to sort by product name"
+                >
+                  Product{mainSortGlyph('name')}
                   <ResizeHandle colKey="product" currentWidth={mainColW.product} setWidths={setMainColW} />
                 </th>
-                <th className="relative px-2 py-1.5 text-left">
-                  Taxonomy
+                <th
+                  className="relative px-2 py-1.5 text-left cursor-pointer select-none hover:bg-slate-100"
+                  onClick={() => toggleMainSort('taxonomy')}
+                  title="Click to sort by taxonomy path"
+                >
+                  Taxonomy{mainSortGlyph('taxonomy')}
                   <ResizeHandle colKey="taxonomy" currentWidth={mainColW.taxonomy} setWidths={setMainColW} />
                 </th>
                 {/* Fix 2: Layer Position is the FIRST qualification column — it
                     drives the conditional rendering of every column to its right. */}
-                <th className="relative px-2 py-1.5 text-left">
-                  Layer
+                <th
+                  className="relative px-2 py-1.5 text-left cursor-pointer select-none hover:bg-slate-100"
+                  onClick={() => toggleMainSort('layer_position')}
+                  title="Click to sort by layer position"
+                >
+                  Layer{mainSortGlyph('layer_position')}
                   <ResizeHandle colKey="layer" currentWidth={mainColW.layer} setWidths={setMainColW} />
                 </th>
-                <th className="relative px-2 py-1.5 text-left">
-                  Substrate
+                <th
+                  className="relative px-2 py-1.5 text-left cursor-pointer select-none hover:bg-slate-100"
+                  onClick={() => toggleMainSort('substrate')}
+                  title="Click to sort by substrate (first value, blanks last)"
+                >
+                  Substrate{mainSortGlyph('substrate')}
                   <ResizeHandle colKey="substrate" currentWidth={mainColW.substrate} setWidths={setMainColW} />
                 </th>
-                <th className="relative px-2 py-1.5 text-left">
-                  Humidity
+                <th
+                  className="relative px-2 py-1.5 text-left cursor-pointer select-none hover:bg-slate-100"
+                  onClick={() => toggleMainSort('humidity')}
+                  title="Click to sort by humidity tolerance (blanks last)"
+                >
+                  Humidity{mainSortGlyph('humidity')}
                   <ResizeHandle colKey="humidity" currentWidth={mainColW.humidity} setWidths={setMainColW} />
                 </th>
-                <th className="relative px-2 py-1.5 text-left">
-                  Duty
+                <th
+                  className="relative px-2 py-1.5 text-left cursor-pointer select-none hover:bg-slate-100"
+                  onClick={() => toggleMainSort('duty')}
+                  title="Click to sort by duty rating (blanks last)"
+                >
+                  Duty{mainSortGlyph('duty')}
                   <ResizeHandle colKey="duty" currentWidth={mainColW.duty} setWidths={setMainColW} />
                 </th>
-                <th className="relative px-2 py-1.5 text-left">
-                  Finish
+                <th
+                  className="relative px-2 py-1.5 text-left cursor-pointer select-none hover:bg-slate-100"
+                  onClick={() => toggleMainSort('finish')}
+                  title="Click to sort by finish type (blanks last)"
+                >
+                  Finish{mainSortGlyph('finish')}
                   <ResizeHandle colKey="finish" currentWidth={mainColW.finish} setWidths={setMainColW} />
                 </th>
-                <th className="relative px-2 py-1.5 text-center" title="Auto-inference confidence (grey = manually set)">
-                  Conf.
+                <th
+                  className="relative px-2 py-1.5 text-center cursor-pointer select-none hover:bg-slate-100"
+                  onClick={() => toggleMainSort('confidence')}
+                  title="Auto-inference confidence (grey = manually set). Click to sort best-first."
+                >
+                  Conf.{mainSortGlyph('confidence')}
                   <ResizeHandle colKey="conf" currentWidth={mainColW.conf} setWidths={setMainColW} minWidth={50} />
                 </th>
-                <th className="relative px-2 py-1.5 text-center">
-                  Ready
+                <th
+                  className="relative px-2 py-1.5 text-center cursor-pointer select-none hover:bg-slate-100"
+                  onClick={() => toggleMainSort('ready')}
+                  title="Click to sort by system-ready flag"
+                >
+                  Ready{mainSortGlyph('ready')}
                   <ResizeHandle colKey="ready" currentWidth={mainColW.ready} setWidths={setMainColW} minWidth={45} />
                 </th>
                 <th className="relative px-2 py-1.5 text-right">
