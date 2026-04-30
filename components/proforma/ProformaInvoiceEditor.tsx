@@ -39,6 +39,7 @@ import {
   ArrowLeft, Save, FileText, FileSpreadsheet, Plus, Trash2, Search, X,
   ChevronDown, ChevronUp, User, Truck, Package, Calculator, StickyNote,
   Anchor, Globe, CreditCard, Percent, DollarSign, GripVertical, AlertCircle,
+  Columns3, ArrowUp, ArrowDown, Eye, EyeOff,
 } from 'lucide-react';
 import { api } from '../../client/api';
 import {
@@ -47,11 +48,19 @@ import {
   ProformaItemData,
   ProformaFinancialData,
   ProformaSettingsData,
+  ProformaCustomColumn,
   CustomerData,
   CustomerFieldData,
 } from '../../types';
 import CustomerSelector from './CustomerSelector';
 import { computeFinancials } from './FinancialsEditor';
+import {
+  evaluateFormula,
+  computeRowTotal,
+  computeSubtotal,
+  FormulaColumn,
+  FormulaRow,
+} from '../../shared/proformaFormula';
 
 // ---------------------------------------------------------------------------
 // Constants
@@ -84,6 +93,104 @@ interface DraftItem {
   customDescription: string | null;
   customPrice: number | null;
   quantity: number;
+  // Per-row values for the proforma's user-defined custom columns. Keyed
+  // by column id (NOT name). Values are stored as strings so we never
+  // lose a partial entry like "12." while the user is typing; the
+  // formula engine parses them lazily on read.
+  customValues: Record<string, string>;
+}
+
+// ---------------------------------------------------------------------------
+// Column model — the editor and preview render columns dynamically based on
+// the user's customColumns + hiddenColumns + columnOrder configuration.
+// ---------------------------------------------------------------------------
+
+// Internal display column. Both built-ins and customs are normalised to
+// this shape so the rendering code can iterate uniformly.
+interface DisplayColumn {
+  id: string;
+  label: string;
+  // 'builtin' columns have hard-coded cell renderers below; the others use
+  // the dynamic custom-cell renderer.
+  type: 'builtin' | 'text' | 'number' | 'formula';
+  // built-in columns cannot be deleted (only hidden if not required).
+  builtIn: boolean;
+  // 'product' (Description) and 'quantity' are required and never hidden.
+  required: boolean;
+  unit?: string;
+  formula?: string;
+}
+
+// Canonical built-in column definitions. Order here is the legacy default
+// order used when columnOrder is empty.
+const BUILTIN_COLUMNS: DisplayColumn[] = [
+  { id: 'product',   label: 'Description', type: 'builtin', builtIn: true, required: true  },
+  { id: 'unitPrice', label: 'Unit Price',  type: 'builtin', builtIn: true, required: false },
+  { id: 'quantity',  label: 'Qty',         type: 'builtin', builtIn: true, required: true  },
+  { id: 'unit',      label: 'Unit',        type: 'builtin', builtIn: true, required: false },
+  { id: 'total',     label: 'Total',       type: 'builtin', builtIn: true, required: false },
+];
+
+// Build the ordered list of all columns (built-in + user customs).
+// columnOrder controls the explicit user-chosen order; anything not in
+// columnOrder is appended in canonical / orderIndex order.
+function buildColumnList(
+  customCols: ProformaCustomColumn[],
+  columnOrder: string[],
+): DisplayColumn[] {
+  const all: DisplayColumn[] = [
+    ...BUILTIN_COLUMNS,
+    ...customCols.map<DisplayColumn>(c => ({
+      id: c.id,
+      label: c.name,
+      type: c.type,
+      builtIn: false,
+      required: false,
+      unit: c.unit,
+      formula: c.formula,
+    })),
+  ];
+  if (!columnOrder || columnOrder.length === 0) return all;
+  const orderMap = new Map(columnOrder.map((id, i) => [id, i]));
+  // Stable sort: ordered entries first (in user order), unmatched after
+  // in their original (canonical) order.
+  const ordered: DisplayColumn[] = [];
+  const leftover: DisplayColumn[] = [];
+  for (const c of all) {
+    if (orderMap.has(c.id)) ordered.push(c);
+    else leftover.push(c);
+  }
+  ordered.sort((a, b) => orderMap.get(a.id)! - orderMap.get(b.id)!);
+  return [...ordered, ...leftover];
+}
+
+// Generate a stable, opaque id for a new custom column. Crypto-random when
+// available, falls back to a millisecond + counter mix.
+let columnIdCounter = 0;
+function newColumnId(): string {
+  try {
+    if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
+      return `col_${crypto.randomUUID().slice(0, 8)}`;
+    }
+  } catch { /* fall through */ }
+  columnIdCounter++;
+  return `col_${Date.now().toString(36)}_${columnIdCounter}`;
+}
+
+// Convert our editor DraftItem into the row shape consumed by the formula
+// utilities. Keeps qty / unitPrice as numbers and customValues as strings.
+function toFormulaRow(it: DraftItem): FormulaRow {
+  return {
+    qty: it.quantity,
+    unitPrice: it.customPrice ?? it.productPrice,
+    customValues: it.customValues || {},
+  };
+}
+
+// Convert our DisplayColumn into the FormulaColumn shape (drops the
+// editor-only `builtIn`/`required` flags).
+function toFormulaColumn(c: DisplayColumn): FormulaColumn {
+  return { id: c.id, name: c.label, type: c.type, unit: c.unit, formula: c.formula };
 }
 
 // Local working copy of a financial step. `id` < 0 means "not yet persisted".
@@ -135,7 +242,16 @@ function itemFromServer(it: ProformaItemData): DraftItem {
     customDescription: it.customDescription ?? null,
     customPrice: it.customPrice ?? null,
     quantity: it.quantity,
+    customValues: (it.customValues && typeof it.customValues === 'object') ? { ...it.customValues } : {},
   };
+}
+
+// Stable JSON of customValues for change detection (so PATCH only fires
+// when the user actually edited a custom cell).
+function stringifyValues(v: Record<string, string> | null | undefined): string {
+  if (!v) return '{}';
+  const keys = Object.keys(v).sort();
+  return JSON.stringify(keys.reduce<Record<string, string>>((acc, k) => { acc[k] = v[k]; return acc; }, {}));
 }
 
 function financialFromServer(f: ProformaFinancialData): DraftFinancial {
@@ -191,6 +307,19 @@ const ProformaInvoiceEditor: React.FC<ProformaInvoiceEditorProps> = ({
 
   const [items, setItems] = useState<DraftItem[]>([]);
   const [financials, setFinancials] = useState<DraftFinancial[]>([]);
+
+  // ── Custom column manager state ────────────────────────────────────────
+  // User-defined extra columns, ids of currently-hidden columns and the
+  // user's preferred display order (built-in + custom). All four pieces
+  // are persisted on `proformas` (jsonb / text columns) and load/save as
+  // a single block alongside the rest of the metadata.
+  const [customColumns, setCustomColumns] = useState<ProformaCustomColumn[]>([]);
+  const [hiddenColumns, setHiddenColumns] = useState<string[]>([]);
+  const [columnOrder, setColumnOrder] = useState<string[]>([]);
+  // Row-total formula override. null/'default' → qty * unit_price.
+  const [totalFormula, setTotalFormula] = useState<string | null>(null);
+  // Toggle for the Columns management panel inside the Products section.
+  const [showColumnsPanel, setShowColumnsPanel] = useState(false);
 
   // ── Original snapshots — used to compute the diff at Save time ─────────
   const originalItemIds = useRef<Set<number>>(new Set());
@@ -295,12 +424,20 @@ const ProformaInvoiceEditor: React.FC<ProformaInvoiceEditorProps> = ({
     const draftItems = (pf.items ?? []).map(itemFromServer);
     setItems(draftItems);
     originalItemIds.current = new Set(draftItems.map(d => d.id));
-    originalItemsById.current = new Map(draftItems.map(d => [d.id, { ...d }]));
+    originalItemsById.current = new Map(draftItems.map(d => [d.id, { ...d, customValues: { ...d.customValues } }]));
 
     const draftFin = (pf.financials ?? []).map(financialFromServer);
     setFinancials(draftFin);
     originalFinancialIds.current = new Set(draftFin.map(d => d.id));
     originalFinancialsById.current = new Map(draftFin.map(d => [d.id, { ...d }]));
+
+    // Custom column manager state. We accept either `null` or an empty
+    // value coming back from the server (legacy proformas have no entries).
+    const cc = Array.isArray(pf.customColumns) ? (pf.customColumns as ProformaCustomColumn[]) : [];
+    setCustomColumns(cc);
+    setHiddenColumns(Array.isArray(pf.hiddenColumns) ? (pf.hiddenColumns as string[]) : []);
+    setColumnOrder(Array.isArray(pf.columnOrder) ? (pf.columnOrder as string[]) : []);
+    setTotalFormula(pf.totalFormula ?? null);
   }, []);
 
   // When the user picks a customer, mirror their fields into the preview.
@@ -312,13 +449,49 @@ const ProformaInvoiceEditor: React.FC<ProformaInvoiceEditorProps> = ({
   // Derived values — computed every render. computeFinancials is pure and
   // cheap enough to run inline.
   // ────────────────────────────────────────────────────────────────────────
+  // Full ordered column list (built-ins + customs) and the visible subset
+  // (required columns + non-hidden). Visible columns drive both the
+  // editor's items-table rendering and the printed preview.
+  const allColumns = useMemo(
+    () => buildColumnList(customColumns, columnOrder),
+    [customColumns, columnOrder],
+  );
+  const hiddenSet = useMemo(() => new Set(hiddenColumns), [hiddenColumns]);
+  const visibleColumns = useMemo(
+    () => allColumns.filter(c => c.required || !hiddenSet.has(c.id)),
+    [allColumns, hiddenSet],
+  );
+  // Reusable formula-engine column list (drops editor-only flags).
+  const formulaColumns = useMemo(
+    () => allColumns.map(toFormulaColumn),
+    [allColumns],
+  );
+
+  // Subtotal: sum of computeRowTotal across rows. When totalFormula is
+  // null/'default' this collapses to the legacy qty * unit_price math.
   const subtotal = useMemo(
-    () => items.reduce((sum, it) => sum + (it.customPrice ?? it.productPrice ?? 0) * it.quantity, 0),
-    [items],
+    () => computeSubtotal(items.map(toFormulaRow), formulaColumns, totalFormula),
+    [items, formulaColumns, totalFormula],
   );
   const calc = useMemo(
     () => computeFinancials(subtotal, financials as ProformaFinancialData[]),
     [subtotal, financials],
+  );
+
+  // Per-row line total (qty × unit_price OR custom totalFormula).
+  const lineTotalFor = useCallback(
+    (it: DraftItem) => computeRowTotal(toFormulaRow(it), formulaColumns, totalFormula),
+    [formulaColumns, totalFormula],
+  );
+
+  // Evaluate a formula column's cell for a given row. Returns NaN when the
+  // formula is empty so the cell renderer can show a tooltip explanation.
+  const evalFormulaCell = useCallback(
+    (it: DraftItem, col: DisplayColumn): number => {
+      if (!col.formula || col.formula.trim() === '') return NaN;
+      return evaluateFormula(col.formula, toFormulaRow(it), formulaColumns, totalFormula, 0);
+    },
+    [formulaColumns, totalFormula],
   );
 
   // ────────────────────────────────────────────────────────────────────────
@@ -350,6 +523,7 @@ const ProformaInvoiceEditor: React.FC<ProformaInvoiceEditorProps> = ({
       customDescription: null,
       customPrice: null,
       quantity: 1,
+      customValues: {},
     }]);
     setProductSearch('');
     setShowProductDropdown(false);
@@ -357,6 +531,17 @@ const ProformaInvoiceEditor: React.FC<ProformaInvoiceEditorProps> = ({
 
   const updateItem = <K extends keyof DraftItem>(id: number, field: K, value: DraftItem[K]) => {
     setItems(prev => prev.map(i => i.id === id ? { ...i, [field]: value } : i));
+  };
+  // Update one custom-column cell on one row. Empty strings are preserved
+  // (we keep the key so empty cells are still distinguishable from "never
+  // touched") but the formula engine treats both as 0.
+  const updateItemCustomValue = (id: number, columnId: string, value: string) => {
+    setItems(prev => prev.map(i => {
+      if (i.id !== id) return i;
+      const next = { ...(i.customValues || {}) };
+      next[columnId] = value;
+      return { ...i, customValues: next };
+    }));
   };
   const removeItem = (id: number) => {
     setItems(prev => prev.filter(i => i.id !== id));
@@ -413,6 +598,12 @@ const ProformaInvoiceEditor: React.FC<ProformaInvoiceEditorProps> = ({
       paymentTerms: norm(paymentTerms),
       deliveryTerms: norm(deliveryTerms),
       notes: norm(notes),
+      // Custom column manager — persisted as jsonb / text on `proformas`.
+      // We always send the full arrays (even empty) so deletes propagate.
+      customColumns,
+      hiddenColumns,
+      columnOrder,
+      totalFormula: totalFormula && totalFormula.trim() !== '' ? totalFormula : null,
     };
   };
 
@@ -466,16 +657,18 @@ const ProformaInvoiceEditor: React.FC<ProformaInvoiceEditorProps> = ({
             customPrice: it.customPrice,
             quantity: it.quantity,
             sortOrder: idx,
+            customValues: it.customValues || {},
           }));
         } else {
           const orig = originalItemsById.current.get(it.id);
           if (!orig) return;
-          // Only PATCH if anything changed.
+          // Only PATCH if anything changed (customValues compared via stable JSON).
           const changed =
             orig.customName !== it.customName ||
             orig.customDescription !== it.customDescription ||
             orig.customPrice !== it.customPrice ||
-            orig.quantity !== it.quantity;
+            orig.quantity !== it.quantity ||
+            stringifyValues(orig.customValues) !== stringifyValues(it.customValues);
           if (changed) {
             itemWrites.push(api.updateProformaItem(it.id, {
               customName: it.customName,
@@ -483,6 +676,7 @@ const ProformaInvoiceEditor: React.FC<ProformaInvoiceEditorProps> = ({
               customPrice: it.customPrice,
               quantity: it.quantity,
               sortOrder: idx,
+              customValues: it.customValues || {},
             }));
           }
         }
@@ -772,9 +966,39 @@ const ProformaInvoiceEditor: React.FC<ProformaInvoiceEditorProps> = ({
               icon={<Package className="w-4 h-4 text-slate-500" />}
               open={openSections.products}
               onToggle={() => toggleSection('products')}
-              right={<span className="text-xs text-slate-400">{items.length} item{items.length !== 1 ? 's' : ''}</span>}
+              right={
+                <div className="flex items-center gap-3">
+                  <span className="text-xs text-slate-400">{items.length} item{items.length !== 1 ? 's' : ''}</span>
+                  <button
+                    type="button"
+                    onClick={(e) => { e.stopPropagation(); setShowColumnsPanel(v => !v); }}
+                    className={`flex items-center gap-1 text-[11px] font-medium px-2 py-1 rounded border transition-colors ${
+                      showColumnsPanel
+                        ? 'bg-blue-50 border-blue-300 text-blue-700'
+                        : 'bg-white border-slate-200 text-slate-600 hover:bg-slate-50'
+                    }`}
+                    title="Manage table columns"
+                  >
+                    <Columns3 className="w-3.5 h-3.5" /> Columns
+                  </button>
+                </div>
+              }
             >
               <div className="space-y-3">
+                {/* Custom Column Manager (toggleable inline panel) */}
+                {showColumnsPanel && (
+                  <ColumnsPanel
+                    allColumns={allColumns}
+                    customColumns={customColumns}
+                    hiddenSet={hiddenSet}
+                    columnOrder={columnOrder}
+                    totalFormula={totalFormula}
+                    onSetCustomColumns={setCustomColumns}
+                    onSetHiddenColumns={setHiddenColumns}
+                    onSetColumnOrder={setColumnOrder}
+                    onSetTotalFormula={setTotalFormula}
+                  />
+                )}
                 {/* Product picker */}
                 <div className="relative">
                   <div className="flex items-center gap-2 px-3 py-2 border border-slate-200 rounded-lg focus-within:ring-2 focus-within:ring-blue-500/20 focus-within:border-blue-400">
@@ -831,7 +1055,7 @@ const ProformaInvoiceEditor: React.FC<ProformaInvoiceEditorProps> = ({
                   )}
                 </div>
 
-                {/* Items list */}
+                {/* Items list — each card renders the visible columns dynamically */}
                 {items.length === 0 ? (
                   <div className="px-4 py-6 text-center text-sm text-slate-400 bg-slate-50 rounded-lg border border-dashed border-slate-200">
                     No products added yet — search above to add one.
@@ -844,74 +1068,175 @@ const ProformaInvoiceEditor: React.FC<ProformaInvoiceEditorProps> = ({
                       const displayPrice = it.customPrice ?? it.productPrice;
                       const overridden =
                         it.customName !== null || it.customDescription !== null || it.customPrice !== null;
+                      // We always render Description (product) at the card top.
+                      // The remaining visible columns are placed in a 2-col grid below.
+                      const productVisible = visibleColumns.some(c => c.id === 'product');
+                      const otherCols = visibleColumns.filter(c => c.id !== 'product');
                       return (
                         <div key={it.id} className="border border-slate-200 rounded-lg bg-white p-3 space-y-2">
-                          <div className="flex items-start gap-2">
-                            <span className="text-xs text-slate-400 font-mono mt-0.5 w-5 flex-shrink-0">
-                              {String(idx + 1).padStart(2, '0')}
-                            </span>
-                            <input
-                              type="text"
-                              value={displayName}
-                              onChange={e => updateItem(it.id, 'customName', e.target.value)}
-                              className="flex-1 px-2 py-1 text-sm font-medium text-slate-800 border border-transparent hover:border-slate-200 rounded focus:outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-500/20 min-w-0"
-                            />
-                            {overridden && (
-                              <button
-                                onClick={() => resetItemOverrides(it.id)}
-                                className="text-[10px] text-amber-600 hover:text-amber-700 px-1.5 py-0.5 rounded hover:bg-amber-50"
-                                title="Reset name / description / price to catalog values"
-                              >
-                                Reset
-                              </button>
-                            )}
-                            <button
-                              onClick={() => removeItem(it.id)}
-                              className="p-1 text-slate-300 hover:text-red-500 transition-colors flex-shrink-0"
-                            >
-                              <Trash2 className="w-3.5 h-3.5" />
-                            </button>
-                          </div>
-                          <textarea
-                            value={displayDesc}
-                            onChange={e => updateItem(it.id, 'customDescription', e.target.value)}
-                            placeholder="Description"
-                            rows={2}
-                            className="w-full px-2 py-1 text-xs text-slate-600 border border-transparent hover:border-slate-200 rounded focus:outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-500/20 resize-none"
-                          />
-                          <div className="grid grid-cols-3 gap-2 items-center">
-                            <div>
-                              <Label small>Unit Price</Label>
-                              <div className="relative">
+                          {/* Header row: name + reset/delete actions */}
+                          {productVisible && (
+                            <>
+                              <div className="flex items-start gap-2">
+                                <span className="text-xs text-slate-400 font-mono mt-0.5 w-5 flex-shrink-0">
+                                  {String(idx + 1).padStart(2, '0')}
+                                </span>
                                 <input
-                                  type="number"
-                                  min="0"
-                                  step="any"
-                                  value={displayPrice}
-                                  onChange={e => updateItem(it.id, 'customPrice', e.target.value === '' ? null : parseFloat(e.target.value))}
-                                  className="w-full pl-2 pr-9 py-1 text-sm border border-slate-200 rounded focus:outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-500/20"
+                                  type="text"
+                                  value={displayName}
+                                  onChange={e => updateItem(it.id, 'customName', e.target.value)}
+                                  className="flex-1 px-2 py-1 text-sm font-medium text-slate-800 border border-transparent hover:border-slate-200 rounded focus:outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-500/20 min-w-0"
                                 />
-                                <span className="absolute right-2 top-1/2 -translate-y-1/2 text-[10px] text-slate-400">{currency}</span>
+                                {overridden && (
+                                  <button
+                                    onClick={() => resetItemOverrides(it.id)}
+                                    className="text-[10px] text-amber-600 hover:text-amber-700 px-1.5 py-0.5 rounded hover:bg-amber-50"
+                                    title="Reset name / description / price to catalog values"
+                                  >
+                                    Reset
+                                  </button>
+                                )}
+                                <button
+                                  onClick={() => removeItem(it.id)}
+                                  className="p-1 text-slate-300 hover:text-red-500 transition-colors flex-shrink-0"
+                                >
+                                  <Trash2 className="w-3.5 h-3.5" />
+                                </button>
                               </div>
-                            </div>
-                            <div>
-                              <Label small>Quantity</Label>
-                              <input
-                                type="number"
-                                min="0"
-                                step="any"
-                                value={it.quantity}
-                                onChange={e => updateItem(it.id, 'quantity', parseFloat(e.target.value) || 0)}
-                                className="w-full px-2 py-1 text-sm border border-slate-200 rounded focus:outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-500/20"
+                              <textarea
+                                value={displayDesc}
+                                onChange={e => updateItem(it.id, 'customDescription', e.target.value)}
+                                placeholder="Description"
+                                rows={2}
+                                className="w-full px-2 py-1 text-xs text-slate-600 border border-transparent hover:border-slate-200 rounded focus:outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-500/20 resize-none"
                               />
+                            </>
+                          )}
+
+                          {/* Dynamic columns grid — built-ins + customs */}
+                          {otherCols.length > 0 && (
+                            <div className="grid grid-cols-2 gap-2">
+                              {otherCols.map(col => {
+                                // ── Built-in columns ──
+                                if (col.id === 'unitPrice') {
+                                  return (
+                                    <div key={col.id}>
+                                      <Label small>{col.label}</Label>
+                                      <div className="relative">
+                                        <input
+                                          type="number"
+                                          min="0"
+                                          step="any"
+                                          value={displayPrice}
+                                          onChange={e => updateItem(it.id, 'customPrice', e.target.value === '' ? null : parseFloat(e.target.value))}
+                                          className="w-full pl-2 pr-9 py-1 text-sm border border-slate-200 rounded focus:outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-500/20"
+                                        />
+                                        <span className="absolute right-2 top-1/2 -translate-y-1/2 text-[10px] text-slate-400">{currency}</span>
+                                      </div>
+                                    </div>
+                                  );
+                                }
+                                if (col.id === 'quantity') {
+                                  return (
+                                    <div key={col.id}>
+                                      <Label small>{col.label}</Label>
+                                      <input
+                                        type="number"
+                                        min="0"
+                                        step="any"
+                                        value={it.quantity}
+                                        onChange={e => updateItem(it.id, 'quantity', parseFloat(e.target.value) || 0)}
+                                        className="w-full px-2 py-1 text-sm border border-slate-200 rounded focus:outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-500/20"
+                                      />
+                                    </div>
+                                  );
+                                }
+                                if (col.id === 'unit') {
+                                  return (
+                                    <div key={col.id}>
+                                      <Label small>{col.label}</Label>
+                                      <div className="px-2 py-1 text-sm text-slate-600 bg-slate-50 rounded border border-slate-100">
+                                        {it.productUnit || '—'}
+                                      </div>
+                                    </div>
+                                  );
+                                }
+                                if (col.id === 'total') {
+                                  // When the user-supplied totalFormula is broken,
+                                  // computeRowTotal returns NaN; surface as '—' with
+                                  // a tooltip so the source of the error is obvious.
+                                  const lt = lineTotalFor(it);
+                                  const ltOk = Number.isFinite(lt);
+                                  return (
+                                    <div key={col.id}>
+                                      <Label small>{col.label}</Label>
+                                      <div
+                                        className={`px-2 py-1 text-sm font-semibold rounded ${
+                                          ltOk ? 'text-slate-700 bg-slate-50'
+                                               : 'text-amber-700 bg-amber-50 border border-amber-200'
+                                        }`}
+                                        title={ltOk ? undefined : 'Row total formula is invalid — check the formula in the Columns panel.'}
+                                      >
+                                        {ltOk ? `${currency} ${fmt(lt)}` : '—'}
+                                      </div>
+                                    </div>
+                                  );
+                                }
+                                // ── Custom text column ──
+                                if (col.type === 'text') {
+                                  return (
+                                    <div key={col.id}>
+                                      <Label small>{col.label}{col.unit ? ` (${col.unit})` : ''}</Label>
+                                      <input
+                                        type="text"
+                                        value={it.customValues?.[col.id] ?? ''}
+                                        onChange={e => updateItemCustomValue(it.id, col.id, e.target.value)}
+                                        className="w-full px-2 py-1 text-sm border border-slate-200 rounded focus:outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-500/20"
+                                      />
+                                    </div>
+                                  );
+                                }
+                                // ── Custom number column ──
+                                if (col.type === 'number') {
+                                  return (
+                                    <div key={col.id}>
+                                      <Label small>{col.label}{col.unit ? ` (${col.unit})` : ''}</Label>
+                                      <input
+                                        type="number"
+                                        step="any"
+                                        value={it.customValues?.[col.id] ?? ''}
+                                        onChange={e => updateItemCustomValue(it.id, col.id, e.target.value)}
+                                        className="w-full px-2 py-1 text-sm border border-slate-200 rounded focus:outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-500/20"
+                                      />
+                                    </div>
+                                  );
+                                }
+                                // ── Custom formula column (read-only) ──
+                                if (col.type === 'formula') {
+                                  const v = evalFormulaCell(it, col);
+                                  const display = Number.isFinite(v) ? fmt(v) : '—';
+                                  return (
+                                    <div key={col.id}>
+                                      <Label small>
+                                        <span className="inline-flex items-center gap-1">
+                                          <span className="text-blue-500 font-bold">ƒ</span>
+                                          {col.label}{col.unit ? ` (${col.unit})` : ''}
+                                        </span>
+                                      </Label>
+                                      <div
+                                        className="px-2 py-1 text-sm font-medium text-slate-700 bg-blue-50/40 rounded border border-blue-100"
+                                        title={col.formula ? `= ${col.formula}` : 'No formula set'}
+                                      >
+                                        {display}
+                                      </div>
+                                    </div>
+                                  );
+                                }
+                                return null;
+                              })}
                             </div>
-                            <div>
-                              <Label small>Line Total</Label>
-                              <div className="px-2 py-1 text-sm font-semibold text-slate-700 bg-slate-50 rounded">
-                                {currency} {fmt(displayPrice * it.quantity)}
-                              </div>
-                            </div>
-                          </div>
+                          )}
+
                           {it.productUnit && (
                             <div className="text-[10px] text-slate-400">
                               Catalog unit: <span className="font-medium text-slate-500">{it.productUnit}</span>
@@ -1083,6 +1408,9 @@ const ProformaInvoiceEditor: React.FC<ProformaInvoiceEditorProps> = ({
                 steps={calc.steps}
                 finalTotal={calc.finalTotal}
                 pdfCapturing={pdfCapturing}
+                visibleColumns={visibleColumns}
+                lineTotalFor={lineTotalFor}
+                evalFormulaCell={evalFormulaCell}
               />
             </div>
           </div>
@@ -1104,11 +1432,21 @@ const Section: React.FC<{
   right?: React.ReactNode;
   children: React.ReactNode;
 }> = ({ title, icon, open, onToggle, right, children }) => (
+  // Outer is a div (not <button>) so callers can nest interactive controls
+  // (e.g. the Columns toggle in `right`) without producing invalid
+  // <button>-in-<button> HTML and the React hydration warning that follows.
   <div className="bg-white rounded-xl border border-slate-200 overflow-hidden shadow-sm">
-    <button
-      type="button"
+    <div
+      role="button"
+      tabIndex={0}
       onClick={onToggle}
-      className="w-full flex items-center justify-between px-4 py-3 bg-slate-50 hover:bg-slate-100 transition-colors border-b border-slate-100"
+      onKeyDown={(e) => {
+        if (e.key === 'Enter' || e.key === ' ') {
+          e.preventDefault();
+          onToggle();
+        }
+      }}
+      className="w-full flex items-center justify-between px-4 py-3 bg-slate-50 hover:bg-slate-100 transition-colors border-b border-slate-100 cursor-pointer select-none"
     >
       <div className="flex items-center gap-2">
         {icon}
@@ -1118,7 +1456,7 @@ const Section: React.FC<{
         {right}
         {open ? <ChevronUp className="w-4 h-4 text-slate-400" /> : <ChevronDown className="w-4 h-4 text-slate-400" />}
       </div>
-    </button>
+    </div>
     {open && <div className="p-4">{children}</div>}
   </div>
 );
@@ -1155,6 +1493,327 @@ const Field: React.FC<{
 );
 
 // =============================================================================
+// ColumnsPanel — inline manager for custom columns + total formula
+// =============================================================================
+// Lives inside the Products section of the editor. Lets the user toggle
+// visibility, reorder (up/down), rename and remove columns; add new
+// text/number/formula columns; apply a Discount % preset; and override the
+// row-total formula. All state is owned by the parent editor.
+// =============================================================================
+
+interface ColumnsPanelProps {
+  allColumns: DisplayColumn[];
+  customColumns: ProformaCustomColumn[];
+  hiddenSet: Set<string>;
+  columnOrder: string[];
+  totalFormula: string | null;
+  onSetCustomColumns: (cols: ProformaCustomColumn[]) => void;
+  onSetHiddenColumns: (ids: string[]) => void;
+  onSetColumnOrder: (ids: string[]) => void;
+  onSetTotalFormula: (f: string | null) => void;
+}
+
+const ColumnsPanel: React.FC<ColumnsPanelProps> = ({
+  allColumns, customColumns, hiddenSet, columnOrder, totalFormula,
+  onSetCustomColumns, onSetHiddenColumns, onSetColumnOrder, onSetTotalFormula,
+}) => {
+  // ── Local form state for the "Add Column" sub-form ──
+  const [draftName, setDraftName] = useState('');
+  const [draftType, setDraftType] = useState<'text' | 'number' | 'formula'>('text');
+  const [draftUnit, setDraftUnit] = useState('');
+  const [draftFormula, setDraftFormula] = useState('');
+
+  // ── Local state for the row-total formula override ──
+  // 'default' means qty × unit_price (legacy behavior).
+  const isCustomTotal = !!totalFormula && totalFormula.trim() !== '';
+  const [totalDraft, setTotalDraft] = useState(totalFormula ?? '');
+  // Keep the draft in sync if the parent ever resets it (e.g. preset button).
+  useEffect(() => { setTotalDraft(totalFormula ?? ''); }, [totalFormula]);
+
+  // Reorder helper: move column id `id` by `delta` (-1 up, +1 down) within
+  // the allColumns visual order. We materialise the current full order from
+  // `allColumns` (which already respects the persisted columnOrder) and write
+  // the swapped result back.
+  const move = (id: string, delta: number) => {
+    const order = allColumns.map(c => c.id);
+    const idx = order.indexOf(id);
+    if (idx < 0) return;
+    const target = idx + delta;
+    if (target < 0 || target >= order.length) return;
+    [order[idx], order[target]] = [order[target], order[idx]];
+    onSetColumnOrder(order);
+  };
+
+  // Toggle hidden state for one column. 'product' / 'quantity' are required
+  // and silently ignored.
+  const toggleHidden = (col: DisplayColumn) => {
+    if (col.required) return;
+    const next = new Set(hiddenSet);
+    if (next.has(col.id)) next.delete(col.id);
+    else next.add(col.id);
+    onSetHiddenColumns(Array.from(next));
+  };
+
+  // Rename a custom column (label only — id is stable).
+  const renameCustom = (id: string, name: string) => {
+    onSetCustomColumns(customColumns.map(c => c.id === id ? { ...c, name } : c));
+  };
+  // Update unit of a custom column.
+  const setCustomUnit = (id: string, unit: string) => {
+    onSetCustomColumns(customColumns.map(c => c.id === id ? { ...c, unit: unit.trim() === '' ? undefined : unit } : c));
+  };
+  // Update formula on a formula-type custom column.
+  const setCustomFormula = (id: string, formula: string) => {
+    onSetCustomColumns(customColumns.map(c => c.id === id ? { ...c, formula } : c));
+  };
+  // Delete a custom column. Also strips its id from columnOrder + hiddenColumns
+  // so we don't leak orphan ids into the persisted state.
+  const deleteCustom = (id: string) => {
+    onSetCustomColumns(customColumns.filter(c => c.id !== id));
+    if (columnOrder.includes(id)) onSetColumnOrder(columnOrder.filter(o => o !== id));
+    if (hiddenSet.has(id)) onSetHiddenColumns(Array.from(hiddenSet).filter(h => h !== id));
+  };
+
+  // Add a brand-new column from the draft form.
+  const addColumn = () => {
+    const name = draftName.trim();
+    if (!name) return;
+    const newCol: ProformaCustomColumn = {
+      id: newColumnId(),
+      name,
+      type: draftType,
+      ...(draftUnit.trim() ? { unit: draftUnit.trim() } : {}),
+      ...(draftType === 'formula' ? { formula: draftFormula } : {}),
+    };
+    onSetCustomColumns([...customColumns, newCol]);
+    setDraftName('');
+    setDraftUnit('');
+    setDraftFormula('');
+  };
+
+  // "Discount %" preset: adds a number column AND sets the total formula.
+  // Idempotent — if a column called "Discount %" already exists we reuse it.
+  const applyDiscountPreset = () => {
+    let discount = customColumns.find(c => c.name.toLowerCase() === 'discount %');
+    let nextCustoms = customColumns;
+    if (!discount) {
+      discount = { id: newColumnId(), name: 'Discount %', type: 'number', unit: '%' };
+      nextCustoms = [...customColumns, discount];
+      onSetCustomColumns(nextCustoms);
+    }
+    const formula = `{qty} * {unit_price} * (1 - {col:${discount.name}} / 100)`;
+    onSetTotalFormula(formula);
+  };
+
+  return (
+    <div className="border border-blue-200 bg-blue-50/30 rounded-lg p-3 space-y-3">
+      <div className="flex items-center justify-between">
+        <h4 className="text-xs font-semibold text-slate-700 uppercase tracking-wider">Columns</h4>
+        <span className="text-[10px] text-slate-500">
+          {allColumns.length} total · {allColumns.length - hiddenSet.size} visible
+        </span>
+      </div>
+
+      {/* Column list — one row each */}
+      <div className="space-y-1">
+        {allColumns.map((col, idx) => {
+          const isHidden = hiddenSet.has(col.id);
+          const isFirst = idx === 0;
+          const isLast = idx === allColumns.length - 1;
+          return (
+            <div
+              key={col.id}
+              className={`flex items-start gap-2 px-2 py-1.5 rounded border ${
+                isHidden ? 'bg-slate-50 border-slate-200 opacity-60' : 'bg-white border-slate-200'
+              }`}
+            >
+              <button
+                type="button"
+                onClick={() => toggleHidden(col)}
+                disabled={col.required}
+                title={col.required ? 'Required column' : isHidden ? 'Show column' : 'Hide column'}
+                className={`mt-1 ${col.required ? 'text-slate-300 cursor-not-allowed' : 'text-slate-500 hover:text-blue-600'}`}
+              >
+                {isHidden ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
+              </button>
+
+              <div className="flex-1 min-w-0 space-y-1">
+                <div className="flex items-center gap-2">
+                  {col.builtIn ? (
+                    <span className="text-xs font-medium text-slate-700">{col.label}</span>
+                  ) : (
+                    <input
+                      type="text"
+                      value={col.label}
+                      onChange={e => renameCustom(col.id, e.target.value)}
+                      className="flex-1 px-1.5 py-0.5 text-xs font-medium text-slate-700 border border-slate-200 rounded focus:outline-none focus:border-blue-400"
+                    />
+                  )}
+                  <span className="text-[10px] text-slate-400 uppercase tracking-wide">
+                    {col.type === 'builtin' ? 'built-in' : col.type}
+                  </span>
+                  {col.required && (
+                    <span className="text-[10px] text-amber-600 uppercase tracking-wide">required</span>
+                  )}
+                </div>
+                {!col.builtIn && (
+                  <div className="flex items-center gap-2">
+                    <input
+                      type="text"
+                      value={col.unit ?? ''}
+                      onChange={e => setCustomUnit(col.id, e.target.value)}
+                      placeholder="unit (optional, e.g. kg, %)"
+                      className="w-32 px-1.5 py-0.5 text-[11px] text-slate-600 border border-slate-200 rounded focus:outline-none focus:border-blue-400"
+                    />
+                    {col.type === 'formula' && (
+                      <input
+                        type="text"
+                        value={col.formula ?? ''}
+                        onChange={e => setCustomFormula(col.id, e.target.value)}
+                        placeholder="e.g. {qty} * {unit_price} * 0.9"
+                        className="flex-1 px-1.5 py-0.5 text-[11px] font-mono text-slate-600 border border-slate-200 rounded focus:outline-none focus:border-blue-400"
+                      />
+                    )}
+                  </div>
+                )}
+              </div>
+
+              <div className="flex items-center gap-0.5 flex-shrink-0">
+                <button
+                  type="button"
+                  onClick={() => move(col.id, -1)}
+                  disabled={isFirst}
+                  className="p-0.5 text-slate-400 hover:text-blue-600 disabled:opacity-30 disabled:hover:text-slate-400"
+                  title="Move up"
+                >
+                  <ArrowUp className="w-3.5 h-3.5" />
+                </button>
+                <button
+                  type="button"
+                  onClick={() => move(col.id, 1)}
+                  disabled={isLast}
+                  className="p-0.5 text-slate-400 hover:text-blue-600 disabled:opacity-30 disabled:hover:text-slate-400"
+                  title="Move down"
+                >
+                  <ArrowDown className="w-3.5 h-3.5" />
+                </button>
+                {!col.builtIn && (
+                  <button
+                    type="button"
+                    onClick={() => deleteCustom(col.id)}
+                    className="p-0.5 text-slate-300 hover:text-red-500"
+                    title="Delete column"
+                  >
+                    <Trash2 className="w-3.5 h-3.5" />
+                  </button>
+                )}
+              </div>
+            </div>
+          );
+        })}
+      </div>
+
+      {/* Add column form */}
+      <div className="border-t border-blue-200 pt-3 space-y-2">
+        <div className="text-[11px] font-semibold text-slate-600 uppercase tracking-wider">Add Column</div>
+        <div className="grid grid-cols-12 gap-2">
+          <input
+            type="text"
+            value={draftName}
+            onChange={e => setDraftName(e.target.value)}
+            placeholder="Column name"
+            className="col-span-4 px-2 py-1 text-xs border border-slate-200 rounded focus:outline-none focus:border-blue-400"
+          />
+          <select
+            value={draftType}
+            onChange={e => setDraftType(e.target.value as 'text' | 'number' | 'formula')}
+            className="col-span-3 px-2 py-1 text-xs border border-slate-200 rounded focus:outline-none focus:border-blue-400 bg-white"
+          >
+            <option value="text">Text</option>
+            <option value="number">Number</option>
+            <option value="formula">Formula</option>
+          </select>
+          <input
+            type="text"
+            value={draftUnit}
+            onChange={e => setDraftUnit(e.target.value)}
+            placeholder="Unit"
+            className="col-span-2 px-2 py-1 text-xs border border-slate-200 rounded focus:outline-none focus:border-blue-400"
+          />
+          <button
+            type="button"
+            onClick={addColumn}
+            disabled={draftName.trim() === ''}
+            className="col-span-3 flex items-center justify-center gap-1 px-2 py-1 text-xs font-medium text-white bg-blue-600 rounded hover:bg-blue-700 disabled:opacity-40 disabled:cursor-not-allowed"
+          >
+            <Plus className="w-3.5 h-3.5" /> Add
+          </button>
+          {draftType === 'formula' && (
+            <input
+              type="text"
+              value={draftFormula}
+              onChange={e => setDraftFormula(e.target.value)}
+              placeholder="Formula — e.g. {qty} * {unit_price} * 0.9 or {col:Discount %}"
+              className="col-span-12 px-2 py-1 text-[11px] font-mono border border-slate-200 rounded focus:outline-none focus:border-blue-400"
+            />
+          )}
+        </div>
+        <div className="flex items-center gap-2">
+          <button
+            type="button"
+            onClick={applyDiscountPreset}
+            className="text-[11px] font-medium text-blue-700 bg-blue-100 hover:bg-blue-200 px-2 py-1 rounded inline-flex items-center gap-1"
+            title="Adds a Discount % column and sets row total = qty × unit_price × (1 − Discount % / 100)"
+          >
+            <Percent className="w-3.5 h-3.5" /> Apply Discount % Preset
+          </button>
+          <span className="text-[10px] text-slate-500">
+            Tokens: <code className="bg-slate-100 px-1 rounded">{'{qty}'}</code>{' '}
+            <code className="bg-slate-100 px-1 rounded">{'{unit_price}'}</code>{' '}
+            <code className="bg-slate-100 px-1 rounded">{'{total}'}</code>{' '}
+            <code className="bg-slate-100 px-1 rounded">{'{col:Name}'}</code>
+          </span>
+        </div>
+      </div>
+
+      {/* Row total formula override */}
+      <div className="border-t border-blue-200 pt-3 space-y-2">
+        <div className="text-[11px] font-semibold text-slate-600 uppercase tracking-wider">Row Total Formula</div>
+        <div className="flex items-center gap-3 text-xs">
+          <label className="inline-flex items-center gap-1.5 cursor-pointer">
+            <input
+              type="radio"
+              name="totalMode"
+              checked={!isCustomTotal}
+              onChange={() => onSetTotalFormula(null)}
+            />
+            <span>Default (qty × unit_price)</span>
+          </label>
+          <label className="inline-flex items-center gap-1.5 cursor-pointer">
+            <input
+              type="radio"
+              name="totalMode"
+              checked={isCustomTotal}
+              onChange={() => onSetTotalFormula(totalDraft.trim() === '' ? '{qty} * {unit_price}' : totalDraft)}
+            />
+            <span>Custom formula</span>
+          </label>
+        </div>
+        {isCustomTotal && (
+          <input
+            type="text"
+            value={totalDraft}
+            onChange={e => { setTotalDraft(e.target.value); onSetTotalFormula(e.target.value); }}
+            placeholder="e.g. {qty} * {unit_price} * (1 - {col:Discount %} / 100)"
+            className="w-full px-2 py-1 text-[11px] font-mono border border-slate-200 rounded focus:outline-none focus:border-blue-400"
+          />
+        )}
+      </div>
+    </div>
+  );
+};
+
+// =============================================================================
 // InvoicePreview — read-only invoice document for the right column
 // =============================================================================
 // Visually mirrors the legacy ProformaPreview component but with no editing
@@ -1184,6 +1843,13 @@ interface InvoicePreviewProps {
   steps: Array<{ id: number; name: string; type: string; valueType: string; value: number; computedAmount: number; runningTotal: number }>;
   finalTotal: number;
   pdfCapturing: boolean;
+  // Visible columns to render in the preview's items table. Driven by the
+  // editor's column-manager state and the proforma's persisted config.
+  visibleColumns: DisplayColumn[];
+  // Helpers from the editor — keep all formula evaluation in one place so the
+  // preview cannot drift from the editor.
+  lineTotalFor: (it: DraftItem) => number;
+  evalFormulaCell: (it: DraftItem, col: DisplayColumn) => number;
 }
 
 const InvoicePreview: React.FC<InvoicePreviewProps> = ({
@@ -1191,6 +1857,7 @@ const InvoicePreview: React.FC<InvoicePreviewProps> = ({
   customerFields, currency, shipTo, portOfLoading, placeOfDestination,
   finalPlaceOfDelivery, countryOfOrigin, transportationMode, paymentTerms,
   deliveryTerms, notes, items, subtotal, steps, finalTotal,
+  visibleColumns, lineTotalFor, evalFormulaCell,
 }) => {
   const today = new Date().toLocaleDateString('en-GB', { day: '2-digit', month: '2-digit', year: 'numeric' });
   const invoicedTo = shipTo.trim() || 'SAME AS CONSIGNEE';
@@ -1270,21 +1937,35 @@ const InvoicePreview: React.FC<InvoicePreviewProps> = ({
         </div>
       </div>
 
-      {/* ─── ITEMS TABLE ────────────────────────────────────────── */}
+      {/* ─── ITEMS TABLE (dynamic columns) ─────────────────────── */}
+      {/* Header alignment / width by column id. Built-ins keep their legacy
+          look; customs default to right-align (numbers feel correct that way). */}
       <table className="w-full border-collapse">
         <thead>
           <tr className="bg-slate-100 border-y border-slate-300">
-            <th className="px-3 py-2 text-left text-[10px] font-bold text-slate-600 uppercase tracking-wider">Description of Goods</th>
-            <th className="px-3 py-2 text-right text-[10px] font-bold text-slate-600 uppercase tracking-wider w-[100px]">Unit Price</th>
-            <th className="px-3 py-2 text-center text-[10px] font-bold text-slate-600 uppercase tracking-wider w-[60px]">Qty</th>
-            <th className="px-3 py-2 text-center text-[10px] font-bold text-slate-600 uppercase tracking-wider w-[60px]">Unit</th>
-            <th className="px-3 py-2 text-right text-[10px] font-bold text-slate-600 uppercase tracking-wider w-[110px]">Total</th>
+            {visibleColumns.map(col => {
+              const align = col.id === 'product' ? 'text-left'
+                          : col.id === 'quantity' || col.id === 'unit' ? 'text-center'
+                          : 'text-right';
+              const w = col.id === 'product' ? '' :
+                        col.id === 'unitPrice' ? 'w-[100px]' :
+                        col.id === 'quantity' ? 'w-[60px]' :
+                        col.id === 'unit' ? 'w-[60px]' :
+                        col.id === 'total' ? 'w-[110px]' :
+                        'w-[100px]';
+              const label = col.id === 'product' ? 'Description of Goods' : col.label;
+              return (
+                <th key={col.id} className={`px-3 py-2 ${align} text-[10px] font-bold text-slate-600 uppercase tracking-wider ${w}`}>
+                  {label}{col.unit && col.id !== 'unit' ? ` (${col.unit})` : ''}
+                </th>
+              );
+            })}
           </tr>
         </thead>
         <tbody>
           {items.length === 0 ? (
             <tr>
-              <td colSpan={5} className="px-3 py-8 text-center text-xs text-slate-400 italic">
+              <td colSpan={Math.max(visibleColumns.length, 1)} className="px-3 py-8 text-center text-xs text-slate-400 italic">
                 No products added. Use the Products section on the left to add items.
               </td>
             </tr>
@@ -1292,29 +1973,79 @@ const InvoicePreview: React.FC<InvoicePreviewProps> = ({
             const name = it.customName ?? it.productName;
             const desc = it.customDescription ?? it.productDescription;
             const price = it.customPrice ?? it.productPrice;
-            const total = price * it.quantity;
             const isLast = idx === items.length - 1;
             return (
               <tr key={it.id} className={isLast ? '' : 'border-b border-slate-200'}>
-                <td className="px-3 py-2 align-top">
-                  <div className="text-xs font-semibold text-slate-800">{name || <span className="italic text-slate-400">Unnamed product</span>}</div>
-                  {desc && <div className="text-[11px] text-slate-600 mt-0.5 whitespace-pre-line">{desc}</div>}
-                  {it.productStockCode && (
-                    <div className="text-[10px] text-slate-400 font-mono mt-0.5">{it.productStockCode}</div>
-                  )}
-                </td>
-                <td className="px-3 py-2 text-right align-top text-xs text-slate-700 tabular-nums">
-                  {fmt(price)}
-                </td>
-                <td className="px-3 py-2 text-center align-top text-xs text-slate-700 tabular-nums">
-                  {it.quantity}
-                </td>
-                <td className="px-3 py-2 text-center align-top text-[11px] text-slate-500">
-                  {it.productUnit || '—'}
-                </td>
-                <td className="px-3 py-2 text-right align-top text-xs font-semibold text-slate-800 tabular-nums">
-                  {fmt(total)}
-                </td>
+                {visibleColumns.map(col => {
+                  if (col.id === 'product') {
+                    return (
+                      <td key={col.id} className="px-3 py-2 align-top">
+                        <div className="text-xs font-semibold text-slate-800">{name || <span className="italic text-slate-400">Unnamed product</span>}</div>
+                        {desc && <div className="text-[11px] text-slate-600 mt-0.5 whitespace-pre-line">{desc}</div>}
+                        {it.productStockCode && (
+                          <div className="text-[10px] text-slate-400 font-mono mt-0.5">{it.productStockCode}</div>
+                        )}
+                      </td>
+                    );
+                  }
+                  if (col.id === 'unitPrice') {
+                    return (
+                      <td key={col.id} className="px-3 py-2 text-right align-top text-xs text-slate-700 tabular-nums">
+                        {fmt(price)}
+                      </td>
+                    );
+                  }
+                  if (col.id === 'quantity') {
+                    return (
+                      <td key={col.id} className="px-3 py-2 text-center align-top text-xs text-slate-700 tabular-nums">
+                        {it.quantity}
+                      </td>
+                    );
+                  }
+                  if (col.id === 'unit') {
+                    return (
+                      <td key={col.id} className="px-3 py-2 text-center align-top text-[11px] text-slate-500">
+                        {it.productUnit || '—'}
+                      </td>
+                    );
+                  }
+                  if (col.id === 'total') {
+                    // Mirror the editor: render '—' when the totalFormula is broken
+                    // so the printed/exported preview never silently shows 0.
+                    const lt = lineTotalFor(it);
+                    return (
+                      <td key={col.id} className="px-3 py-2 text-right align-top text-xs font-semibold text-slate-800 tabular-nums">
+                        {Number.isFinite(lt) ? fmt(lt) : '—'}
+                      </td>
+                    );
+                  }
+                  // Custom columns
+                  if (col.type === 'text') {
+                    return (
+                      <td key={col.id} className="px-3 py-2 text-right align-top text-xs text-slate-700">
+                        {it.customValues?.[col.id] || '—'}
+                      </td>
+                    );
+                  }
+                  if (col.type === 'number') {
+                    const raw = it.customValues?.[col.id];
+                    const n = raw == null || raw === '' ? null : parseFloat(raw);
+                    return (
+                      <td key={col.id} className="px-3 py-2 text-right align-top text-xs text-slate-700 tabular-nums">
+                        {n == null || !Number.isFinite(n) ? '—' : fmt(n)}
+                      </td>
+                    );
+                  }
+                  if (col.type === 'formula') {
+                    const v = evalFormulaCell(it, col);
+                    return (
+                      <td key={col.id} className="px-3 py-2 text-right align-top text-xs text-slate-700 tabular-nums">
+                        {Number.isFinite(v) ? fmt(v) : '—'}
+                      </td>
+                    );
+                  }
+                  return <td key={col.id} />;
+                })}
               </tr>
             );
           })}

@@ -310,11 +310,21 @@ export interface ProformaItemData {
 // One user-added column on the proforma items table. The user picks the name
 // and the data type; position relative to the built-in columns is computed
 // from orderIndex (smaller = further left, larger = further right).
+//
+// type='formula' columns are computed read-only cells whose value is derived
+// from `formula` (see shared/proformaFormula.ts for grammar).
+// `unit` is an optional display label shown after the column header
+// (e.g. "kg", "m²", "%").
 export interface ProformaCustomColumn {
   id: string;
   name: string;
-  type: 'text' | 'number';
-  orderIndex: number;
+  type: 'text' | 'number' | 'formula';
+  // Legacy ordering field. New code drives display order via the proforma's
+  // `columnOrder` array (which orders built-ins + customs together) so this
+  // is optional; we keep it for backwards compatibility with older payloads.
+  orderIndex?: number;
+  unit?: string;
+  formula?: string;
 }
 
 // Built-in column ids that the user is allowed to hide. 'product' (description)
@@ -374,6 +384,19 @@ export interface ProformaData {
   date?: string | null;
   createdAt?: string | null;
   updatedAt?: string | null;
+  // Custom column definitions (user-added columns shown in the items
+  // table and the printed preview). See ProformaCustomColumn above.
+  customColumns?: ProformaCustomColumn[] | null;
+  // Column ids that should be hidden in both the editor and the preview.
+  // 'product' (Description) and 'quantity' (Qty) are required and ignored
+  // if present here.
+  hiddenColumns?: string[] | null;
+  // User-defined display order of column ids (built-in + custom). Empty
+  // or missing → fall back to canonical order.
+  columnOrder?: string[] | null;
+  // Optional row-total formula override. When null/empty/'default', row
+  // totals use qty × unit_price. See shared/proformaFormula.ts.
+  totalFormula?: string | null;
   items?: ProformaItemData[];
   financials?: ProformaFinancialData[];
   customerFields?: CustomerFieldData[];

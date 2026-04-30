@@ -365,6 +365,12 @@ export const proformas = pgTable("proformas", {
   // ordering (built-ins in their canonical order, custom columns by their
   // orderIndex) is used so old proformas still render correctly.
   columnOrder: jsonb("column_order").default([]),
+  // Optional row-total formula. When NULL or 'default' the row total is the
+  // standard qty * unit_price. When set to a formula string (using the
+  // tokens documented in shared/proformaFormula.ts — {qty}, {unit_price},
+  // {col:Name}, {total}) the row total is computed by evaluating it for
+  // each row, and the proforma subtotal aggregates those evaluated totals.
+  totalFormula: text("total_formula"),
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow(),
 });

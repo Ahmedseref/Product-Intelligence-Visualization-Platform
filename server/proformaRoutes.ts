@@ -2,6 +2,13 @@ import type { Express } from "express";
 import { storage } from "./storage";
 import { authMiddleware, requirePasswordChange } from "./authRoutes";
 import ExcelJS from "exceljs";
+import {
+  computeRowTotal,
+  computeSubtotal,
+  evaluateFormula,
+  type FormulaColumn,
+  type FormulaRow,
+} from "../shared/proformaFormula";
 import { refreshState } from "./refreshState";
 
 function computeFinancials(
@@ -141,11 +148,59 @@ export function registerProformaRoutes(app: Express): void {
       if (!full) return res.status(404).json({ error: "Proforma not found" });
 
       const settings = await storage.getProformaSettings();
-      const items = (full.items || []) as Array<{ productStockCode?: string; customName?: string | null; productName?: string; customDescription?: string | null; productDescription?: string; quantity: number; customPrice?: number | null; productPrice?: number; productUnit?: string }>;
+      const items = (full.items || []) as Array<{ productStockCode?: string; customName?: string | null; productName?: string; customDescription?: string | null; productDescription?: string; quantity: number; customPrice?: number | null; productPrice?: number; productUnit?: string; customValues?: Record<string, string> | null }>;
       const financials = (full.financials || []) as Array<{ id: number; name: string; type: string; valueType: string; value: number; orderIndex: number }>;
       const customerFields = (full.customerFields || []) as Array<{ fieldName: string; fieldValue?: string | null }>;
       const currency = full.currency || settings?.defaultCurrency || "USD";
-      const subtotal = items.reduce((sum, item) => sum + item.quantity * (item.customPrice ?? item.productPrice ?? 0), 0);
+
+      // ── Resolve dynamic column configuration from the persisted proforma ──
+      // Mirrors the editor's buildColumnList helper so the exported file
+      // matches what the user sees on screen, including hidden columns and
+      // the user's preferred order.
+      type CT = 'builtin' | 'text' | 'number' | 'formula';
+      interface PCol { id: string; name: string; type: CT; unit?: string; formula?: string; required?: boolean; }
+      const BUILTIN: PCol[] = [
+        { id: 'product',   name: 'Description', type: 'builtin', required: true  },
+        { id: 'unitPrice', name: 'Unit Price',  type: 'builtin' },
+        { id: 'quantity',  name: 'Qty',         type: 'builtin', required: true  },
+        { id: 'unit',      name: 'Unit',        type: 'builtin' },
+        { id: 'total',     name: 'Total',       type: 'builtin' },
+      ];
+      const customCols = Array.isArray((full as any).customColumns) ? ((full as any).customColumns as Array<{ id: string; name: string; type: CT; unit?: string; formula?: string }>) : [];
+      const hiddenIds = new Set(Array.isArray((full as any).hiddenColumns) ? ((full as any).hiddenColumns as string[]) : []);
+      const colOrder = Array.isArray((full as any).columnOrder) ? ((full as any).columnOrder as string[]) : [];
+      const totalFormulaCfg = (full as any).totalFormula as string | null | undefined;
+      const allCols: PCol[] = [
+        ...BUILTIN,
+        ...customCols.map<PCol>(c => ({ id: c.id, name: c.name, type: c.type, unit: c.unit, formula: c.formula })),
+      ];
+      let orderedCols: PCol[];
+      if (colOrder.length === 0) {
+        orderedCols = allCols;
+      } else {
+        const idx = new Map(colOrder.map((id, i) => [id, i]));
+        const ordered: PCol[] = [];
+        const leftover: PCol[] = [];
+        for (const c of allCols) {
+          if (idx.has(c.id)) ordered.push(c);
+          else leftover.push(c);
+        }
+        ordered.sort((a, b) => idx.get(a.id)! - idx.get(b.id)!);
+        orderedCols = [...ordered, ...leftover];
+      }
+      const visibleCols = orderedCols.filter(c => c.required || !hiddenIds.has(c.id));
+
+      // Reusable formula-engine column shape (drops editor-only flags).
+      const formulaCols: FormulaColumn[] = allCols.map(c => ({ id: c.id, name: c.name, type: c.type, unit: c.unit, formula: c.formula }));
+      const toFRow = (it: typeof items[number]): FormulaRow => ({
+        qty: it.quantity,
+        unitPrice: it.customPrice ?? it.productPrice ?? 0,
+        customValues: (it.customValues ?? {}) as Record<string, string>,
+      });
+
+      // Subtotal uses the shared computeSubtotal — automatically picks up
+      // any totalFormula override the user configured.
+      const subtotal = computeSubtotal(items.map(toFRow), formulaCols, totalFormulaCfg ?? null);
       const { steps, finalTotal } = computeFinancials(subtotal, financials);
       const invoiceDate = full.date ? new Date(full.date).toLocaleDateString("en-GB", { day: "2-digit", month: "2-digit", year: "numeric" }) : new Date().toLocaleDateString("en-GB", { day: "2-digit", month: "2-digit", year: "numeric" });
       const invoicedTo = (full as any).shipTo?.trim() || "SAME AS CONSIGNEE";
@@ -167,25 +222,32 @@ export function registerProformaRoutes(app: Express): void {
       const BORDER_THIN: Partial<ExcelJS.Border> = { style: "thin", color: { argb: "FFCBD5E1" } };
       const BORDER_DASHED: Partial<ExcelJS.Border> = { style: "dotted", color: { argb: "FFCBD5E1" } };
 
-      ws.columns = [
-        { width: 36 },
-        { width: 10 },
-        { width: 10 },
-        { width: 14 },
-        { width: 14 },
-      ];
+      // Dynamic column widths. The Description column always gets the most
+      // room (the workbook's static header sections rely on a wide left column
+      // for the company info merge); everything else gets a sensible default.
+      const COL_COUNT = Math.max(5, visibleCols.length);
+      const widthFor = (c: PCol | undefined): number => {
+        if (!c) return 12;
+        if (c.id === 'product') return 36;
+        if (c.id === 'unitPrice' || c.id === 'total') return 14;
+        if (c.id === 'quantity' || c.id === 'unit') return 10;
+        // Custom columns: text wider, number/formula narrower.
+        if (c.type === 'text') return 18;
+        return 14;
+      };
+      ws.columns = Array.from({ length: COL_COUNT }, (_, i) => ({ width: widthFor(visibleCols[i]) }));
 
       let r = 1;
 
       // ─── TITLE BAR ───
-      ws.mergeCells(r, 1, r, 5);
+      ws.mergeCells(r, 1, r, COL_COUNT);
       const titleCell = ws.getCell(r, 1);
       titleCell.value = "PROFORMA INVOICE";
       titleCell.font = { name: FONT_FAMILY, size: 14, bold: true, color: { argb: DARK } };
       titleCell.alignment = { vertical: "middle" };
       titleCell.border = { top: BORDER_DARK, left: BORDER_DARK, right: BORDER_DARK, bottom: BORDER_DARK };
-      for (let c = 2; c <= 5; c++) {
-        ws.getCell(r, c).border = { top: BORDER_DARK, bottom: BORDER_DARK, right: c === 5 ? BORDER_DARK : undefined };
+      for (let c = 2; c <= COL_COUNT; c++) {
+        ws.getCell(r, c).border = { top: BORDER_DARK, bottom: BORDER_DARK, right: c === COL_COUNT ? BORDER_DARK : undefined };
       }
       ws.getRow(r).height = 28;
       r++;
@@ -271,40 +333,55 @@ export function registerProformaRoutes(app: Express): void {
         }
       }
 
-      for (let c = 1; c <= 5; c++) {
+      for (let c = 1; c <= COL_COUNT; c++) {
         const cell = ws.getCell(headerStartRow + headerRows - 1, c);
         cell.border = { ...cell.border, bottom: BORDER_DARK };
       }
       r += headerRows;
 
-      // ─── PRODUCTS TABLE HEADER ───
-      const prodHeaders = ["DESCRIPTION OF GOODS", "QTY", "UNIT", "UNIT PRICE", "TOTAL"];
+      // ─── PRODUCTS TABLE HEADER (dynamic columns) ───
+      // Render header cells for each visible column. When the user has fewer
+      // visible columns than COL_COUNT (legacy behavior keeps a 5-col floor
+      // so the rest of the layout stays consistent), pad the right side with
+      // empty bordered cells.
+      const headerLabel = (col: PCol): string => {
+        if (col.id === 'product') return 'DESCRIPTION OF GOODS';
+        const base = col.name.toUpperCase();
+        return col.unit && col.id !== 'unit' ? `${base} (${col.unit})` : base;
+      };
+      const alignFor = (col: PCol): 'left' | 'center' | 'right' => {
+        if (col.id === 'product') return 'left';
+        if (col.id === 'quantity' || col.id === 'unit') return 'center';
+        return 'right';
+      };
+
       const prodRow = ws.getRow(r);
       prodRow.height = 22;
-      for (let c = 0; c < prodHeaders.length; c++) {
-        const cell = ws.getCell(r, c + 1);
-        cell.value = prodHeaders[c];
+      for (let c = 1; c <= COL_COUNT; c++) {
+        const col = visibleCols[c - 1];
+        const cell = ws.getCell(r, c);
+        cell.value = col ? headerLabel(col) : '';
         cell.font = { name: FONT_FAMILY, size: 8, bold: true, color: { argb: MED } };
         cell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: BG_HEADER } };
-        cell.alignment = { vertical: "middle", horizontal: c === 0 ? "left" : c <= 2 ? "center" : "right" };
+        cell.alignment = { vertical: "middle", horizontal: col ? alignFor(col) : 'center' };
         cell.border = {
           top: BORDER_DARK,
           bottom: BORDER_DARK,
-          left: c === 0 ? BORDER_DARK : BORDER_THIN,
-          right: c === prodHeaders.length - 1 ? BORDER_DARK : BORDER_THIN,
+          left: c === 1 ? BORDER_DARK : BORDER_THIN,
+          right: c === COL_COUNT ? BORDER_DARK : BORDER_THIN,
         };
       }
       r++;
 
-      // ─── PRODUCT ROWS ───
+      // ─── PRODUCT ROWS (dynamic columns) ───
       if (items.length === 0) {
-        ws.mergeCells(r, 1, r, 5);
+        ws.mergeCells(r, 1, r, COL_COUNT);
         const emptyCell = ws.getCell(r, 1);
         emptyCell.value = "No products in this proforma";
         emptyCell.font = { name: FONT_FAMILY, size: 9, italic: true, color: { argb: LIGHT } };
         emptyCell.alignment = { vertical: "middle", horizontal: "center" };
         emptyCell.border = { left: BORDER_DARK, right: BORDER_DARK };
-        for (let c = 2; c <= 5; c++) ws.getCell(r, c).border = { right: c === 5 ? BORDER_DARK : undefined };
+        for (let c = 2; c <= COL_COUNT; c++) ws.getCell(r, c).border = { right: c === COL_COUNT ? BORDER_DARK : undefined };
         ws.getRow(r).height = 24;
         r++;
       }
@@ -313,9 +390,10 @@ export function registerProformaRoutes(app: Express): void {
         const displayName = item.customName ?? item.productName ?? "";
         const displayDesc = item.customDescription ?? item.productDescription ?? "";
         const displayPrice = item.customPrice ?? item.productPrice ?? 0;
-        const lineTotal = displayPrice * item.quantity;
-        const unit = item.productUnit || "pc";
+        const fRow = toFRow(item);
+        const isLastRow = i === items.length - 1;
 
+        // Build the description block once — used for the 'product' column.
         let descText = displayName;
         if (displayDesc) descText += `\n${displayDesc}`;
         if (item.productStockCode) descText += `\n${item.productStockCode}`;
@@ -323,36 +401,52 @@ export function registerProformaRoutes(app: Express): void {
         const row = ws.getRow(r);
         row.height = descText.includes("\n") ? 36 : 20;
 
-        const descCell = ws.getCell(r, 1);
-        descCell.value = descText;
-        descCell.font = { name: FONT_FAMILY, size: 9, color: { argb: DARK } };
-        descCell.alignment = { vertical: "middle", wrapText: true };
-        descCell.border = { left: BORDER_DARK, right: BORDER_THIN, bottom: i < items.length - 1 ? BORDER_THIN : undefined };
+        for (let c = 1; c <= COL_COUNT; c++) {
+          const col = visibleCols[c - 1];
+          const cell = ws.getCell(r, c);
+          cell.font = { name: FONT_FAMILY, size: 9, color: { argb: DARK } };
+          cell.alignment = {
+            vertical: "middle",
+            horizontal: col ? alignFor(col) : 'center',
+            wrapText: col?.id === 'product',
+          };
+          cell.border = {
+            left: c === 1 ? BORDER_DARK : undefined,
+            right: c === COL_COUNT ? BORDER_DARK : BORDER_THIN,
+            bottom: !isLastRow ? BORDER_THIN : undefined,
+          };
+          if (!col) { cell.value = ''; continue; }
 
-        const qtyCell = ws.getCell(r, 2);
-        qtyCell.value = item.quantity;
-        qtyCell.font = { name: FONT_FAMILY, size: 9, color: { argb: DARK } };
-        qtyCell.alignment = { vertical: "middle", horizontal: "center" };
-        qtyCell.border = { right: BORDER_THIN, bottom: i < items.length - 1 ? BORDER_THIN : undefined };
-
-        const unitCell = ws.getCell(r, 3);
-        unitCell.value = unit;
-        unitCell.font = { name: FONT_FAMILY, size: 9, color: { argb: MED } };
-        unitCell.alignment = { vertical: "middle", horizontal: "center" };
-        unitCell.border = { right: BORDER_THIN, bottom: i < items.length - 1 ? BORDER_THIN : undefined };
-
-        const priceCell = ws.getCell(r, 4);
-        priceCell.value = `${currency} ${fmt(displayPrice)}`;
-        priceCell.font = { name: FONT_FAMILY, size: 9, color: { argb: DARK } };
-        priceCell.alignment = { vertical: "middle", horizontal: "right" };
-        priceCell.border = { right: BORDER_THIN, bottom: i < items.length - 1 ? BORDER_THIN : undefined };
-
-        const totalCell = ws.getCell(r, 5);
-        totalCell.value = `${currency} ${fmt(lineTotal)}`;
-        totalCell.font = { name: FONT_FAMILY, size: 9, bold: true, color: { argb: DARK } };
-        totalCell.alignment = { vertical: "middle", horizontal: "right" };
-        totalCell.border = { right: BORDER_DARK, bottom: i < items.length - 1 ? BORDER_THIN : undefined };
-
+          // Built-in columns
+          if (col.id === 'product') {
+            cell.value = descText;
+          } else if (col.id === 'quantity') {
+            cell.value = item.quantity;
+          } else if (col.id === 'unit') {
+            cell.value = item.productUnit || 'pc';
+            cell.font = { name: FONT_FAMILY, size: 9, color: { argb: MED } };
+          } else if (col.id === 'unitPrice') {
+            cell.value = `${currency} ${fmt(displayPrice)}`;
+          } else if (col.id === 'total') {
+            // computeRowTotal returns NaN when the user-supplied totalFormula is
+            // structurally broken; mirror the editor/preview by rendering '—'
+            // so the export never silently misrepresents a row as 0.
+            const rt = computeRowTotal(fRow, formulaCols, totalFormulaCfg ?? null);
+            cell.value = Number.isFinite(rt) ? `${currency} ${fmt(rt)}` : '—';
+            cell.font = { name: FONT_FAMILY, size: 9, bold: true, color: { argb: DARK } };
+          }
+          // Custom columns
+          else if (col.type === 'text') {
+            cell.value = item.customValues?.[col.id] ?? '';
+          } else if (col.type === 'number') {
+            const raw = item.customValues?.[col.id];
+            const n = raw == null || raw === '' ? null : parseFloat(raw);
+            cell.value = n != null && Number.isFinite(n) ? fmt(n) : '';
+          } else if (col.type === 'formula') {
+            const v = !col.formula ? NaN : evaluateFormula(col.formula, fRow, formulaCols, totalFormulaCfg ?? null, 0);
+            cell.value = Number.isFinite(v) ? fmt(v) : '—';
+          }
+        }
         r++;
       }
 
@@ -362,10 +456,15 @@ export function registerProformaRoutes(app: Express): void {
       const finalPlaceOfDelivery = (full as any).finalPlaceOfDelivery || "";
       const placeOfDestination = (full as any).placeOfDestination || "";
 
+      // Totals span all columns except the last (which holds the amount).
+      // LAST_COL = COL_COUNT, LABEL_END = COL_COUNT - 1.
+      const LAST_COL = COL_COUNT;
+      const LABEL_END = COL_COUNT - 1;
+
       if (steps.length > 0) {
         const subtotalRow = ws.getRow(r);
         subtotalRow.height = 22;
-        ws.mergeCells(r, 1, r, 4);
+        ws.mergeCells(r, 1, r, LABEL_END);
         const subLabelCell = ws.getCell(r, 1);
         let subLabel = `SUBTOTAL ${effectiveDeliveryTerms}`;
         if (portOfLoading) subLabel += ` ${portOfLoading}`;
@@ -374,8 +473,8 @@ export function registerProformaRoutes(app: Express): void {
         subLabelCell.font = { name: FONT_FAMILY, size: 8, bold: true, color: { argb: MED } };
         subLabelCell.alignment = { vertical: "middle", horizontal: "right" };
         subLabelCell.border = { left: BORDER_DARK, top: BORDER_DARK };
-        for (let c = 2; c <= 4; c++) ws.getCell(r, c).border = { top: BORDER_DARK };
-        const subAmtCell = ws.getCell(r, 5);
+        for (let c = 2; c <= LABEL_END; c++) ws.getCell(r, c).border = { top: BORDER_DARK };
+        const subAmtCell = ws.getCell(r, LAST_COL);
         subAmtCell.value = `${currency} ${fmt(subtotal)}`;
         subAmtCell.font = { name: FONT_FAMILY, size: 9, bold: true, color: { argb: MED } };
         subAmtCell.alignment = { vertical: "middle", horizontal: "right" };
@@ -388,18 +487,18 @@ export function registerProformaRoutes(app: Express): void {
         const row = ws.getRow(r);
         row.height = 18;
 
-        ws.mergeCells(r, 1, r, 4);
+        ws.mergeCells(r, 1, r, LABEL_END);
         const labelCell = ws.getCell(r, 1);
         const label = step.valueType === "percentage" ? `${step.name} (${step.value}%)` : step.name;
         labelCell.value = label;
         labelCell.font = { name: FONT_FAMILY, size: 8, color: { argb: DARK } };
         labelCell.alignment = { vertical: "middle", horizontal: "right" };
         labelCell.border = { left: BORDER_DARK, top: BORDER_DASHED };
-        for (let c = 2; c <= 4; c++) {
+        for (let c = 2; c <= LABEL_END; c++) {
           ws.getCell(r, c).border = { top: BORDER_DASHED };
         }
 
-        const amtCell = ws.getCell(r, 5);
+        const amtCell = ws.getCell(r, LAST_COL);
         amtCell.value = `${currency} ${fmt(Math.abs(step.computedAmount))}`;
         amtCell.font = { name: FONT_FAMILY, size: 8, color: { argb: DARK } };
         amtCell.alignment = { vertical: "middle", horizontal: "right" };
@@ -410,7 +509,7 @@ export function registerProformaRoutes(app: Express): void {
       // ─── FINAL TOTAL ROW ───
       const totalRow = ws.getRow(r);
       totalRow.height = 24;
-      ws.mergeCells(r, 1, r, 4);
+      ws.mergeCells(r, 1, r, LABEL_END);
       const totalLabelCell = ws.getCell(r, 1);
       let totalLabel: string;
       if (steps.length > 0) {
@@ -426,11 +525,11 @@ export function registerProformaRoutes(app: Express): void {
       totalLabelCell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: BG_HEADER } };
       totalLabelCell.alignment = { vertical: "middle", horizontal: "right" };
       totalLabelCell.border = { left: BORDER_DARK, top: BORDER_DARK, bottom: BORDER_DARK };
-      for (let c = 2; c <= 4; c++) {
+      for (let c = 2; c <= LABEL_END; c++) {
         ws.getCell(r, c).border = { top: BORDER_DARK, bottom: BORDER_DARK };
         ws.getCell(r, c).fill = { type: "pattern", pattern: "solid", fgColor: { argb: BG_HEADER } };
       }
-      const grandTotalCell = ws.getCell(r, 5);
+      const grandTotalCell = ws.getCell(r, LAST_COL);
       grandTotalCell.value = `${currency} ${fmt(finalTotal)}`;
       grandTotalCell.font = { name: FONT_FAMILY, size: 10, bold: true, color: { argb: DARK } };
       grandTotalCell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: BG_HEADER } };
@@ -441,42 +540,42 @@ export function registerProformaRoutes(app: Express): void {
       // ─── NOTES SECTION ───
       const notesText = (full as any).notes || settings?.notes || "";
       if (notesText) {
-        ws.mergeCells(r, 1, r, 5);
+        ws.mergeCells(r, 1, r, COL_COUNT);
         const notesLabelCell = ws.getCell(r, 1);
         notesLabelCell.value = "Notes";
         notesLabelCell.font = { name: FONT_FAMILY, size: 7, bold: true, color: { argb: LIGHT } };
         notesLabelCell.border = { left: BORDER_DARK, right: BORDER_DARK };
-        for (let c = 2; c <= 5; c++) ws.getCell(r, c).border = { right: c === 5 ? BORDER_DARK : undefined };
+        for (let c = 2; c <= COL_COUNT; c++) ws.getCell(r, c).border = { right: c === COL_COUNT ? BORDER_DARK : undefined };
         r++;
 
-        ws.mergeCells(r, 1, r, 5);
+        ws.mergeCells(r, 1, r, COL_COUNT);
         const notesCell = ws.getCell(r, 1);
         notesCell.value = notesText;
         notesCell.font = { name: FONT_FAMILY, size: 9, color: { argb: MED } };
         notesCell.alignment = { wrapText: true, vertical: "top" };
         notesCell.border = { left: BORDER_DARK, right: BORDER_DARK, bottom: settings?.bankDetails ? undefined : BORDER_DARK };
-        for (let c = 2; c <= 5; c++) ws.getCell(r, c).border = { right: c === 5 ? BORDER_DARK : undefined, bottom: settings?.bankDetails ? undefined : BORDER_DARK };
+        for (let c = 2; c <= COL_COUNT; c++) ws.getCell(r, c).border = { right: c === COL_COUNT ? BORDER_DARK : undefined, bottom: settings?.bankDetails ? undefined : BORDER_DARK };
         ws.getRow(r).height = 30;
         r++;
       }
 
       // ─── BANK DETAILS SECTION ───
       if (settings?.bankDetails) {
-        ws.mergeCells(r, 1, r, 5);
+        ws.mergeCells(r, 1, r, COL_COUNT);
         const bankLabelCell = ws.getCell(r, 1);
         bankLabelCell.value = "Bank Details";
         bankLabelCell.font = { name: FONT_FAMILY, size: 7, bold: true, color: { argb: LIGHT } };
         bankLabelCell.border = { left: BORDER_DARK, right: BORDER_DARK };
-        for (let c = 2; c <= 5; c++) ws.getCell(r, c).border = { right: c === 5 ? BORDER_DARK : undefined };
+        for (let c = 2; c <= COL_COUNT; c++) ws.getCell(r, c).border = { right: c === COL_COUNT ? BORDER_DARK : undefined };
         r++;
 
-        ws.mergeCells(r, 1, r, 5);
+        ws.mergeCells(r, 1, r, COL_COUNT);
         const bankCell = ws.getCell(r, 1);
         bankCell.value = settings.bankDetails;
         bankCell.font = { name: "Consolas", size: 8, color: { argb: MED } };
         bankCell.alignment = { wrapText: true, vertical: "top" };
         bankCell.border = { left: BORDER_DARK, right: BORDER_DARK, bottom: BORDER_DARK };
-        for (let c = 2; c <= 5; c++) ws.getCell(r, c).border = { right: c === 5 ? BORDER_DARK : undefined, bottom: BORDER_DARK };
+        for (let c = 2; c <= COL_COUNT; c++) ws.getCell(r, c).border = { right: c === COL_COUNT ? BORDER_DARK : undefined, bottom: BORDER_DARK };
         ws.getRow(r).height = 40;
         r++;
       }
