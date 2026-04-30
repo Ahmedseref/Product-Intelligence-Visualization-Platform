@@ -978,8 +978,6 @@ export const systemsApi = {
       // ---- Installable-spec fields. All nullable; null clears the value. ----
       // kg of material per m² of substrate.
       consumptionRateKgM2?: number | null;
-      // Wet film thickness (μm).
-      wftMicrons?: number | null;
       // Dry film thickness (μm).
       dftMicrons?: number | null;
       // Recoat window min/max in hours between this coat and the next.

@@ -35,7 +35,7 @@ type TabMode = 'builder' | 'analytics' | 'qualification' | 'preview';
 // ----------------------------------------------------------------------------
 // SpecNumberInput
 // Compact uncontrolled-feeling numeric cell used by the installable-spec rows
-// (system thickness range + per-layer consumption / WFT / DFT / recoat). It
+// (system thickness range + per-layer consumption / DFT / recoat). It
 // keeps a local string draft so partial typing like "1." or "" doesn't fire
 // premature saves, then commits on blur or Enter. The draft is re-synced from
 // the prop via useEffect so a parent refresh (loadFullSystem) overwrites stale
@@ -556,14 +556,12 @@ const SystemBuilder: React.FC<SystemBuilderProps> = ({ products, onProductUpdate
         // spec'd to avoid a noop network round-trip.
         const hasSpec =
           layer.consumptionRateKgM2 != null ||
-          layer.wftMicrons != null ||
           layer.dftMicrons != null ||
           layer.recoatMinHours != null ||
           layer.recoatMaxHours != null;
         if (hasSpec) {
           await systemsApi.updateLayer(newLayer.layerId, {
             consumptionRateKgM2: layer.consumptionRateKgM2 ?? null,
-            wftMicrons: layer.wftMicrons ?? null,
             dftMicrons: layer.dftMicrons ?? null,
             recoatMinHours: layer.recoatMinHours ?? null,
             recoatMaxHours: layer.recoatMaxHours ?? null,
@@ -715,7 +713,6 @@ const SystemBuilder: React.FC<SystemBuilderProps> = ({ products, onProductUpdate
     layerId: string,
     patch: Partial<{
       consumptionRateKgM2: number | null;
-      wftMicrons: number | null;
       dftMicrons: number | null;
       recoatMinHours: number | null;
       recoatMaxHours: number | null;
@@ -1769,8 +1766,8 @@ const SystemBuilder: React.FC<SystemBuilderProps> = ({ products, onProductUpdate
                       </div>
 
                       {/* ---------- Installable spec strip ----------
-                          Always-visible compact row of five numeric fields:
-                          consumption (kg/m²), WFT/DFT (μm), and recoat min/max
+                          Always-visible compact row of four numeric fields:
+                          consumption (kg/m²), DFT (μm), and recoat min/max
                           (hrs). They sit directly under the layer header so
                           the spec is impossible to miss when reviewing a
                           layer; absence of values shows as a placeholder dash
@@ -1791,16 +1788,6 @@ const SystemBuilder: React.FC<SystemBuilderProps> = ({ products, onProductUpdate
                             testId={`layer-consumption-${layer.layerId}`}
                           />
                           <span className="text-slate-400">kg/m²</span>
-                        </label>
-                        <label className="flex items-center gap-1">
-                          <span className="text-slate-500">WFT</span>
-                          <SpecNumberInput
-                            value={layer.wftMicrons}
-                            onSave={(v) => handleSaveLayerSpec(layer.layerId, { wftMicrons: v })}
-                            ariaLabel={`Wet film thickness (μm) for layer ${layer.layerName}`}
-                            testId={`layer-wft-${layer.layerId}`}
-                          />
-                          <span className="text-slate-400">μm</span>
                         </label>
                         <label className="flex items-center gap-1">
                           <span className="text-slate-500">DFT</span>

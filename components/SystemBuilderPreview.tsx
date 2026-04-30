@@ -100,7 +100,6 @@ type LayerRow = {
   // partially-spec'd layers render only the fields that are set; the
   // formatter helpers (fmtSpec / fmtSpecRange) gracefully handle nulls.
   consumptionRateKgM2?: number | null;
-  wftMicrons?: number | null;
   dftMicrons?: number | null;
   recoatMinHours?: number | null;
   recoatMaxHours?: number | null;
@@ -169,7 +168,6 @@ function fmtSpecRange(min: number | null | undefined, max: number | null | undef
 // technical data sheet: how-much / how-thick / when-to-recoat.
 type LayerSpecLike = {
   consumptionRateKgM2?: number | null;
-  wftMicrons?: number | null;
   dftMicrons?: number | null;
   recoatMinHours?: number | null;
   recoatMaxHours?: number | null;
@@ -178,8 +176,6 @@ function buildLayerSpecSummary(l: LayerSpecLike): string | null {
   const parts: string[] = [];
   const consumption = fmtSpec(l.consumptionRateKgM2, 'kg/m²');
   if (consumption) parts.push(consumption);
-  const wft = fmtSpec(l.wftMicrons, 'μm WFT');
-  if (wft) parts.push(wft);
   const dft = fmtSpec(l.dftMicrons, 'μm DFT');
   if (dft) parts.push(dft);
   const recoat = fmtSpecRange(l.recoatMinHours, l.recoatMaxHours, 'h recoat');
@@ -716,11 +712,9 @@ export default function SystemBuilderPreview({ onEditInBuilder }: Props) {
       // readable for partially-spec'd systems instead of carrying a wall
       // of dashes. fmtSpec / fmtSpecRange return null when missing.
       const consumption = fmtSpec(l.consumptionRateKgM2, 'kg/m²');
-      const wft = fmtSpec(l.wftMicrons, 'μm');
       const dft = fmtSpec(l.dftMicrons, 'μm');
       const recoat = fmtSpecRange(l.recoatMinHours, l.recoatMaxHours, 'hrs');
       if (consumption) lines.push(`    Consumption:     ${consumption}`);
-      if (wft)         lines.push(`    Wet film (WFT):  ${wft}`);
       if (dft)         lines.push(`    Dry film (DFT):  ${dft}`);
       if (recoat)      lines.push(`    Recoat window:   ${recoat}`);
       const others = l.productOptions.filter(o => o !== def);
@@ -1059,7 +1053,7 @@ export default function SystemBuilderPreview({ onEditInBuilder }: Props) {
                                   )}
                                 </div>
                                 {/* Installable-spec summary line. Only rendered
-                                    when at least one of consumption/WFT/DFT/recoat
+                                    when at least one of consumption/DFT/recoat
                                     is set so an unspec'd legacy system still
                                     shows the same compact bar as before. The
                                     monospace tabular figures keep the values
@@ -1199,25 +1193,20 @@ export default function SystemBuilderPreview({ onEditInBuilder }: Props) {
 
                                   {/* Installable-spec mini-table. Only rendered
                                       when the layer carries at least one of the
-                                      five spec values. Two-column grid keeps
+                                      four spec values. Two-column grid keeps
                                       labels right-aligned and values monospaced
                                       so multiple stacked layer cards line up
                                       visually. */}
                                   {(() => {
                                     const consumption = fmtSpec(l.consumptionRateKgM2, 'kg/m²');
-                                    const wft = fmtSpec(l.wftMicrons, 'μm');
                                     const dft = fmtSpec(l.dftMicrons, 'μm');
                                     const recoat = fmtSpecRange(l.recoatMinHours, l.recoatMaxHours, 'h');
-                                    if (!consumption && !wft && !dft && !recoat) return null;
+                                    if (!consumption && !dft && !recoat) return null;
                                     return (
                                       <dl className="mt-3 pt-2 border-t border-slate-100 grid grid-cols-[auto_1fr] gap-x-3 gap-y-0.5 text-[11px]">
                                         {consumption && (<>
                                           <dt className="text-slate-400">Consumption</dt>
                                           <dd className="text-slate-700 font-mono tabular-nums">{consumption}</dd>
-                                        </>)}
-                                        {wft && (<>
-                                          <dt className="text-slate-400">WFT</dt>
-                                          <dd className="text-slate-700 font-mono tabular-nums">{wft}</dd>
                                         </>)}
                                         {dft && (<>
                                           <dt className="text-slate-400">DFT</dt>

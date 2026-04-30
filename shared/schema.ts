@@ -227,9 +227,6 @@ export const systemLayers = pgTable("system_layers", {
   // user can convert in their head. Stored as `real`; allows fractional
   // values like 0.35 (typical primer) up to 6 (heavy self-leveller).
   consumptionRateKgM2: real("consumption_rate_kg_m2"),
-  // Wet film thickness in microns (μm). Used by the applicator on site
-  // with a wet-comb gauge to verify deposition matches spec.
-  wftMicrons: real("wft_microns"),
   // Dry film thickness in microns (μm). The contractually agreed final
   // thickness of this coat once cured.
   dftMicrons: real("dft_microns"),
