@@ -929,6 +929,8 @@ export const systemsApi = {
       systemDuty?: string | null;
       // Phase 3: per-sector substrate override
       sectorOverrides?: Record<string, { substrateOverride?: string | null }>;
+      // System Preview tab: free-text recommendation editable inline.
+      previewNote?: string | null;
     }>
   ) => {
     const response = await fetch(`${API_BASE}/systems/${systemId}`, {

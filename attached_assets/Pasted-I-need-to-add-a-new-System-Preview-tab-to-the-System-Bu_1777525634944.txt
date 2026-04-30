@@ -1,0 +1,113 @@
+I need to add a new "System Preview" tab to the System Builder. It sits alongside Product Qualification, Builder, and Analytics tabs. Read the existing System Builder component fully before touching anything.
+
+## What to build
+
+### New tab: System Preview
+Add a tab labelled "System Preview" with an eye or layout icon (Lucide) in the System Builder tab bar. The tab renders a card grid of all systems, and clicking a card opens a detailed modal preview styled like a PPG technical catalog page.
+
+---
+
+## Section 1 — System card grid
+
+Fetch all systems from the existing systems API on tab mount. Display them as a responsive card grid using Tailwind CSS grid (grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3).
+
+Each card shows:
+- System type badge (Epoxy / PU / Polyurea / Acrylic) — colored pill using the system's material base color
+- System name (truncated to 2 lines max)
+- Substrate · Duty rating (from system parameters if set, otherwise "Not configured")
+- Supplier names (unique list from all products assigned to the system's layers)
+- Status badge (Active / Draft)
+- Layer color bar: a row of small colored rectangles, one per layer, each colored by layer position type:
+  - Primer → amber
+  - Base coat → blue
+  - Intermediate → gray
+  - Topcoat → green
+  - Unknown → light gray
+
+Filter bar above the grid:
+- Search by system name (text input)
+- Filter by type (Epoxy / PU / Polyurea / Acrylic / All)
+- Filter by status (Active / Draft / All)
+- Filter by substrate (from system_substrate field, or All)
+All filters are client-side.
+
+---
+
+## Section 2 — System preview modal
+
+When a card is clicked, open a full-screen modal overlay. Use the min-height wrapper pattern (not position:fixed) — wrap in a div with min-height: 100vh and display:flex.
+
+The modal has two columns side by side (left: cross-section preview, right: layer product details).
+
+### Left column — cross-section panel
+
+Header: system name, description, supplier badge pills (one per unique supplier across all layers).
+
+Build-up cross-section visual:
+- Render each layer as a horizontal bar, stacked bottom to top (structural substrate at bottom, topcoat at top)
+- Each bar has: a left-side color accent stripe (4px, colored by layer position type), a fill area (lighter version of the same color), a layer number circle, and a layer name label
+- If is_final_layer = true, show a small "final" badge on that layer bar
+- Bars are proportional but minimum 32px height each
+- Below the stack, show a dashed bar labelled "Structural substrate: [value]"
+- Each layer bar is clickable — clicking highlights that layer's product card in the right column
+
+System parameters section (below cross-section):
+- Table of key-value rows: Substrate, Humidity, Duty, Finish, Topcoat required (yes/no based on whether any layer has layer_position = topcoat)
+- If system_substrate / system_humidity / system_duty are null, show "Not configured" in muted text
+
+### Right column — layer product details
+
+For each layer (in order, top to bottom matching the cross-section):
+Render a product card containing:
+- Layer number circle (matching color) + layer name label
+- Default product: name, supplier, product code
+- Product qualification tags as small pills: substrate, duty, finish (if set)
+- If the layer has multiple products (alternatives), show pill buttons to switch between them — "Default: [name]" selected, alternatives as clickable pills. Clicking a pill updates the displayed product card for that layer only (local state, no API call)
+- If a product has no qualification tags, show a grey "Unqualified" badge
+
+Below all layer cards:
+- Recommendation box (green background) — a text field showing a note about this system. For now, this is a static text field editable inline. Save the note using PATCH /api/systems/:id with a new field called preview_note (add this nullable text column to the systems table and run npm run db:push).
+
+### Modal actions (bottom bar):
+- "Edit in Builder" button — closes modal and switches to Builder tab with this system selected
+- "Export spec sheet" button — calls sendPrompt with "Generate a spec sheet for [system name]" so Claude can format it
+- Close button (top right)
+
+---
+
+## Section 3 — Data requirements
+
+The preview needs these data points per system. Fetch them efficiently:
+
+1. GET /api/systems — existing endpoint, fetch all systems
+2. For each system, fetch its layers and products — use the existing layers/products endpoints
+3. For each product in a layer, fetch its qualification tags from GET /api/qualification-tags/:productId — use Promise.all to batch these, cache results in a local map to avoid duplicate fetches
+4. Supplier names — derive from the product records already fetched (product.supplier field)
+5. System parameters — from system_substrate, system_humidity, system_duty fields added in Phase 3
+
+Add preview_note (text, nullable) column to the systems table. Extend the existing PATCH /api/systems/:id endpoint to accept and save preview_note.
+
+---
+
+## Layer position color mapping (use consistently in both card strip and modal cross-section):
+- primer → amber: fill #FAEEDA, accent #BA7517, text #633806
+- base_coat → blue: fill #E6F1FB, accent #378ADD, text #0C447C
+- intermediate → gray: fill #F1EFE8, accent #888780, text #444441
+- topcoat → green: fill #EAF3DE, accent #639922, text #27500A
+- standalone → gray: fill #F1EFE8, accent #888780, text #444441
+- unknown/null → light gray: fill #F1EFE8, accent #D3D1C7, text #888780
+
+---
+
+## Rules
+- Do not modify the Builder, Analytics, or Product Qualification tabs
+- Do not modify any existing API routes — only extend (add preview_note field to PATCH /api/systems/:id)
+- The preview is read-only except for the inline preview_note field
+- Alternative product switching is local state only — no API call
+- All filters in the card grid are client-side
+- Run npm run db:push after adding preview_note column
+- The modal must not use position:fixed — use min-height wrapper
+- Use Tailwind CSS and Lucide React matching the existing System Builder style
+- Cache qualification tag fetches in a local Map (productId → tags) to avoid N+1 fetches on modal open
+- The new component lives in: components/SystemBuilderPreview.tsx
+- Import and render it in the existing System Builder component only, as the new tab panel

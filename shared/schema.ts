@@ -189,6 +189,10 @@ export const systems = pgTable("systems", {
   // Nullable / empty by default. Used to override systemSubstrate when
   // searching products inside a particular sector's layers.
   sectorOverrides: jsonb("sector_overrides").$type<Record<string, { substrateOverride?: string | null }>>().default({}),
+  // Free-text recommendation / note shown on the System Preview catalog page.
+  // Editable inline from the preview modal; nullable so legacy systems and
+  // newly-created ones default to no note.
+  previewNote: text("preview_note"),
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow(),
 });
