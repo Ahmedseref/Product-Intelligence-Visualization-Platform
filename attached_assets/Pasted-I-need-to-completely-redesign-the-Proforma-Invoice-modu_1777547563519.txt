@@ -1,0 +1,175 @@
+I need to completely redesign the Proforma Invoice module (ProformaInvoice.tsx) into a single-canvas editor. The current multi-screen design (Create → Edit → Preview as separate screens) must be replaced with one unified screen. Read the full existing ProformaInvoice.tsx and all related components, routes, and schema before making any changes.
+
+## Core design principle
+Single canvas, two-column layout:
+- Left column (controls): all editable fields — customer, shipping, products, financial calculations, notes
+- Right column (live preview): a read-only invoice document that updates in real-time as the user types on the left
+- No separate "Preview" screen. No separate "Edit Details" screen. No modal popups for editing.
+- The invoice list screen still exists as the entry point — clicking an invoice or "+ New Proforma" opens the single-canvas editor
+
+---
+
+## Layout structure
+
+### Top bar (full width, above both columns)
+Left side:
+- Invoice ID (monospace, read-only, auto-generated)
+- Status dropdown inline (Draft / Sent / Accepted / Rejected) — updates immediately on change
+- A small green "Live preview" badge
+
+Right side:
+- Export PDF button
+- Export Excel button  
+- Save button (primary)
+- Back to list link
+
+### Left column (controls, ~40% width, scrollable)
+Five collapsible sections, each with a chevron toggle. Default: all open.
+
+Section 1 — Customer & header:
+- Customer searchable dropdown (existing customers, with "+ Add new" option at bottom)
+- Currency select (USD / EUR / TRY / GBP)
+- Date picker
+- Terms of payment (text input)
+- Terms of delivery / Incoterms (text input)
+
+Section 2 — Shipping & logistics:
+- Port of loading
+- Place of destination
+- Final place of delivery
+- Country of origin
+- Transportation mode (Sea / Air / Road / Rail select)
+- Invoiced to (textarea, leave empty = "Same as consignee")
+
+Section 3 — Products:
+- "+ Add product" button (primary, top right of section)
+- Each product row is a small card with:
+  - Product name (text input, editable inline) — auto-populated from product search
+  - Product code / SKU (text input)
+  - Quantity (number input)
+  - Unit price in currency (number input)
+  - Unit (text input — kg, m², pcs, etc.)
+  - A remove button (✕)
+  - Row total shown below the inputs (qty × unit price, formatted)
+- A product search bar that searches the existing products database (GET /api/products). When a product is clicked from search results, it adds a new row pre-filled with that product's name, code, and price.
+- Subtotal shown at bottom of section (sum of all row totals)
+
+Section 4 — Financial calculations:
+- Description: "Steps run in order. Each % applies to the running total at that point."
+- "+ Add step" button
+- Each step row contains:
+  - Step number (auto, read-only)
+  - Name (text input — e.g. "VAT 20%", "Freight", "Early payment discount")
+  - Type select: "+ Add" / "− Subtract"
+  - Value type select: "%" / "Fixed"
+  - Value (number input)
+  - Computed amount (read-only, shown in muted text: e.g. "+ USD 340.00")
+  - Running total after this step (read-only, muted)
+  - Remove button (✕)
+- Steps can be reordered by drag (use existing drag logic from the editor if it exists)
+- Final total shown at bottom (bold, large)
+
+Section 5 — Notes & bank details:
+- Notes textarea (shown at bottom of invoice)
+- Bank details textarea (monospace font, shown in bank details section of invoice)
+
+### Right column (live preview, ~60% width, sticky top)
+A styled document that mirrors the printed invoice. Updates in real time via React state — no API calls needed for preview updates.
+
+The document structure (top to bottom):
+1. Header row: Company info left (from proforma_settings), invoice title + ID + date right
+2. Bill & ship to block (customer info) | Meta strip (terms, currency, ports, incoterms — from left column fields)
+3. Line items table: Description of goods | Unit price | QTY | Unit | Total
+4. Financial calculations summary: each step as a line (name + computed amount), then Final Total bold
+5. Bank details (monospace, if filled)
+6. Notes / footer (if filled)
+
+All values in the preview come from React state — they update as the user types. No save required to see changes.
+
+---
+
+## Financial calculation engine
+Create a pure function computeFinancials(items, calcSteps, currency):
+
+```typescript
+function computeFinancials(items, calcSteps, currency) {
+  const subtotal = items.reduce((sum, item) => sum + (item.qty * item.unitPrice), 0);
+  let running = subtotal;
+  const steps = calcSteps.map(step => {
+    const amount = step.valType === 'pct' 
+      ? running * (step.value / 100) 
+      : step.value;
+    const signed = step.type === 'sub' ? -amount : amount;
+    running += signed;
+    return { ...step, computedAmount: signed, runningTotal: running };
+  });
+  return { subtotal, steps, finalTotal: running };
+}
+```
+
+This function is called on every state change. Its output drives both the left column (computed amounts per step) and the right column (financials preview).
+
+---
+
+## State management
+Use a single invoice state object in React:
+
+```typescript
+interface InvoiceState {
+  customerId: string;
+  currency: string;
+  date: string;
+  termsOfPayment: string;
+  termsOfDelivery: string;
+  portOfLoading: string;
+  placeOfDestination: string;
+  finalDelivery: string;
+  countryOfOrigin: string;
+  transportationMode: string;
+  invoicedTo: string;
+  items: InvoiceItem[];
+  calcSteps: CalcStep[];
+  notes: string;
+  bankDetails: string;
+  status: string;
+}
+```
+
+Every input onChange updates this state. The preview derives everything from this state. Save calls PATCH /api/proformas/:id (or POST for new) with the full state.
+
+---
+
+## What to remove / simplify
+- Remove the separate Create screen — the single canvas IS the create screen (with empty state)
+- Remove the separate Edit Details modal/panel — those fields are now in Section 1 and 2 of the left column
+- Remove the separate Preview screen — the right column IS the preview
+- Remove the Columns panel — for now, keep the default set of columns (Description, Unit Price, QTY, Unit, Total). Custom columns can be a future enhancement.
+- Keep the List screen (ProformaInvoice list view) exactly as it is
+- Keep the Customers screen exactly as it is
+- Keep Export PDF and Export Excel — they export the right column preview document
+
+---
+
+## API changes needed
+No schema changes required. The existing proformas, proforma_items, proforma_financials tables are sufficient.
+
+New/updated API behavior:
+- GET /api/proformas/:id — returns full invoice with items and financials joined (already exists, confirm it returns items and calcSteps)
+- PATCH /api/proformas/:id — accepts full invoice state including items array and calcSteps array, upserts them (delete old items/steps, insert new ones)
+- POST /api/proformas — same as PATCH but creates new record with auto-generated ID
+- GET /api/products?search=term — already exists, use for product search in Section 3
+
+---
+
+## Rules
+- Single React component file: ProformaInvoice.tsx (or split into ProformaInvoiceEditor.tsx + ProformaInvoiceList.tsx if cleaner)
+- All preview updates are pure React state — no API calls on input change
+- The computeFinancials function must be pure — no side effects
+- All currency amounts displayed with currency prefix and 2 decimal places
+- Numbers must use toFixed(2) — no raw JS float display
+- Use Tailwind CSS matching the existing app style
+- Use Lucide React icons matching the existing app
+- Keep the existing Export PDF and Export Excel functionality working — they should capture/export the right column preview div
+- The right column must be position:sticky top-0 so it stays visible while the user scrolls the left column
+- Run npm run db:push only if schema changes are made (they shouldn't be needed)
+- After changes, test: (1) typing in Terms of Payment updates the preview immediately, (2) adding a product and changing qty updates subtotal and final total, (3) adding a VAT 20% step after a 5% discount correctly applies 20% to the discounted amount not the original subtotal, (4) Export Excel still works
