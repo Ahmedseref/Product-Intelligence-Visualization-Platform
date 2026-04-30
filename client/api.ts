@@ -931,6 +931,10 @@ export const systemsApi = {
       sectorOverrides?: Record<string, { substrateOverride?: string | null }>;
       // System Preview tab: free-text recommendation editable inline.
       previewNote?: string | null;
+      // Installable-spec total build-up thickness range, in millimetres.
+      // Both nullable; null means "not specified yet".
+      totalThicknessMinMm?: number | null;
+      totalThicknessMaxMm?: number | null;
     }>
   ) => {
     const response = await fetch(`${API_BASE}/systems/${systemId}`, {
@@ -971,6 +975,16 @@ export const systemsApi = {
       defaultProductId?: string | null;
       // Phase 3: optional per-layer substrate override
       layerSubstrateOverride?: string | null;
+      // ---- Installable-spec fields. All nullable; null clears the value. ----
+      // kg of material per m² of substrate.
+      consumptionRateKgM2?: number | null;
+      // Wet film thickness (μm).
+      wftMicrons?: number | null;
+      // Dry film thickness (μm).
+      dftMicrons?: number | null;
+      // Recoat window min/max in hours between this coat and the next.
+      recoatMinHours?: number | null;
+      recoatMaxHours?: number | null;
     }>
   ) => {
     const response = await fetch(`${API_BASE}/system-layers/${layerId}`, {

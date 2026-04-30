@@ -69,6 +69,12 @@ type SystemRow = {
   systemHumidity?: string | null;
   systemDuty?: string | null;
   previewNote?: string | null;
+  // Installable-spec total dry-film thickness range (millimetres). Both
+  // sides nullable so legacy systems and partially-spec'd systems remain
+  // valid; the cross-section formatter uses fmtSpecRange to render only
+  // what's set.
+  totalThicknessMinMm?: number | null;
+  totalThicknessMaxMm?: number | null;
 };
 
 type ProductOption = {
@@ -90,6 +96,14 @@ type LayerRow = {
   layerSubstrateOverride?: string | null;
   notes?: string | null;
   productOptions: ProductOption[];
+  // Per-layer installable-spec values. All independently optional so
+  // partially-spec'd layers render only the fields that are set; the
+  // formatter helpers (fmtSpec / fmtSpecRange) gracefully handle nulls.
+  consumptionRateKgM2?: number | null;
+  wftMicrons?: number | null;
+  dftMicrons?: number | null;
+  recoatMinHours?: number | null;
+  recoatMaxHours?: number | null;
 };
 
 type FullSystem = SystemRow & { layers: LayerRow[] };
@@ -116,6 +130,62 @@ const LAYER_COLORS: Record<string, { fill: string; accent: string; text: string;
   standalone:   { fill: '#F1EFE8', accent: '#888780', text: '#444441', label: 'Standalone'   },
   unknown:      { fill: '#F1EFE8', accent: '#D3D1C7', text: '#888780', label: 'Layer'        },
 };
+
+// ---------------------------------------------------------------------------
+// Installable-spec value formatters.
+//   - fmtSpec returns "<value><suffix>" for a single non-null number; returns
+//     `null` (NOT a dash) when the value is missing so callers can decide
+//     whether to render a placeholder or skip the field entirely. We strip
+//     trailing zeros from decimals so 0.30 → "0.3" but 0 → "0" (kept).
+//   - fmtSpecRange returns "min–max suffix" when both sides are present, a
+//     single value with a "≤" / "≥" prefix when only one side is set, or
+//     `null` when both are missing.
+// ---------------------------------------------------------------------------
+function fmtSpecNumber(n: number): string {
+  // Six significant digits is more precision than any coatings spec needs;
+  // toFixed(2) would lose 0.05 kg/m² primer values. Number(...) round-trip
+  // strips trailing zeros while keeping the canonical short form.
+  return String(Number(n.toPrecision(6)));
+}
+function fmtSpec(value: number | null | undefined, suffix: string): string | null {
+  if (value == null || !Number.isFinite(value)) return null;
+  return `${fmtSpecNumber(value)}${suffix ? ' ' + suffix : ''}`;
+}
+function fmtSpecRange(min: number | null | undefined, max: number | null | undefined, suffix: string): string | null {
+  const hasMin = min != null && Number.isFinite(min);
+  const hasMax = max != null && Number.isFinite(max);
+  if (!hasMin && !hasMax) return null;
+  const tail = suffix ? ' ' + suffix : '';
+  if (hasMin && hasMax) {
+    if (min === max) return `${fmtSpecNumber(min)}${tail}`;
+    return `${fmtSpecNumber(min)}–${fmtSpecNumber(max)}${tail}`;
+  }
+  if (hasMin) return `≥ ${fmtSpecNumber(min!)}${tail}`;
+  return `≤ ${fmtSpecNumber(max!)}${tail}`;
+}
+// Build a compact, human-friendly spec summary for a layer row. Returns
+// `null` when the layer has no spec values at all so callers can skip the
+// rendering entirely. Order matches the natural reading order on a
+// technical data sheet: how-much / how-thick / when-to-recoat.
+type LayerSpecLike = {
+  consumptionRateKgM2?: number | null;
+  wftMicrons?: number | null;
+  dftMicrons?: number | null;
+  recoatMinHours?: number | null;
+  recoatMaxHours?: number | null;
+};
+function buildLayerSpecSummary(l: LayerSpecLike): string | null {
+  const parts: string[] = [];
+  const consumption = fmtSpec(l.consumptionRateKgM2, 'kg/m²');
+  if (consumption) parts.push(consumption);
+  const wft = fmtSpec(l.wftMicrons, 'μm WFT');
+  if (wft) parts.push(wft);
+  const dft = fmtSpec(l.dftMicrons, 'μm DFT');
+  if (dft) parts.push(dft);
+  const recoat = fmtSpecRange(l.recoatMinHours, l.recoatMaxHours, 'h recoat');
+  if (recoat) parts.push(recoat);
+  return parts.length ? parts.join(' · ') : null;
+}
 
 // ---------------------------------------------------------------------------
 // Material chemistry detection. Same regex set used by the System Builder's
@@ -620,9 +690,16 @@ export default function SystemBuilderPreview({ onEditInBuilder }: Props) {
     if (openSystem.description) lines.push(openSystem.description);
     lines.push('');
     lines.push('System parameters');
-    lines.push(`  Substrate : ${openSystem.systemSubstrate || 'Not configured'}`);
-    lines.push(`  Humidity  : ${openSystem.systemHumidity || 'Not configured'}`);
-    lines.push(`  Duty      : ${openSystem.systemDuty || 'Not configured'}`);
+    lines.push(`  Substrate       : ${openSystem.systemSubstrate || 'Not configured'}`);
+    lines.push(`  Humidity        : ${openSystem.systemHumidity || 'Not configured'}`);
+    lines.push(`  Duty            : ${openSystem.systemDuty || 'Not configured'}`);
+    // Installable-spec total build-up thickness — labelled "Not configured"
+    // when both bounds are null so the section reads consistently with the
+    // qualification fields above.
+    {
+      const total = fmtSpecRange(openSystem.totalThicknessMinMm, openSystem.totalThicknessMaxMm, 'mm');
+      lines.push(`  Total thickness : ${total || 'Not configured'}`);
+    }
     lines.push('');
     lines.push('Build-up (bottom → top)');
     for (let i = 0; i < openSystem.layers.length; i++) {
@@ -634,6 +711,18 @@ export default function SystemBuilderPreview({ onEditInBuilder }: Props) {
         lines.push(`    Default product: ${def.productName || '—'}  (${def.productStockCode || 'no code'})`);
         lines.push(`    Supplier:        ${def.productSupplier || '—'}`);
       }
+      // Installable-spec values per layer. Each is independently optional;
+      // we emit only the lines that have a value so the spec sheet stays
+      // readable for partially-spec'd systems instead of carrying a wall
+      // of dashes. fmtSpec / fmtSpecRange return null when missing.
+      const consumption = fmtSpec(l.consumptionRateKgM2, 'kg/m²');
+      const wft = fmtSpec(l.wftMicrons, 'μm');
+      const dft = fmtSpec(l.dftMicrons, 'μm');
+      const recoat = fmtSpecRange(l.recoatMinHours, l.recoatMaxHours, 'hrs');
+      if (consumption) lines.push(`    Consumption:     ${consumption}`);
+      if (wft)         lines.push(`    Wet film (WFT):  ${wft}`);
+      if (dft)         lines.push(`    Dry film (DFT):  ${dft}`);
+      if (recoat)      lines.push(`    Recoat window:   ${recoat}`);
       const others = l.productOptions.filter(o => o !== def);
       if (others.length) {
         lines.push(`    Alternatives:    ${others.map(o => o.productName).filter(Boolean).join(', ')}`);
@@ -951,22 +1040,42 @@ export default function SystemBuilderPreview({ onEditInBuilder }: Props) {
                               title={`Click to highlight layer ${realIdx + 1}`}
                             >
                               <div style={{ width: 4, backgroundColor: c.accent }} />
-                              <div className="flex-1 flex items-center px-3 py-2 gap-3" style={{ backgroundColor: c.fill }}>
-                                <span
-                                  className="inline-flex items-center justify-center w-6 h-6 rounded-full text-[11px] font-bold text-white"
-                                  style={{ backgroundColor: c.accent }}
-                                >
-                                  {realIdx + 1}
-                                </span>
-                                <span className="text-sm font-medium" style={{ color: c.text }}>{l.layerName}</span>
-                                <span className="text-[10px] uppercase tracking-wider" style={{ color: c.text, opacity: 0.7 }}>
-                                  {c.label}
-                                </span>
-                                {isFinal && (
-                                  <span className="ml-auto text-[10px] font-semibold px-1.5 py-0.5 rounded bg-white border border-slate-200 text-slate-600">
-                                    final
+                              <div className="flex-1 flex flex-col px-3 py-2" style={{ backgroundColor: c.fill }}>
+                                <div className="flex items-center gap-3">
+                                  <span
+                                    className="inline-flex items-center justify-center w-6 h-6 rounded-full text-[11px] font-bold text-white"
+                                    style={{ backgroundColor: c.accent }}
+                                  >
+                                    {realIdx + 1}
                                   </span>
-                                )}
+                                  <span className="text-sm font-medium" style={{ color: c.text }}>{l.layerName}</span>
+                                  <span className="text-[10px] uppercase tracking-wider" style={{ color: c.text, opacity: 0.7 }}>
+                                    {c.label}
+                                  </span>
+                                  {isFinal && (
+                                    <span className="ml-auto text-[10px] font-semibold px-1.5 py-0.5 rounded bg-white border border-slate-200 text-slate-600">
+                                      final
+                                    </span>
+                                  )}
+                                </div>
+                                {/* Installable-spec summary line. Only rendered
+                                    when at least one of consumption/WFT/DFT/recoat
+                                    is set so an unspec'd legacy system still
+                                    shows the same compact bar as before. The
+                                    monospace tabular figures keep the values
+                                    aligned across stacked layers. */}
+                                {(() => {
+                                  const summary = buildLayerSpecSummary(l);
+                                  if (!summary) return null;
+                                  return (
+                                    <div
+                                      className="mt-1 ml-9 text-[10px] font-mono tabular-nums truncate"
+                                      style={{ color: c.text, opacity: 0.75 }}
+                                    >
+                                      {summary}
+                                    </div>
+                                  );
+                                })()}
                               </div>
                             </button>
                           );
@@ -1000,6 +1109,13 @@ export default function SystemBuilderPreview({ onEditInBuilder }: Props) {
                               })()],
                             ['Topcoat required',
                               openSystem.layers.some(l => inferLayerPositionFromSlotName(l.layerName) === 'topcoat') ? 'Yes' : 'No'],
+                            // Installable-spec total build-up thickness range.
+                            // Rendered through the same fmt helper used by the
+                            // cross-section bars so the formatting (and the
+                            // "≥" / "≤" handling for one-sided ranges) is
+                            // shared in a single place.
+                            ['Total thickness',
+                              fmtSpecRange(openSystem.totalThicknessMinMm, openSystem.totalThicknessMaxMm, 'mm')],
                           ].map(([k, v]) => (
                             <tr key={k as string} className="border-b border-slate-200 last:border-b-0">
                               <td className="py-1.5 text-slate-500 w-1/3">{k}</td>
@@ -1080,6 +1196,40 @@ export default function SystemBuilderPreview({ onEditInBuilder }: Props) {
                                       <TagPill tone="slate">Unqualified</TagPill>
                                     )}
                                   </div>
+
+                                  {/* Installable-spec mini-table. Only rendered
+                                      when the layer carries at least one of the
+                                      five spec values. Two-column grid keeps
+                                      labels right-aligned and values monospaced
+                                      so multiple stacked layer cards line up
+                                      visually. */}
+                                  {(() => {
+                                    const consumption = fmtSpec(l.consumptionRateKgM2, 'kg/m²');
+                                    const wft = fmtSpec(l.wftMicrons, 'μm');
+                                    const dft = fmtSpec(l.dftMicrons, 'μm');
+                                    const recoat = fmtSpecRange(l.recoatMinHours, l.recoatMaxHours, 'h');
+                                    if (!consumption && !wft && !dft && !recoat) return null;
+                                    return (
+                                      <dl className="mt-3 pt-2 border-t border-slate-100 grid grid-cols-[auto_1fr] gap-x-3 gap-y-0.5 text-[11px]">
+                                        {consumption && (<>
+                                          <dt className="text-slate-400">Consumption</dt>
+                                          <dd className="text-slate-700 font-mono tabular-nums">{consumption}</dd>
+                                        </>)}
+                                        {wft && (<>
+                                          <dt className="text-slate-400">WFT</dt>
+                                          <dd className="text-slate-700 font-mono tabular-nums">{wft}</dd>
+                                        </>)}
+                                        {dft && (<>
+                                          <dt className="text-slate-400">DFT</dt>
+                                          <dd className="text-slate-700 font-mono tabular-nums">{dft}</dd>
+                                        </>)}
+                                        {recoat && (<>
+                                          <dt className="text-slate-400">Recoat</dt>
+                                          <dd className="text-slate-700 font-mono tabular-nums">{recoat}</dd>
+                                        </>)}
+                                      </dl>
+                                    );
+                                  })()}
 
                                   {/* Alternatives switcher */}
                                   {l.productOptions.length > 1 && (
@@ -1244,6 +1394,13 @@ export default function SystemBuilderPreview({ onEditInBuilder }: Props) {
                   ['Finish',          finishOf(A),                       finishOf(B)],
                   ['Topcoat required', topcoatOf(A),                     topcoatOf(B)],
                   ['Layer count',     String(A.layers.length),           String(B.layers.length)],
+                  // Installable-spec total thickness goes through the same
+                  // fmt helper as everywhere else; empty string when neither
+                  // bound is set so the existing "Not configured" placeholder
+                  // and the differs-only highlighting both still work.
+                  ['Total thickness',
+                    fmtSpecRange(A.totalThicknessMinMm, A.totalThicknessMaxMm, 'mm') || '',
+                    fmtSpecRange(B.totalThicknessMinMm, B.totalThicknessMaxMm, 'mm') || ''],
                 ];
 
                 // Render a single side's cross-section (top→bottom) — used
@@ -1262,19 +1419,38 @@ export default function SystemBuilderPreview({ onEditInBuilder }: Props) {
                           style={{ minHeight: 32 }}
                         >
                           <div style={{ width: 4, backgroundColor: c.accent }} />
-                          <div className="flex-1 flex items-center px-3 py-1.5 gap-2" style={{ backgroundColor: c.fill }}>
-                            <span
-                              className="inline-flex items-center justify-center w-5 h-5 rounded-full text-[10px] font-bold text-white"
-                              style={{ backgroundColor: c.accent }}
-                            >
-                              {realIdx + 1}
-                            </span>
-                            <span className="text-xs font-medium truncate" style={{ color: c.text }}>{l.layerName}</span>
-                            {isFinal && (
-                              <span className="ml-auto text-[9px] font-semibold px-1.5 py-0.5 rounded bg-white border border-slate-200 text-slate-600">
-                                final
+                          <div className="flex-1 flex flex-col px-3 py-1.5" style={{ backgroundColor: c.fill }}>
+                            <div className="flex items-center gap-2">
+                              <span
+                                className="inline-flex items-center justify-center w-5 h-5 rounded-full text-[10px] font-bold text-white"
+                                style={{ backgroundColor: c.accent }}
+                              >
+                                {realIdx + 1}
                               </span>
-                            )}
+                              <span className="text-xs font-medium truncate" style={{ color: c.text }}>{l.layerName}</span>
+                              {isFinal && (
+                                <span className="ml-auto text-[9px] font-semibold px-1.5 py-0.5 rounded bg-white border border-slate-200 text-slate-600">
+                                  final
+                                </span>
+                              )}
+                            </div>
+                            {/* Compare-modal compact spec line — same source
+                                helper as the single-preview bar so both views
+                                read identically. Skipped when the layer has
+                                no spec values to keep the side-by-side height
+                                tight. */}
+                            {(() => {
+                              const summary = buildLayerSpecSummary(l);
+                              if (!summary) return null;
+                              return (
+                                <div
+                                  className="mt-0.5 ml-7 text-[9px] font-mono tabular-nums truncate"
+                                  style={{ color: c.text, opacity: 0.7 }}
+                                >
+                                  {summary}
+                                </div>
+                              );
+                            })()}
                           </div>
                         </div>
                       );
@@ -1300,6 +1476,19 @@ export default function SystemBuilderPreview({ onEditInBuilder }: Props) {
                           <div className="min-w-0">
                             <div className="text-slate-700 font-medium truncate">{l.layerName}</div>
                             <div className="text-slate-500 truncate">{def?.productName || <span className="italic">No product</span>}</div>
+                            {/* Per-layer installable-spec summary in the
+                                compare layer-summary list. Hidden when the
+                                layer has nothing spec'd, so legacy systems
+                                don't gain an empty grey line. */}
+                            {(() => {
+                              const summary = buildLayerSpecSummary(l);
+                              if (!summary) return null;
+                              return (
+                                <div className="text-[10px] text-slate-400 font-mono tabular-nums truncate mt-0.5">
+                                  {summary}
+                                </div>
+                              );
+                            })()}
                           </div>
                         </li>
                       );

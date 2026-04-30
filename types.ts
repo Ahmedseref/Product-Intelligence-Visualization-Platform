@@ -175,6 +175,12 @@ export interface SystemData {
   systemDuty?: string | null;
   // Optional per-sector overrides keyed by sector name.
   sectorOverrides?: Record<string, { substrateOverride?: string | null }> | null;
+  // Free-text recommendation shown on the System Preview catalog tab.
+  previewNote?: string | null;
+  // Installable-spec total dry-film thickness range for the build-up, in mm.
+  // Both nullable; absence means "not specified yet".
+  totalThicknessMinMm?: number | null;
+  totalThicknessMaxMm?: number | null;
   createdAt: string;
   updatedAt: string;
 }
@@ -191,6 +197,13 @@ export interface SystemLayer {
   // Optional per-layer substrate override (wins over sector and system
   // substrate when filtering product search).
   layerSubstrateOverride?: string | null;
+  // Installable-spec fields; all nullable. Stored as `real` server-side and
+  // round-tripped as plain JS numbers.
+  consumptionRateKgM2?: number | null; // kg of material per m² of substrate
+  wftMicrons?: number | null;          // wet film thickness, μm
+  dftMicrons?: number | null;          // dry film thickness, μm
+  recoatMinHours?: number | null;      // minimum hours before next coat
+  recoatMaxHours?: number | null;      // maximum hours before next coat
   createdAt: string;
   updatedAt: string;
 }

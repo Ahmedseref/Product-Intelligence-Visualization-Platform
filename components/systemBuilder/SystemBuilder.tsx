@@ -32,6 +32,97 @@ interface SystemBuilderProps {
 
 type TabMode = 'builder' | 'analytics' | 'qualification' | 'preview';
 
+// ----------------------------------------------------------------------------
+// SpecNumberInput
+// Compact uncontrolled-feeling numeric cell used by the installable-spec rows
+// (system thickness range + per-layer consumption / WFT / DFT / recoat). It
+// keeps a local string draft so partial typing like "1." or "" doesn't fire
+// premature saves, then commits on blur or Enter. The draft is re-synced from
+// the prop via useEffect so a parent refresh (loadFullSystem) overwrites stale
+// in-flight edits cleanly. Empty input is treated as `null` (clears the value).
+// Returning early when nothing changed keeps the network quiet on plain focus
+// in/out without any edits.
+// ----------------------------------------------------------------------------
+interface SpecNumberInputProps {
+  value: number | null | undefined;
+  onSave: (next: number | null) => void;
+  placeholder?: string;
+  className?: string;
+  step?: string;
+  ariaLabel?: string;
+  testId?: string;
+  disabled?: boolean;
+}
+const SpecNumberInput: React.FC<SpecNumberInputProps> = React.memo(({
+  value, onSave, placeholder, className, step, ariaLabel, testId, disabled,
+}) => {
+  const initial = value == null ? '' : String(value);
+  const [draft, setDraft] = React.useState<string>(initial);
+  // Escape sets this flag so the immediately-following blur does NOT commit.
+  // We need a ref (not state) because the blur handler reads it synchronously
+  // in the same tick the Escape keydown fires, before any re-render. The flag
+  // is cleared inside the blur handler so subsequent normal blurs still save.
+  const skipNextCommitRef = React.useRef<boolean>(false);
+  // Re-sync the draft when the persisted value changes (parent reloaded). We
+  // only overwrite when the parent's value differs from what we currently show
+  // so that mid-edit refreshes don't yank the cursor out of the field.
+  React.useEffect(() => {
+    const next = value == null ? '' : String(value);
+    setDraft(prev => (prev === next ? prev : next));
+  }, [value]);
+  const commit = React.useCallback(() => {
+    const trimmed = draft.trim();
+    const nextNumeric: number | null = trimmed === '' ? null : Number(trimmed);
+    // Reject non-numeric garbage by snapping the draft back to the persisted value.
+    if (nextNumeric !== null && !Number.isFinite(nextNumeric)) {
+      setDraft(value == null ? '' : String(value));
+      return;
+    }
+    // No-op when the value didn't actually change (avoids needless network).
+    const persisted: number | null = value == null ? null : value;
+    if (nextNumeric === persisted) return;
+    onSave(nextNumeric);
+  }, [draft, value, onSave]);
+  return (
+    <input
+      type="number"
+      inputMode="decimal"
+      step={step ?? 'any'}
+      value={draft}
+      placeholder={placeholder ?? '—'}
+      aria-label={ariaLabel}
+      data-testid={testId}
+      disabled={disabled}
+      onChange={(e) => setDraft(e.target.value)}
+      onBlur={() => {
+        // Honour the discard flag set by Escape — and clear it regardless so
+        // the *next* blur (a normal one) still commits. Without this guard
+        // the closure-captured `draft` inside `commit` is the pre-Escape edit
+        // (setDraft is async), so Escape would silently save the abandoned
+        // value.
+        if (skipNextCommitRef.current) {
+          skipNextCommitRef.current = false;
+          return;
+        }
+        commit();
+      }}
+      onKeyDown={(e) => {
+        if (e.key === 'Enter') (e.target as HTMLInputElement).blur();
+        if (e.key === 'Escape') {
+          // Discard local edits and snap back to persisted value. Mark the
+          // imminent blur as a "skip commit" so the discard isn't immediately
+          // re-saved by the onBlur handler reading stale draft state.
+          skipNextCommitRef.current = true;
+          setDraft(value == null ? '' : String(value));
+          (e.target as HTMLInputElement).blur();
+        }
+      }}
+      className={className ?? 'w-16 px-1.5 py-0.5 text-[11px] text-right border border-slate-200 rounded bg-white focus:ring-1 focus:ring-indigo-400 outline-none disabled:bg-slate-50 disabled:text-slate-400'}
+    />
+  );
+});
+SpecNumberInput.displayName = 'SpecNumberInput';
+
 const SystemBuilder: React.FC<SystemBuilderProps> = ({ products, onProductUpdate, customFields, treeNodes, suppliers, usageAreas, units, colors, currentUser, onAddFieldDefinition, onAddTreeNode, onProductEdit }) => {
   const [activeTab, setActiveTab] = useState<TabMode>('builder');
   const [systems, setSystems] = useState<SystemData[]>([]);
@@ -432,6 +523,17 @@ const SystemBuilder: React.FC<SystemBuilderProps> = ({ products, onProductUpdate
       });
       newSystemId = newSystem.systemId;
 
+      // Carry over the system-level installable-spec totals so the duplicate
+      // genuinely matches the source (otherwise duplicating loses thickness).
+      // updateSystem accepts nullable numbers; passing the source values
+      // through unchanged also covers the "both null" case as a no-op patch.
+      if (source.totalThicknessMinMm != null || source.totalThicknessMaxMm != null) {
+        await systemsApi.updateSystem(newSystem.systemId, {
+          totalThicknessMinMm: source.totalThicknessMinMm ?? null,
+          totalThicknessMaxMm: source.totalThicknessMaxMm ?? null,
+        });
+      }
+
       // Recreate every layer and its product options preserving order.
       // We pass orderSequence explicitly so the duplicate keeps the same
       // visual order as the source (server defaults this to 0, which would
@@ -445,6 +547,28 @@ const SystemBuilder: React.FC<SystemBuilderProps> = ({ products, onProductUpdate
           notes: layer.notes || '',
           orderSequence: layer.orderSequence ?? i,
         });
+
+        // Copy the per-layer installable-spec values into the duplicate. We
+        // update rather than pass on create because createLayer's typed
+        // signature is intentionally narrow; a follow-up updateLayer is the
+        // single shared write path for all spec fields and keeps the API
+        // surface tight. Skipped entirely when the source layer has nothing
+        // spec'd to avoid a noop network round-trip.
+        const hasSpec =
+          layer.consumptionRateKgM2 != null ||
+          layer.wftMicrons != null ||
+          layer.dftMicrons != null ||
+          layer.recoatMinHours != null ||
+          layer.recoatMaxHours != null;
+        if (hasSpec) {
+          await systemsApi.updateLayer(newLayer.layerId, {
+            consumptionRateKgM2: layer.consumptionRateKgM2 ?? null,
+            wftMicrons: layer.wftMicrons ?? null,
+            dftMicrons: layer.dftMicrons ?? null,
+            recoatMinHours: layer.recoatMinHours ?? null,
+            recoatMaxHours: layer.recoatMaxHours ?? null,
+          });
+        }
 
         for (const opt of layer.productOptions || []) {
           await systemsApi.addProductOption({
@@ -563,8 +687,15 @@ const SystemBuilder: React.FC<SystemBuilderProps> = ({ products, onProductUpdate
   };
 
   // Save the system-level parameter header values (substrate / humidity /
-  // duty). All three are nullable — pass null to clear an individual field.
-  const handleSaveSystemParams = async (patch: { systemSubstrate?: string | null; systemHumidity?: string | null; systemDuty?: string | null }) => {
+  // duty / total thickness range). All fields are nullable — pass null to
+  // clear an individual field.
+  const handleSaveSystemParams = async (patch: {
+    systemSubstrate?: string | null;
+    systemHumidity?: string | null;
+    systemDuty?: string | null;
+    totalThicknessMinMm?: number | null;
+    totalThicknessMaxMm?: number | null;
+  }) => {
     if (!selectedSystemId) return;
     setSavingParams(true);
     try {
@@ -574,6 +705,28 @@ const SystemBuilder: React.FC<SystemBuilderProps> = ({ products, onProductUpdate
       console.error('Failed to save system parameters:', err);
     } finally {
       setSavingParams(false);
+    }
+  };
+
+  // Save one or more installable-spec fields on a single layer. Mirrors
+  // the system-params handler: optimistic-free, refresh-after-save so the
+  // displayed values are always the server's truth. Nulls clear the field.
+  const handleSaveLayerSpec = async (
+    layerId: string,
+    patch: Partial<{
+      consumptionRateKgM2: number | null;
+      wftMicrons: number | null;
+      dftMicrons: number | null;
+      recoatMinHours: number | null;
+      recoatMaxHours: number | null;
+    }>
+  ) => {
+    if (!selectedSystemId) return;
+    try {
+      await systemsApi.updateLayer(layerId, patch);
+      await loadFullSystem(selectedSystemId);
+    } catch (err) {
+      console.error('Failed to save layer spec:', err);
     }
   };
 
@@ -1465,6 +1618,36 @@ const SystemBuilder: React.FC<SystemBuilderProps> = ({ products, onProductUpdate
                         {vocab.duty.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
                       </select>
                     </div>
+                    {/* ---------- Installable spec: total dry-film thickness ---------- */}
+                    {/* Sits on its own full-width row beneath the qualification
+                        triple. Two compact numeric inputs let the spec carry
+                        an "X – Y mm" build-up range; either side is optional
+                        so a single-coat system can carry just min, and a
+                        target-thickness system can leave one side blank. */}
+                    <div className="sm:col-span-3">
+                      <label className="block text-[10px] font-semibold text-slate-500 uppercase mb-1">
+                        Total dry-film thickness
+                        <span className="ml-1 text-slate-400 normal-case font-normal">(mm, optional)</span>
+                      </label>
+                      <div className="flex items-center gap-2 text-xs text-slate-500">
+                        <SpecNumberInput
+                          value={fullSystem.totalThicknessMinMm}
+                          onSave={(v) => handleSaveSystemParams({ totalThicknessMinMm: v })}
+                          ariaLabel="Total dry-film thickness minimum (mm)"
+                          testId="system-total-thickness-min"
+                          className="w-20 px-2 py-1 text-sm text-right border border-slate-200 rounded-lg bg-white focus:ring-2 focus:ring-indigo-500 outline-none"
+                        />
+                        <span className="text-slate-400">–</span>
+                        <SpecNumberInput
+                          value={fullSystem.totalThicknessMaxMm}
+                          onSave={(v) => handleSaveSystemParams({ totalThicknessMaxMm: v })}
+                          ariaLabel="Total dry-film thickness maximum (mm)"
+                          testId="system-total-thickness-max"
+                          className="w-20 px-2 py-1 text-sm text-right border border-slate-200 rounded-lg bg-white focus:ring-2 focus:ring-indigo-500 outline-none"
+                        />
+                        <span className="text-slate-500">mm total</span>
+                      </div>
+                    </div>
                     {/* Active sector context picker — only shown when more than
                         one sector has a substrate override defined, since
                         otherwise getEffectiveSubstrate auto-resolves it. */}
@@ -1583,6 +1766,69 @@ const SystemBuilder: React.FC<SystemBuilderProps> = ({ products, onProductUpdate
                             </button>
                           </>
                         )}
+                      </div>
+
+                      {/* ---------- Installable spec strip ----------
+                          Always-visible compact row of five numeric fields:
+                          consumption (kg/m²), WFT/DFT (μm), and recoat min/max
+                          (hrs). They sit directly under the layer header so
+                          the spec is impossible to miss when reviewing a
+                          layer; absence of values shows as a placeholder dash
+                          so an unspec'd layer reads as "needs values" rather
+                          than as a regression. Keyboard-accessible via labels
+                          + aria-labels on each input. */}
+                      <div
+                        className="px-3 py-1.5 bg-slate-50/60 border-b border-slate-100 flex flex-wrap items-center gap-x-3 gap-y-1 text-[11px] text-slate-500"
+                        data-testid={`layer-spec-strip-${layer.layerId}`}
+                      >
+                        <span className="font-semibold text-slate-400 uppercase tracking-wide text-[10px]">Spec</span>
+                        <label className="flex items-center gap-1">
+                          <span className="text-slate-500">Consumption</span>
+                          <SpecNumberInput
+                            value={layer.consumptionRateKgM2}
+                            onSave={(v) => handleSaveLayerSpec(layer.layerId, { consumptionRateKgM2: v })}
+                            ariaLabel={`Consumption rate (kg/m²) for layer ${layer.layerName}`}
+                            testId={`layer-consumption-${layer.layerId}`}
+                          />
+                          <span className="text-slate-400">kg/m²</span>
+                        </label>
+                        <label className="flex items-center gap-1">
+                          <span className="text-slate-500">WFT</span>
+                          <SpecNumberInput
+                            value={layer.wftMicrons}
+                            onSave={(v) => handleSaveLayerSpec(layer.layerId, { wftMicrons: v })}
+                            ariaLabel={`Wet film thickness (μm) for layer ${layer.layerName}`}
+                            testId={`layer-wft-${layer.layerId}`}
+                          />
+                          <span className="text-slate-400">μm</span>
+                        </label>
+                        <label className="flex items-center gap-1">
+                          <span className="text-slate-500">DFT</span>
+                          <SpecNumberInput
+                            value={layer.dftMicrons}
+                            onSave={(v) => handleSaveLayerSpec(layer.layerId, { dftMicrons: v })}
+                            ariaLabel={`Dry film thickness (μm) for layer ${layer.layerName}`}
+                            testId={`layer-dft-${layer.layerId}`}
+                          />
+                          <span className="text-slate-400">μm</span>
+                        </label>
+                        <label className="flex items-center gap-1">
+                          <span className="text-slate-500">Recoat</span>
+                          <SpecNumberInput
+                            value={layer.recoatMinHours}
+                            onSave={(v) => handleSaveLayerSpec(layer.layerId, { recoatMinHours: v })}
+                            ariaLabel={`Recoat minimum (hours) for layer ${layer.layerName}`}
+                            testId={`layer-recoat-min-${layer.layerId}`}
+                          />
+                          <span className="text-slate-400">–</span>
+                          <SpecNumberInput
+                            value={layer.recoatMaxHours}
+                            onSave={(v) => handleSaveLayerSpec(layer.layerId, { recoatMaxHours: v })}
+                            ariaLabel={`Recoat maximum (hours) for layer ${layer.layerName}`}
+                            testId={`layer-recoat-max-${layer.layerId}`}
+                          />
+                          <span className="text-slate-400">hrs</span>
+                        </label>
                       </div>
 
                       {showAddProduct === layer.layerId && (

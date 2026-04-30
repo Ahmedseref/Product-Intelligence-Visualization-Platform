@@ -477,7 +477,19 @@ export function registerSystemRoutes(app: Express): void {
             .from(systemProductOptions)
             .leftJoin(products, eq(systemProductOptions.productId, products.productId))
             .where(eq(systemProductOptions.layerId, layer.layerId));
-          return { layerName: layer.layerName, order: layer.orderSequence, notes: layer.notes, products: options };
+          return {
+            layerName: layer.layerName,
+            order: layer.orderSequence,
+            notes: layer.notes,
+            // Installable-spec fields. Round-tripped through export/import
+            // so the spec is fully portable between environments.
+            consumptionRateKgM2: layer.consumptionRateKgM2,
+            wftMicrons: layer.wftMicrons,
+            dftMicrons: layer.dftMicrons,
+            recoatMinHours: layer.recoatMinHours,
+            recoatMaxHours: layer.recoatMaxHours,
+            products: options,
+          };
         })
       );
 
@@ -487,6 +499,9 @@ export function registerSystemRoutes(app: Express): void {
         typicalUses: system.typicalUses,
         status: system.status,
         version: system.version,
+        // Installable-spec system-wide build-up thickness range (mm).
+        totalThicknessMinMm: system.totalThicknessMinMm,
+        totalThicknessMaxMm: system.totalThicknessMaxMm,
         layers: layersWithProducts,
         exportedAt: new Date().toISOString(),
       };
@@ -525,7 +540,17 @@ export function registerSystemRoutes(app: Express): void {
 
   app.post("/api/systems/import", async (req, res) => {
     try {
-      const { name, description, typicalUses, sectorMapping, layers } = req.body;
+      const {
+        name,
+        description,
+        typicalUses,
+        sectorMapping,
+        layers,
+        // Installable-spec system fields. Optional; missing on legacy
+        // exports and that's fine — they remain null.
+        totalThicknessMinMm,
+        totalThicknessMaxMm,
+      } = req.body;
 
       if (!name) return res.status(400).json({ error: "System name is required" });
 
@@ -537,6 +562,8 @@ export function registerSystemRoutes(app: Express): void {
         typicalUses: typicalUses || "",
         sectorMapping: sectorMapping || [],
         status: "draft",
+        totalThicknessMinMm: totalThicknessMinMm ?? null,
+        totalThicknessMaxMm: totalThicknessMaxMm ?? null,
       }).returning();
 
       if (layers && Array.isArray(layers)) {
@@ -549,6 +576,13 @@ export function registerSystemRoutes(app: Express): void {
             layerName: layer.layerName || layer.name || `Layer ${i + 1}`,
             orderSequence: layer.orderSequence ?? layer.order ?? i,
             notes: layer.notes || "",
+            // Installable-spec layer fields. Each defaults to null when
+            // absent so legacy exports import cleanly.
+            consumptionRateKgM2: layer.consumptionRateKgM2 ?? null,
+            wftMicrons: layer.wftMicrons ?? null,
+            dftMicrons: layer.dftMicrons ?? null,
+            recoatMinHours: layer.recoatMinHours ?? null,
+            recoatMaxHours: layer.recoatMaxHours ?? null,
           });
 
           if (layer.products && Array.isArray(layer.products)) {

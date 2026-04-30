@@ -193,6 +193,14 @@ export const systems = pgTable("systems", {
   // Editable inline from the preview modal; nullable so legacy systems and
   // newly-created ones default to no note.
   previewNote: text("preview_note"),
+  // Installable-spec total dry-film thickness for the whole build-up, in
+  // millimetres. Min/max range so a system can carry e.g. "2.0 – 3.0 mm".
+  // Both nullable for backward compatibility with systems that haven't
+  // been spec'd yet. Stored as `real` (single-precision float) — physical
+  // quantities, not money, so float precision is more than enough and
+  // round-trips as a JS number rather than a numeric-string.
+  totalThicknessMinMm: real("total_thickness_min_mm"),
+  totalThicknessMaxMm: real("total_thickness_max_mm"),
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow(),
 });
@@ -212,6 +220,25 @@ export const systemLayers = pgTable("system_layers", {
   // and the system-level substrate when filtering the product search for
   // this specific layer. Nullable for backward compatibility.
   layerSubstrateOverride: varchar("layer_substrate_override", { length: 50 }),
+  // ---- Installable-spec fields (all nullable so legacy layers stay valid) ----
+  // Material consumption per square metre of substrate, in kg/m². Convention
+  // is kg/m² because the dominant materials in this app (epoxy, PU,
+  // polyurea, cement-acrylic) are quoted that way; for thinned coatings the
+  // user can convert in their head. Stored as `real`; allows fractional
+  // values like 0.35 (typical primer) up to 6 (heavy self-leveller).
+  consumptionRateKgM2: real("consumption_rate_kg_m2"),
+  // Wet film thickness in microns (μm). Used by the applicator on site
+  // with a wet-comb gauge to verify deposition matches spec.
+  wftMicrons: real("wft_microns"),
+  // Dry film thickness in microns (μm). The contractually agreed final
+  // thickness of this coat once cured.
+  dftMicrons: real("dft_microns"),
+  // Recoat window minimum/maximum hours between this coat and the next.
+  // Missing the max recoat window is the single most common cause of
+  // intercoat adhesion failure for PU and polyurea systems, so both
+  // bounds are surfaced as first-class fields.
+  recoatMinHours: real("recoat_min_hours"),
+  recoatMaxHours: real("recoat_max_hours"),
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow(),
 });
