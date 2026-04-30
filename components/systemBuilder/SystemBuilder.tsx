@@ -713,7 +713,6 @@ const SystemBuilder: React.FC<SystemBuilderProps> = ({ products, onProductUpdate
     layerId: string,
     patch: Partial<{
       consumptionRateKgM2: number | null;
-      wftMicrons: number | null;
       dftMicrons: number | null;
       recoatMinHours: number | null;
       recoatMaxHours: number | null;

@@ -484,7 +484,6 @@ export function registerSystemRoutes(app: Express): void {
             // Installable-spec fields. Round-tripped through export/import
             // so the spec is fully portable between environments.
             consumptionRateKgM2: layer.consumptionRateKgM2,
-            wftMicrons: layer.wftMicrons,
             dftMicrons: layer.dftMicrons,
             recoatMinHours: layer.recoatMinHours,
             recoatMaxHours: layer.recoatMaxHours,
@@ -579,7 +578,6 @@ export function registerSystemRoutes(app: Express): void {
             // Installable-spec layer fields. Each defaults to null when
             // absent so legacy exports import cleanly.
             consumptionRateKgM2: layer.consumptionRateKgM2 ?? null,
-            wftMicrons: layer.wftMicrons ?? null,
             dftMicrons: layer.dftMicrons ?? null,
             recoatMinHours: layer.recoatMinHours ?? null,
             recoatMaxHours: layer.recoatMaxHours ?? null,
