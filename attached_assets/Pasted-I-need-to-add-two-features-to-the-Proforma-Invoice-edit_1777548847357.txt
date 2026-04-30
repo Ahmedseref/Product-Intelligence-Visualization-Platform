@@ -1,0 +1,141 @@
+I need to add two features to the Proforma Invoice editor: a custom column manager and an Excel-like formula system for row calculations. Read the full existing ProformaInvoice.tsx, the proforma_items schema, and the existing column-related code before making any changes.
+
+---
+
+## Feature 1 — Custom column manager
+
+### Column data model
+Each column has:
+- id: string (auto-generated for custom, fixed for built-in)
+- label: string — display name shown in table header
+- type: 'text' | 'number' | 'formula'
+- unit: string — optional unit label shown in header (kg, m², pcs, USD)
+- formula: string — only for type='formula', see Feature 2
+- builtIn: boolean — built-in columns cannot be deleted, only hidden
+- visible: boolean — controls whether column appears in table and preview
+- order: number — controls horizontal position in table
+
+Built-in columns (always exist, cannot be deleted):
+- description (text) — product name + code
+- qty (number)
+- unit (text) — unit of measure
+- unit_price (number, USD)
+- total (computed — see Feature 2)
+
+### Storage
+Store custom column definitions per proforma in the existing proformas table. The proformas table already has a JSON column for column config — check the schema and use that field. If it doesn't exist, add a nullable JSONB column called column_config to the proformas table and run npm run db:push. This column stores the full array of column definitions (both built-in visibility state and custom columns).
+
+Store custom cell values per row in the existing proforma_items table. Check if there is already a custom_fields or similar JSONB column — if so, use it. If not, add a nullable JSONB column called custom_values to proforma_items and run npm run db:push. This stores {columnId: value} pairs per row.
+
+### Column manager UI
+Add a "Columns" button (with a table/grid icon from Lucide) to the product table section header. Clicking it opens a side panel or inline panel (not a modal) showing:
+
+Current columns list (built-in + custom):
+- Each column shows: drag handle, visibility toggle (checkbox), column name, type badge, unit label, delete button (only for custom columns)
+- Drag to reorder columns — updates the order field on all columns
+- Toggle visibility checkbox — updates the visible field
+
+Add column form at the bottom of the panel:
+- Column name input
+- Type select: Text / Number / Formula
+- Unit label input (shown when type is Number or Formula)
+- Formula input (shown only when type is Formula — see Feature 2)
+- A reference guide shown when type is Formula: "Variables: {qty} {unit_price} {total} {col:ColumnName}"
+- "+ Add column" button
+
+Changes to columns update the table and preview immediately (local state). Changes are saved when the user clicks the main Save button.
+
+### Table rendering
+The product table must render dynamically based on the visible columns in order. For each row:
+- Built-in columns (description, qty, unit, unit_price): editable inline inputs
+- Custom text columns: editable inline text input, value saved to row.custom_values[columnId]
+- Custom number columns: editable inline number input, value saved to row.custom_values[columnId]
+- Formula columns: computed read-only value displayed in italic/muted style (see Feature 2)
+- Total column: always last, computed (see Feature 2)
+
+The printed preview (right column) renders the same columns in the same order with computed values.
+
+---
+
+## Feature 2 — Formula engine
+
+### Formula syntax
+Formulas are strings containing:
+- {qty} — row quantity
+- {unit_price} — row unit price
+- {total} — row subtotal (qty × unit_price, or the custom total formula result)
+- {col:ColumnName} — value of any other column by its label name
+- Standard math operators: + - * / ( )
+- Numeric literals
+
+Examples:
+- {qty} * {col:Net Weight} — total net weight for that row
+- {qty} * {unit_price} * (1 - {col:Discount%} / 100) — unit price with row-level discount
+- {col:Gross Weight} * 2.5 — freight cost at 2.5 per kg
+- {qty} * {col:Net Weight} * 1.15 — net weight with 15% buffer
+
+### Formula evaluation function
+Create a pure utility function evaluateFormula(formula: string, row: InvoiceRow, columns: Column[]): number
+
+The function:
+1. Takes the formula string
+2. Replaces {qty} with row.qty
+3. Replaces {unit_price} with row.unit_price
+4. Replaces {total} with computeRowTotal(row, columns) — see below
+5. For each {col:Name} token, finds the column with that label and substitutes row.custom_values[col.id] — if the referenced column is itself a formula column, recursively evaluates it (max depth 3 to prevent infinite loops)
+6. Evaluates the resulting numeric expression safely using Function constructor wrapped in try/catch — returns 0 on error
+
+### Row total formula
+Add a "Total column formula" control in the Columns panel (below the column list):
+- Select: "Default (qty × unit price)" / "Custom formula"
+- When Custom: a formula input appears
+- This formula overrides how the Total column is computed for every row
+- Stored as total_formula in the column_config JSONB field on the proforma
+
+computeRowTotal(row, columns, totalFormula): number:
+- If totalFormula is null or 'default': return row.qty * row.unit_price
+- If custom formula: return evaluateFormula(totalFormula, row, columns)
+- The subtotal (sum of all rows) and all financial calculation steps use computeRowTotal per row
+
+### Formula column rendering
+In the table:
+- Formula columns show a small ƒ badge in the column header
+- Cell values are read-only, computed from evaluateFormula on every render
+- If formula evaluation fails (syntax error, missing column), show "—" in the cell with a warning tooltip: "Formula error — check column references"
+- Values are formatted with 2 decimal places
+
+In the preview (right panel):
+- Formula column values show as plain numbers with 2 decimal places
+- No ƒ badge in the printed preview
+
+### Row-level discount / markup column (example preset)
+Add a preset button "Add discount column" that adds a pre-configured setup:
+- A number column named "Discount %" with unit "%"  
+- Overrides the total formula to: {qty} * {unit_price} * (1 - {col:Discount%} / 100)
+This gives the user a one-click Excel-like per-row discount without manual formula writing.
+
+---
+
+## Integration with financial calculations
+The existing financial calculation steps (VAT, freight, etc.) run on the invoice subtotal. The subtotal must always use computeRowTotal — so if a custom total formula is set, the subtotal correctly reflects it. This means:
+
+computeFinancials(rows, columns, totalFormula, calcSteps, currency):
+1. subtotal = rows.reduce((sum, row) => sum + computeRowTotal(row, columns, totalFormula), 0)
+2. Run calc steps in order against running total
+3. Return { subtotal, steps, finalTotal }
+
+No changes needed to the calc steps UI — just ensure the subtotal input to it uses computeRowTotal.
+
+---
+
+## Rules
+- evaluateFormula must be pure — no API calls, no side effects
+- Use Function('"use strict"; return (' + expr + ')')() for evaluation, always wrapped in try/catch returning 0
+- Never use eval() directly
+- Max formula recursion depth: 3 levels
+- All displayed numbers use .toFixed(2)
+- Column reordering uses the existing drag logic if it exists in the codebase, otherwise implement with simple up/down arrow buttons
+- The Columns panel opens inline (not as a modal or overlay) — it pushes the table content down or appears as a side panel
+- Column config and custom cell values persist on Save with the rest of the invoice
+- Export PDF and Export Excel must include all visible columns including custom and formula columns
+- After changes, test: (1) Add "Net Weight (kg)" number column, fill values, add formula column "Freight" = {col:Net Weight} * 2.5 — freight column shows correct computed values. (2) Add discount column preset, set 10% discount on one row — that row total = qty × unit_price × 0.9. (3) Subtotal and Final Total reflect the custom row totals. (4) Preview (right column) shows all visible columns in correct order.
