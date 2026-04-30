@@ -200,7 +200,8 @@ export interface SystemLayer {
   // Installable-spec fields; all nullable. Stored as `real` server-side and
   // round-tripped as plain JS numbers.
   consumptionRateKgM2?: number | null; // kg of material per m² of substrate
-  dftMicrons?: number | null;          // dry film thickness, μm
+  wftMicrons?: number | null;          // wet film thickness, μm (measured during application)
+  dftMicrons?: number | null;          // dry film thickness, μm (measured after cure)
   recoatMinHours?: number | null;      // minimum hours before next coat
   recoatMaxHours?: number | null;      // maximum hours before next coat
   createdAt: string;

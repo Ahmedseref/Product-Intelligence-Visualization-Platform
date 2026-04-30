@@ -1,17 +1,27 @@
+// =============================================================================
+// ProformaInvoice — top-level proforma module router
+// =============================================================================
+// Hosts the three top-level views inside the Proforma tab:
+//   • list      — invoice index (table)
+//   • editor    — single-canvas create/edit screen (ProformaInvoiceEditor)
+//   • customers — customer manager (CustomerManager)
+//
+// The previous separate "create", "edit", and "preview" subviews have been
+// collapsed into a single "editor" subview backed by ProformaInvoiceEditor.
+// =============================================================================
+
 import React, { useState, useEffect, useCallback } from 'react';
-import { Plus, Trash2, Eye, Pencil, FileText, Search, X, Users } from 'lucide-react';
+import { Plus, Trash2, Pencil, FileText, Search, X, Users } from 'lucide-react';
 import { api } from '../client/api';
 import { Product, ProformaData } from '../types';
-import ProformaCreate from './proforma/ProformaCreate';
-import ProformaPreview from './proforma/ProformaPreview';
-import ProformaEdit from './proforma/ProformaEdit';
+import ProformaInvoiceEditor from './proforma/ProformaInvoiceEditor';
 import CustomerManager from './proforma/CustomerManager';
 
 interface ProformaInvoiceProps {
   products: Product[];
 }
 
-type SubView = 'list' | 'create' | 'preview' | 'edit' | 'customers';
+type SubView = 'list' | 'editor' | 'customers';
 
 const STATUS_COLORS: Record<string, string> = {
   draft: 'bg-slate-100 text-slate-600',
@@ -22,6 +32,8 @@ const STATUS_COLORS: Record<string, string> = {
 
 const ProformaInvoice: React.FC<ProformaInvoiceProps> = ({ products }) => {
   const [subView, setSubView] = useState<SubView>('list');
+  // null while drafting a brand-new invoice; populated when editing an
+  // existing one (or after the first save of a new one).
   const [activeProformaId, setActiveProformaId] = useState<string | null>(null);
   const [proformas, setProformas] = useState<ProformaData[]>([]);
   const [loading, setLoading] = useState(true);
@@ -34,19 +46,26 @@ const ProformaInvoice: React.FC<ProformaInvoiceProps> = ({ products }) => {
       const list = await api.getProformas();
       setProformas(list);
     } catch (e) {
-      console.error(e);
+      console.error('[ProformaInvoice] failed to load list:', e);
     } finally {
       setLoading(false);
     }
   }, []);
 
+  // Re-fetch the list whenever we land back on the list view (e.g. after
+  // saving an invoice in the editor and clicking Back).
   useEffect(() => {
     if (subView === 'list') loadList();
   }, [subView, loadList]);
 
-  const handleCreated = (proformaId: string) => {
+  const openNew = () => {
+    setActiveProformaId(null);
+    setSubView('editor');
+  };
+
+  const openEditor = (proformaId: string) => {
     setActiveProformaId(proformaId);
-    setSubView('preview');
+    setSubView('editor');
   };
 
   const handleDelete = async (proformaId: string) => {
@@ -56,7 +75,7 @@ const ProformaInvoice: React.FC<ProformaInvoiceProps> = ({ products }) => {
       await api.deleteProforma(proformaId);
       setProformas(prev => prev.filter(p => p.proformaId !== proformaId));
     } catch (e) {
-      console.error(e);
+      console.error('[ProformaInvoice] failed to delete:', e);
     } finally {
       setDeletingId(null);
     }
@@ -72,42 +91,19 @@ const ProformaInvoice: React.FC<ProformaInvoiceProps> = ({ products }) => {
     );
   });
 
-  if (subView === 'create') {
+  // ─── Single-canvas editor (full-screen) ─────────────────────────────
+  if (subView === 'editor') {
     return (
-      <div className="flex-1 overflow-y-auto p-6 bg-slate-50">
-        <ProformaCreate
-          products={products}
-          onCreated={handleCreated}
-          onCancel={() => setSubView('list')}
-        />
-      </div>
+      <ProformaInvoiceEditor
+        proformaId={activeProformaId}
+        products={products}
+        onBack={() => { setSubView('list'); setActiveProformaId(null); }}
+        onSaved={(id) => setActiveProformaId(id)}
+      />
     );
   }
 
-  if (subView === 'preview' && activeProformaId) {
-    return (
-      <div className="flex-1 overflow-y-auto p-6 bg-slate-50">
-        <ProformaPreview
-          proformaId={activeProformaId}
-          onBack={() => { setSubView('list'); setActiveProformaId(null); }}
-        />
-      </div>
-    );
-  }
-
-  if (subView === 'edit' && activeProformaId) {
-    return (
-      <div className="flex-1 overflow-y-auto p-6 bg-slate-50">
-        <ProformaEdit
-          proformaId={activeProformaId}
-          products={products}
-          onSaved={(id) => { setActiveProformaId(id); setSubView('preview'); }}
-          onCancel={() => { setSubView('list'); setActiveProformaId(null); }}
-        />
-      </div>
-    );
-  }
-
+  // ─── List view + Customers tab share the same chrome (header + tabs) ─
   return (
     <div className="flex-1 flex flex-col overflow-hidden">
       {/* Page Header */}
@@ -124,7 +120,7 @@ const ProformaInvoice: React.FC<ProformaInvoiceProps> = ({ products }) => {
           </div>
           {subView === 'list' && (
             <button
-              onClick={() => setSubView('create')}
+              onClick={openNew}
               className="flex items-center gap-2 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium rounded-lg transition-colors shadow-sm"
             >
               <Plus className="w-4 h-4" />
@@ -196,7 +192,7 @@ const ProformaInvoice: React.FC<ProformaInvoiceProps> = ({ products }) => {
                 <p className="font-medium text-slate-500">No proforma invoices yet</p>
                 <p className="text-sm mt-1">Create your first proforma to get started</p>
                 <button
-                  onClick={() => setSubView('create')}
+                  onClick={openNew}
                   className="mt-5 flex items-center gap-2 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium rounded-lg transition-colors"
                 >
                   <Plus className="w-4 h-4" />
@@ -241,18 +237,11 @@ const ProformaInvoice: React.FC<ProformaInvoiceProps> = ({ products }) => {
                         <td className="px-5 py-4">
                           <div className="flex items-center gap-2 justify-end">
                             <button
-                              onClick={() => { setActiveProformaId(p.proformaId); setSubView('preview'); }}
+                              onClick={() => openEditor(p.proformaId)}
                               className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-blue-600 bg-blue-50 hover:bg-blue-100 rounded-lg transition-colors"
                             >
-                              <Eye className="w-3.5 h-3.5" />
-                              View
-                            </button>
-                            <button
-                              onClick={() => { setActiveProformaId(p.proformaId); setSubView('edit'); }}
-                              className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-amber-600 bg-amber-50 hover:bg-amber-100 rounded-lg transition-colors"
-                            >
                               <Pencil className="w-3.5 h-3.5" />
-                              Edit
+                              Open
                             </button>
                             <button
                               onClick={() => handleDelete(p.proformaId)}
