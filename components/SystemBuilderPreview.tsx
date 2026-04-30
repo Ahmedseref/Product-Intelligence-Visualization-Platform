@@ -43,7 +43,7 @@
 // =============================================================================
 
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Eye, X, Search, Edit3, Download, AlertCircle, Star, Layers } from 'lucide-react';
+import { Eye, X, Search, Edit3, Download, AlertCircle, Star, Layers, Check, GitCompare, Filter } from 'lucide-react';
 import { systemsApi } from '../client/api';
 import { useEscapeKey } from '../hooks/useEscapeKey';
 
@@ -237,6 +237,33 @@ export default function SystemBuilderPreview({ onEditInBuilder }: Props) {
   const [noteSaving, setNoteSaving] = useState(false);
   const noteSaveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
+  // ---------- "Make default" inline action state ----------
+  // Per-layer in-flight set — multiple layers can be saving in parallel
+  // without trampling each other's loading indicator. A request-token map
+  // lets the rollback path ignore stale responses if a newer request for
+  // the same layer has already been issued.
+  const [makingDefaultLayers, setMakingDefaultLayers] = useState<Set<string>>(() => new Set());
+  const [makeDefaultErrors, setMakeDefaultErrors] = useState<Record<string, string>>({});
+  const makeDefaultTokens = useRef<Record<string, number>>({});
+
+  // ---------- Compare basket + comparison modal state ----------
+  // We cap the basket at 2 systems intentionally — visually a 2-up layout
+  // is the only one that fits inside the modal width without compromise.
+  const COMPARE_MAX = 2;
+  const [compareIds, setCompareIds] = useState<string[]>([]);
+  // Brief inline hint when the user tries to add a third selection — used
+  // instead of silently replacing oldest (which felt random per architect
+  // feedback). Cleared automatically after 2.5s.
+  const [compareHint, setCompareHint] = useState<string | null>(null);
+  const compareHintTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const [compareOpen, setCompareOpen] = useState(false);
+  const [compareLoading, setCompareLoading] = useState(false);
+  const [compareSystems, setCompareSystems] = useState<[FullSystem | null, FullSystem | null]>([null, null]);
+  // Monotonic request id — only the latest in-flight openCompareModal call
+  // is allowed to commit its result, so closing/re-opening with a different
+  // selection can't be overwritten by a stale earlier response.
+  const compareRequestRef = useRef<number>(0);
+
   // ---------- initial load ----------
   // We pre-fetch the full system payloads for every system so the cards can
   // show colour strips, supplier list and material badge without per-card
@@ -421,6 +448,169 @@ export default function SystemBuilderPreview({ onEditInBuilder }: Props) {
     }, 600);
   }, [openSystem, noteText]);
 
+  // ---------- "Make default" inline action ----------
+  // Promotes the currently-active alternative to the layer's default product
+  // by writing through PUT /api/system-layers/:id. The implementation is
+  // hardened against the concurrency cases architect review flagged:
+  //
+  //   • Per-layer in-flight tracking (`makingDefaultLayers` Set) so two
+  //     layers can save in parallel without each finally-block clearing
+  //     the other's spinner.
+  //   • Per-layer request token (`makeDefaultTokens` ref) so a stale
+  //     response from a superseded request can't roll back a newer one.
+  //     Only the response whose token still matches `tokens[layerId]` is
+  //     allowed to commit a rollback or clear the in-flight flag.
+  //   • Surgical snapshot — we only snapshot the affected layer's
+  //     productOptions, not the whole openSystem / cache. That way the
+  //     rollback can never undo unrelated state writes (preview-note
+  //     saves, other layer updates, etc.) that landed during the round-trip.
+  const makeDefault = useCallback(async (layerId: string, newDefaultProductId: string) => {
+    if (!openSystem) return;
+    // Bump the token for this layer; this request "owns" that value until
+    // a newer request supersedes it.
+    const myToken = (makeDefaultTokens.current[layerId] || 0) + 1;
+    makeDefaultTokens.current[layerId] = myToken;
+
+    // Surgical snapshot of just this layer's productOptions.
+    const targetLayer = openSystem.layers.find(l => l.layerId === layerId);
+    if (!targetLayer) return;
+    const prevOptions = targetLayer.productOptions;
+    const flippedOptions = prevOptions.map(o => ({
+      ...o,
+      isDefault: o.productId === newDefaultProductId,
+    }));
+
+    // Apply optimistic flip via functional updates — keeps us correct even
+    // when other state changes have landed since this callback was created.
+    const applyOptions = (newOptions: ProductOption[]) => {
+      setOpenSystem(prev => prev ? {
+        ...prev,
+        layers: prev.layers.map(l => l.layerId === layerId ? { ...l, productOptions: newOptions } : l),
+      } : prev);
+      setSystemLayersBySys(prev => {
+        const cached = prev[openSystem.systemId];
+        if (!cached) return prev;
+        return {
+          ...prev,
+          [openSystem.systemId]: cached.map(l => l.layerId === layerId ? { ...l, productOptions: newOptions } : l),
+        };
+      });
+    };
+
+    applyOptions(flippedOptions);
+    setMakeDefaultErrors(prev => { const { [layerId]: _, ...rest } = prev; return rest; });
+    setMakingDefaultLayers(prev => { const next = new Set(prev); next.add(layerId); return next; });
+    try {
+      await systemsApi.updateLayer(layerId, { defaultProductId: newDefaultProductId });
+      // Only mark this layer as "done" if no newer request has superseded us.
+      if (makeDefaultTokens.current[layerId] === myToken) {
+        setMakingDefaultLayers(prev => { const next = new Set(prev); next.delete(layerId); return next; });
+      }
+    } catch (e: any) {
+      // Stale response — a newer request is already in flight, let it
+      // decide the final state. Don't roll back its optimistic update.
+      if (makeDefaultTokens.current[layerId] !== myToken) return;
+      // Rollback only the affected layer's options.
+      applyOptions(prevOptions);
+      setMakeDefaultErrors(prev => ({ ...prev, [layerId]: e?.message || 'Failed to set default' }));
+      setMakingDefaultLayers(prev => { const next = new Set(prev); next.delete(layerId); return next; });
+    }
+  }, [openSystem]);
+
+  // ---------- Compare basket helpers ----------
+  // Brief inline hint helper — used when the user tries to add a third
+  // system. We intentionally do NOT replace oldest silently (architect
+  // feedback: feels random to the user); instead we refuse and explain.
+  const flashCompareHint = useCallback((msg: string) => {
+    setCompareHint(msg);
+    if (compareHintTimer.current) clearTimeout(compareHintTimer.current);
+    compareHintTimer.current = setTimeout(() => setCompareHint(null), 2500);
+  }, []);
+
+  const toggleCompare = useCallback((systemId: string, e?: React.SyntheticEvent) => {
+    // Stop propagation (mouse AND keyboard) so toggling the checkbox doesn't
+    // also fire the card's onClick/onKeyDown (which would open the single-
+    // system preview modal). Architect flagged that mouse-only stop wasn't
+    // enough because the parent now handles Enter/Space too.
+    e?.stopPropagation();
+    setCompareIds(prev => {
+      if (prev.includes(systemId)) return prev.filter(id => id !== systemId);
+      if (prev.length >= COMPARE_MAX) {
+        flashCompareHint(`Compare is limited to ${COMPARE_MAX} systems — clear one first.`);
+        return prev;
+      }
+      return [...prev, systemId];
+    });
+  }, [flashCompareHint]);
+
+  const clearCompare = useCallback(() => setCompareIds([]), []);
+
+  const openCompareModal = useCallback(async () => {
+    if (compareIds.length !== 2) return;
+    // Bump the request id; only the response from the latest call may
+    // commit. Earlier responses bail out at every check below.
+    const myRequest = ++compareRequestRef.current;
+    const [idA, idB] = compareIds;
+    setCompareOpen(true);
+    setCompareLoading(true);
+    setCompareSystems([null, null]);
+    try {
+      const [a, b] = await Promise.all([
+        systemsApi.getSystemFull(idA),
+        systemsApi.getSystemFull(idB),
+      ]);
+      // Stale response → drop it. The latest request will commit its own.
+      if (compareRequestRef.current !== myRequest) return;
+      // Sort layers ascending so the cross-section can render bottom→top.
+      const sortLayers = (s: FullSystem) => ({
+        ...s,
+        layers: [...s.layers].sort((x, y) => (x.orderSequence ?? 0) - (y.orderSequence ?? 0)),
+      });
+      setCompareSystems([sortLayers(a), sortLayers(b)]);
+    } catch (err) {
+      if (compareRequestRef.current !== myRequest) return;
+      console.error('Compare load failed:', err);
+    } finally {
+      if (compareRequestRef.current === myRequest) {
+        setCompareLoading(false);
+      }
+    }
+  }, [compareIds]);
+
+  const closeCompareModal = useCallback(() => {
+    // Invalidate any in-flight load so its response can't sneak in after
+    // we close — bumping the ref makes every active request "stale".
+    compareRequestRef.current++;
+    setCompareOpen(false);
+    setCompareSystems([null, null]);
+    setCompareLoading(false);
+  }, []);
+
+  // Wire Escape to whichever modal is currently open. The single-preview
+  // modal already binds Escape via its own useEscapeKey call; the compare
+  // modal uses its own binding so the two can coexist independently.
+  useEscapeKey(compareOpen ? closeCompareModal : null);
+
+  // Cleanup all pending timers on unmount so they can't fire setState on
+  // an unmounted component (works in React 18, but it's still leak-y).
+  useEffect(() => () => {
+    if (noteSaveTimer.current) clearTimeout(noteSaveTimer.current);
+    if (compareHintTimer.current) clearTimeout(compareHintTimer.current);
+  }, []);
+
+  // True when any non-default filter is active — drives the empty state's
+  // "Clear filters" affordance.
+  const hasActiveFilters = useMemo(
+    () => searchText.trim() !== '' || filterType !== 'all' || filterStatus !== 'all' || filterSubstrate !== 'all',
+    [searchText, filterType, filterStatus, filterSubstrate],
+  );
+  const clearFilters = useCallback(() => {
+    setSearchText('');
+    setFilterType('all');
+    setFilterStatus('all');
+    setFilterSubstrate('all');
+  }, []);
+
   // ---------- "Export spec sheet" → downloadable .txt ----------
   const exportSpecSheet = useCallback(() => {
     if (!openSystem) return;
@@ -517,65 +707,172 @@ export default function SystemBuilderPreview({ onEditInBuilder }: Props) {
       </div>
 
       {/* ---------- card grid ---------- */}
-      <div className="flex-1 overflow-y-auto p-6">
+      {/* The padding-bottom buys space for the floating compare bar so the
+          last row of cards is never hidden behind it. */}
+      <div className="flex-1 overflow-y-auto p-6 pb-24">
         {loading ? (
           <div className="text-center text-slate-500 py-12">Loading systems…</div>
         ) : filtered.length === 0 ? (
-          <div className="text-center text-slate-500 py-12">No systems match these filters.</div>
+          // ---------- empty / zero-state ----------
+          // Two flavours: "no systems exist at all" vs "filters yielded nothing".
+          // The latter gets a Clear filters CTA so the user can recover in
+          // one click instead of hunting through four selectors.
+          <div className="flex flex-col items-center justify-center py-16 px-6 text-center">
+            <div className="w-14 h-14 rounded-full bg-slate-100 flex items-center justify-center mb-4">
+              {hasActiveFilters
+                ? <Filter size={22} className="text-slate-400" />
+                : <Layers size={22} className="text-slate-400" />}
+            </div>
+            <h3 className="text-base font-semibold text-slate-700 mb-1">
+              {hasActiveFilters ? 'No systems match these filters' : 'No systems yet'}
+            </h3>
+            <p className="text-sm text-slate-500 max-w-sm mb-4">
+              {hasActiveFilters
+                ? 'Try widening the criteria — change the type, status, or substrate, or clear the search box.'
+                : 'Create your first system in the Builder tab to see it here.'}
+            </p>
+            {hasActiveFilters && (
+              <button
+                type="button"
+                onClick={clearFilters}
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 text-sm bg-indigo-600 text-white rounded-lg hover:bg-indigo-700"
+              >
+                <X size={14} /> Clear filters
+              </button>
+            )}
+          </div>
         ) : (
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
-            {filtered.map(({ system, material, suppliers, layerColors }) => (
-              <button
-                key={system.systemId}
-                type="button"
-                onClick={() => openModal(system.systemId)}
-                className="text-left bg-white border border-slate-200 rounded-xl p-4 shadow-sm hover:shadow-md hover:border-indigo-300 transition-all"
-              >
-                <div className="flex items-start justify-between gap-2 mb-2">
-                  <div className="flex items-center gap-2 flex-wrap">
-                    {material ? (
-                      <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-semibold border ${MATERIAL_KEYWORDS[material].color}`}>
-                        {MATERIAL_KEYWORDS[material].label}
+            {filtered.map(({ system, material, suppliers, layerColors }) => {
+              const isInCompare = compareIds.includes(system.systemId);
+              return (
+                // Card is a <div> (not <button>) so the nested compare
+                // checkbox can be its own real <button> without nesting
+                // interactive elements (which would be invalid HTML).
+                <div
+                  key={system.systemId}
+                  role="button"
+                  tabIndex={0}
+                  onClick={() => openModal(system.systemId)}
+                  onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); openModal(system.systemId); } }}
+                  className={`relative text-left bg-white border rounded-xl p-4 shadow-sm hover:shadow-md transition-all cursor-pointer ${
+                    isInCompare ? 'border-indigo-400 ring-2 ring-indigo-200' : 'border-slate-200 hover:border-indigo-300'
+                  }`}
+                >
+                  {/* Compare toggle — top-right corner. We stop propagation
+                      on BOTH click and keyDown so activating it via Space/
+                      Enter doesn't bubble up to the parent card and open
+                      the preview. aria-pressed gives assistive tech the
+                      correct toggle semantics. */}
+                  <button
+                    type="button"
+                    aria-pressed={isInCompare}
+                    onClick={(e) => toggleCompare(system.systemId, e)}
+                    onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') e.stopPropagation(); }}
+                    className={`absolute top-2 right-2 w-6 h-6 rounded border flex items-center justify-center transition-all ${
+                      isInCompare
+                        ? 'bg-indigo-600 border-indigo-600 text-white'
+                        : 'bg-white border-slate-300 text-transparent hover:border-indigo-400 hover:text-slate-300'
+                    }`}
+                    aria-label={isInCompare ? 'Remove from compare' : 'Add to compare'}
+                    title={isInCompare ? 'Selected for compare — click to remove' : 'Add to compare'}
+                  >
+                    <Check size={14} />
+                  </button>
+
+                  <div className="flex items-start justify-between gap-2 mb-2 pr-8">
+                    <div className="flex items-center gap-2 flex-wrap">
+                      {material ? (
+                        <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-semibold border ${MATERIAL_KEYWORDS[material].color}`}>
+                          {MATERIAL_KEYWORDS[material].label}
+                        </span>
+                      ) : (
+                        <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-semibold border bg-slate-100 text-slate-600 border-slate-200">Mixed</span>
+                      )}
+                      <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-semibold ${
+                        (system.status || 'draft').toLowerCase() === 'active' ? 'bg-emerald-100 text-emerald-700' : 'bg-amber-100 text-amber-700'
+                      }`}>
+                        {(system.status || 'draft').toLowerCase() === 'active' ? 'Active' : 'Draft'}
                       </span>
-                    ) : (
-                      <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-semibold border bg-slate-100 text-slate-600 border-slate-200">Mixed</span>
-                    )}
-                    <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-semibold ${
-                      (system.status || 'draft').toLowerCase() === 'active' ? 'bg-emerald-100 text-emerald-700' : 'bg-amber-100 text-amber-700'
-                    }`}>
-                      {(system.status || 'draft').toLowerCase() === 'active' ? 'Active' : 'Draft'}
-                    </span>
+                    </div>
                   </div>
+                  <h3 className="text-sm font-semibold text-slate-800 line-clamp-2 mb-1" title={system.name}>{system.name}</h3>
+                  <div className="text-[11px] text-slate-500 mb-2">
+                    {system.systemSubstrate || system.systemDuty
+                      ? `${system.systemSubstrate || '—'} · ${system.systemDuty || '—'}`
+                      : <span className="italic">Not configured</span>}
+                  </div>
+                  {suppliers.length > 0 && (
+                    <div className="flex flex-wrap gap-1 mb-3">
+                      {suppliers.slice(0, 4).map(sup => (
+                        <span key={sup} className="text-[10px] px-1.5 py-0.5 bg-slate-100 text-slate-600 rounded">{sup}</span>
+                      ))}
+                      {suppliers.length > 4 && <span className="text-[10px] text-slate-400">+{suppliers.length - 4}</span>}
+                    </div>
+                  )}
+                  {/* Layer colour strip — one rectangle per layer, bottom→top order. */}
+                  {layerColors.length > 0 ? (
+                    <div className="flex h-2 gap-0.5 rounded overflow-hidden">
+                      {layerColors.map((c, i) => (
+                        <div key={i} className="flex-1" style={{ backgroundColor: c.accent }} title={c.label} />
+                      ))}
+                    </div>
+                  ) : (
+                    <div className="text-[10px] text-slate-400 italic">No layers</div>
+                  )}
                 </div>
-                <h3 className="text-sm font-semibold text-slate-800 line-clamp-2 mb-1" title={system.name}>{system.name}</h3>
-                <div className="text-[11px] text-slate-500 mb-2">
-                  {system.systemSubstrate || system.systemDuty
-                    ? `${system.systemSubstrate || '—'} · ${system.systemDuty || '—'}`
-                    : <span className="italic">Not configured</span>}
-                </div>
-                {suppliers.length > 0 && (
-                  <div className="flex flex-wrap gap-1 mb-3">
-                    {suppliers.slice(0, 4).map(sup => (
-                      <span key={sup} className="text-[10px] px-1.5 py-0.5 bg-slate-100 text-slate-600 rounded">{sup}</span>
-                    ))}
-                    {suppliers.length > 4 && <span className="text-[10px] text-slate-400">+{suppliers.length - 4}</span>}
-                  </div>
-                )}
-                {/* Layer colour strip — one rectangle per layer, bottom→top order. */}
-                {layerColors.length > 0 ? (
-                  <div className="flex h-2 gap-0.5 rounded overflow-hidden">
-                    {layerColors.map((c, i) => (
-                      <div key={i} className="flex-1" style={{ backgroundColor: c.accent }} title={c.label} />
-                    ))}
-                  </div>
-                ) : (
-                  <div className="text-[10px] text-slate-400 italic">No layers</div>
-                )}
-              </button>
-            ))}
+              );
+            })}
           </div>
         )}
       </div>
+
+      {/* ---------- floating compare bar ---------- */}
+      {/* Pinned to the bottom of the viewport whenever there's at least one
+          system selected for compare, OR when we're showing a transient
+          hint (e.g. user clicked a third card). The hint sits above the bar
+          so it's still visible when the basket is full. */}
+      {(compareIds.length > 0 || compareHint) && (
+        <div className="fixed bottom-4 left-1/2 -translate-x-1/2 z-40 flex flex-col items-center gap-2">
+          {compareHint && (
+            <div
+              role="status"
+              className="text-xs bg-amber-100 text-amber-900 border border-amber-300 px-3 py-1.5 rounded-lg shadow"
+            >
+              {compareHint}
+            </div>
+          )}
+          {compareIds.length > 0 && (
+            <div className="bg-slate-900 text-white shadow-2xl rounded-full pl-4 pr-2 py-2 flex items-center gap-3">
+              <GitCompare size={16} className="text-indigo-300" />
+              <span className="text-sm">
+                {compareIds.length} of {COMPARE_MAX} selected
+              </span>
+              <button
+                type="button"
+                onClick={openCompareModal}
+                disabled={compareIds.length !== COMPARE_MAX}
+                className={`px-3 py-1 text-xs rounded-full font-medium transition-colors ${
+                  compareIds.length === COMPARE_MAX
+                    ? 'bg-indigo-500 hover:bg-indigo-400 text-white'
+                    : 'bg-slate-700 text-slate-400 cursor-not-allowed'
+                }`}
+              >
+                Compare
+              </button>
+              <button
+                type="button"
+                onClick={clearCompare}
+                className="p-1 text-slate-400 hover:text-white"
+                aria-label="Clear compare selection"
+                title="Clear selection"
+              >
+                <X size={16} />
+              </button>
+            </div>
+          )}
+        </div>
+      )}
 
       {/* =================================================================== */}
       {/* MODAL — min-height wrapper (per spec, not position:fixed)            */}
@@ -786,26 +1083,61 @@ export default function SystemBuilderPreview({ onEditInBuilder }: Props) {
 
                                   {/* Alternatives switcher */}
                                   {l.productOptions.length > 1 && (
-                                    <div className="flex flex-wrap gap-1 mt-3 pt-3 border-t border-slate-100">
-                                      {l.productOptions.map(o => {
-                                        const isActive = o.optionId === active.optionId;
+                                    <div className="mt-3 pt-3 border-t border-slate-100">
+                                      <div className="flex flex-wrap gap-1">
+                                        {l.productOptions.map(o => {
+                                          const isActive = o.optionId === active.optionId;
+                                          return (
+                                            <button
+                                              key={o.optionId}
+                                              type="button"
+                                              onClick={() => setActiveOptionByLayer(prev => ({ ...prev, [l.layerId]: o.optionId }))}
+                                              className={`text-[10px] px-2 py-1 rounded-full border transition-colors ${
+                                                isActive
+                                                  ? 'bg-indigo-600 text-white border-indigo-600'
+                                                  : 'bg-white text-slate-600 border-slate-200 hover:border-indigo-300'
+                                              }`}
+                                              title={o.productName || ''}
+                                            >
+                                              {o.isDefault && <Star size={9} className={`inline mr-1 ${isActive ? 'fill-white' : 'fill-amber-500 text-amber-500'}`} />}
+                                              {o.productName || 'Unnamed'}
+                                            </button>
+                                          );
+                                        })}
+                                      </div>
+
+                                      {/* "Make default" — only shown when the active alternative
+                                          isn't already the default. Writes through updateLayer
+                                          and optimistically flips the star. Each layer has its
+                                          own in-flight + error state so multiple layers can be
+                                          saving in parallel without interfering. */}
+                                      {active.optionId !== def?.optionId && (() => {
+                                        const isSaving = makingDefaultLayers.has(l.layerId);
+                                        const layerError = makeDefaultErrors[l.layerId];
                                         return (
-                                          <button
-                                            key={o.optionId}
-                                            type="button"
-                                            onClick={() => setActiveOptionByLayer(prev => ({ ...prev, [l.layerId]: o.optionId }))}
-                                            className={`text-[10px] px-2 py-1 rounded-full border transition-colors ${
-                                              isActive
-                                                ? 'bg-indigo-600 text-white border-indigo-600'
-                                                : 'bg-white text-slate-600 border-slate-200 hover:border-indigo-300'
-                                            }`}
-                                            title={o.productName || ''}
-                                          >
-                                            {o.isDefault && <Star size={9} className={`inline mr-1 ${isActive ? 'fill-white' : 'fill-amber-500 text-amber-500'}`} />}
-                                            {o.productName || 'Unnamed'}
-                                          </button>
+                                          <div className="mt-2 flex items-center gap-2 flex-wrap">
+                                            <button
+                                              type="button"
+                                              disabled={isSaving}
+                                              onClick={() => makeDefault(l.layerId, active.productId)}
+                                              className={`text-[10px] inline-flex items-center gap-1 px-2 py-1 rounded-full border transition-colors ${
+                                                isSaving
+                                                  ? 'bg-amber-50 text-amber-500 border-amber-200 cursor-wait'
+                                                  : 'bg-amber-50 text-amber-700 border-amber-200 hover:bg-amber-100'
+                                              }`}
+                                              title="Promote this product to the layer's default"
+                                            >
+                                              <Star size={10} className={isSaving ? '' : 'fill-amber-500 text-amber-500'} />
+                                              {isSaving ? 'Saving…' : 'Make default'}
+                                            </button>
+                                            {layerError && (
+                                              <span className="text-[10px] text-rose-600 inline-flex items-center gap-1">
+                                                <AlertCircle size={10} /> {layerError}
+                                              </span>
+                                            )}
+                                          </div>
                                         );
-                                      })}
+                                      })()}
                                     </div>
                                   )}
                                 </>
@@ -853,6 +1185,240 @@ export default function SystemBuilderPreview({ onEditInBuilder }: Props) {
                   </div>
                 </>
               )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* =================================================================== */}
+      {/* COMPARE MODAL — side-by-side view of two systems                     */}
+      {/* =================================================================== */}
+      {/*
+        Layout reuses the same LAYER_COLORS and inferLayerPositionFromSlotName
+        helpers as the single-preview modal so the cross-section bars look
+        identical. The middle "delta" table highlights rows whose values
+        differ between A and B with an amber ring + "≠" badge — that's the
+        whole point of the compare view, so it's visually loud.
+      */}
+      {compareOpen && (
+        <div
+          className="fixed inset-0 z-50 bg-black/40 overflow-y-auto"
+          onClick={closeCompareModal}
+        >
+          <div className="min-h-screen flex items-start justify-center py-8 px-4">
+            <div
+              className="bg-white rounded-2xl shadow-2xl w-full max-w-7xl"
+              onClick={e => e.stopPropagation()}
+              style={{ minHeight: '60vh' }}
+              role="dialog"
+              aria-modal="true"
+              aria-label="Compare systems"
+            >
+              {compareLoading || !compareSystems[0] || !compareSystems[1] ? (
+                <div className="p-12 text-center text-slate-500">Loading both systems…</div>
+              ) : (() => {
+                // Extracted into an IIFE so we can compute the delta map
+                // once and reuse it in the parameter table without re-running
+                // the comparisons in render.
+                const [A, B] = compareSystems as [FullSystem, FullSystem];
+                const finishOf = (s: FullSystem) => {
+                  const finishes = new Set<string>();
+                  for (const l of s.layers) {
+                    const def = l.productOptions.find(o => o.isDefault) || l.productOptions[0];
+                    if (def) {
+                      const t = tagsByProduct[def.productId];
+                      if (t?.finishType) finishes.add(t.finishType);
+                    }
+                  }
+                  return finishes.size ? Array.from(finishes).join(', ') : '';
+                };
+                const topcoatOf = (s: FullSystem) =>
+                  s.layers.some(l => inferLayerPositionFromSlotName(l.layerName) === 'topcoat') ? 'Yes' : 'No';
+
+                // Each row: [label, value-A, value-B]. Empty values render as
+                // dashes; differing values render with the delta badge.
+                const rows: Array<[string, string, string]> = [
+                  ['Substrate',       (A.systemSubstrate || '').trim(), (B.systemSubstrate || '').trim()],
+                  ['Humidity',        (A.systemHumidity  || '').trim(), (B.systemHumidity  || '').trim()],
+                  ['Duty',            (A.systemDuty      || '').trim(), (B.systemDuty      || '').trim()],
+                  ['Finish',          finishOf(A),                       finishOf(B)],
+                  ['Topcoat required', topcoatOf(A),                     topcoatOf(B)],
+                  ['Layer count',     String(A.layers.length),           String(B.layers.length)],
+                ];
+
+                // Render a single side's cross-section (top→bottom) — used
+                // twice below.
+                const renderCrossSection = (s: FullSystem) => (
+                  <div className="space-y-1">
+                    {[...s.layers].reverse().map((l, idx) => {
+                      const realIdx = s.layers.length - 1 - idx;
+                      const pos = inferLayerPositionFromSlotName(l.layerName) || 'unknown';
+                      const c = LAYER_COLORS[pos];
+                      const isFinal = realIdx === s.layers.length - 1;
+                      return (
+                        <div
+                          key={l.layerId}
+                          className="flex items-stretch rounded-md overflow-hidden border border-transparent"
+                          style={{ minHeight: 32 }}
+                        >
+                          <div style={{ width: 4, backgroundColor: c.accent }} />
+                          <div className="flex-1 flex items-center px-3 py-1.5 gap-2" style={{ backgroundColor: c.fill }}>
+                            <span
+                              className="inline-flex items-center justify-center w-5 h-5 rounded-full text-[10px] font-bold text-white"
+                              style={{ backgroundColor: c.accent }}
+                            >
+                              {realIdx + 1}
+                            </span>
+                            <span className="text-xs font-medium truncate" style={{ color: c.text }}>{l.layerName}</span>
+                            {isFinal && (
+                              <span className="ml-auto text-[9px] font-semibold px-1.5 py-0.5 rounded bg-white border border-slate-200 text-slate-600">
+                                final
+                              </span>
+                            )}
+                          </div>
+                        </div>
+                      );
+                    })}
+                    <div className="flex items-center justify-center px-3 py-1.5 mt-1 border-2 border-dashed border-slate-300 rounded-md text-[10px] text-slate-500 bg-white">
+                      <Layers size={11} className="mr-1.5" />
+                      {s.systemSubstrate || 'Not configured'}
+                    </div>
+                  </div>
+                );
+
+                // Per-layer default-product summary list — kept compact so
+                // both columns fit at standard modal width.
+                const renderLayerSummary = (s: FullSystem) => (
+                  <ul className="space-y-1.5">
+                    {[...s.layers].reverse().map(l => {
+                      const def = l.productOptions.find(o => o.isDefault) || l.productOptions[0];
+                      const pos = inferLayerPositionFromSlotName(l.layerName) || 'unknown';
+                      const c = LAYER_COLORS[pos];
+                      return (
+                        <li key={l.layerId} className="flex items-start gap-2 text-xs">
+                          <span className="inline-block w-1.5 h-1.5 rounded-full mt-1.5 flex-shrink-0" style={{ backgroundColor: c.accent }} />
+                          <div className="min-w-0">
+                            <div className="text-slate-700 font-medium truncate">{l.layerName}</div>
+                            <div className="text-slate-500 truncate">{def?.productName || <span className="italic">No product</span>}</div>
+                          </div>
+                        </li>
+                      );
+                    })}
+                  </ul>
+                );
+
+                return (
+                  <>
+                    {/* ---- compare-modal header ---- */}
+                    <div className="flex items-center justify-between gap-3 px-6 py-4 border-b border-slate-200">
+                      <div className="flex items-center gap-2">
+                        <GitCompare size={18} className="text-indigo-600" />
+                        <h2 className="text-lg font-bold text-slate-800">Compare systems</h2>
+                      </div>
+                      <button
+                        onClick={closeCompareModal}
+                        className="p-2 text-slate-400 hover:text-slate-700 hover:bg-slate-100 rounded-lg"
+                        aria-label="Close compare"
+                      >
+                        <X size={18} />
+                      </button>
+                    </div>
+
+                    {/* ---- two-column system header strip ---- */}
+                    <div className="grid grid-cols-2 gap-0 border-b border-slate-200">
+                      {[A, B].map((s, i) => (
+                        <div key={s.systemId} className={`p-4 ${i === 0 ? 'border-r border-slate-200 bg-slate-50' : 'bg-white'}`}>
+                          <div className="text-[10px] font-semibold uppercase tracking-wider text-slate-400 mb-1">
+                            System {i === 0 ? 'A' : 'B'}
+                          </div>
+                          <h3 className="text-sm font-semibold text-slate-800">{s.name}</h3>
+                          {s.description && (
+                            <p className="text-xs text-slate-500 mt-0.5 line-clamp-2">{s.description}</p>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+
+                    {/* ---- cross-sections side-by-side ---- */}
+                    <div className="grid grid-cols-2 gap-0">
+                      {[A, B].map((s, i) => (
+                        <div key={s.systemId} className={`p-5 ${i === 0 ? 'border-r border-slate-100 bg-slate-50' : 'bg-white'}`}>
+                          <h4 className="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-2">Build-up</h4>
+                          {renderCrossSection(s)}
+                        </div>
+                      ))}
+                    </div>
+
+                    {/* ---- parameter delta table ---- */}
+                    <div className="px-6 py-5 border-t border-slate-200">
+                      <h4 className="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-3">Parameters</h4>
+                      <div className="overflow-x-auto">
+                        <table className="w-full text-xs">
+                          <thead>
+                            <tr className="text-left text-slate-400 border-b border-slate-200">
+                              <th className="py-2 font-medium w-1/4">Parameter</th>
+                              <th className="py-2 font-medium">{A.name}</th>
+                              <th className="py-2 font-medium">{B.name}</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {rows.map(([label, a, b]) => {
+                              // We only flag a row as "different" when both
+                              // sides have a value AND those values differ.
+                              // Comparing missing-vs-present would create
+                              // noisy false-positives when one system simply
+                              // hasn't been fully configured yet.
+                              const differs = a !== '' && b !== '' && a.toLowerCase() !== b.toLowerCase();
+                              return (
+                                <tr
+                                  key={label}
+                                  className={`border-b border-slate-100 last:border-b-0 ${
+                                    differs ? 'bg-amber-50' : ''
+                                  }`}
+                                >
+                                  <td className="py-2 text-slate-500">{label}</td>
+                                  <td className={`py-2 ${differs ? 'text-amber-800 font-medium' : 'text-slate-800'}`}>
+                                    {a || <span className="italic text-slate-400">Not configured</span>}
+                                  </td>
+                                  <td className={`py-2 ${differs ? 'text-amber-800 font-medium' : 'text-slate-800'}`}>
+                                    <div className="flex items-center gap-2">
+                                      <span>{b || <span className="italic text-slate-400">Not configured</span>}</span>
+                                      {differs && (
+                                        <span className="text-[9px] font-bold px-1.5 py-0.5 rounded bg-amber-200 text-amber-900">≠</span>
+                                      )}
+                                    </div>
+                                  </td>
+                                </tr>
+                              );
+                            })}
+                          </tbody>
+                        </table>
+                      </div>
+                    </div>
+
+                    {/* ---- per-layer default-product summary, side-by-side ---- */}
+                    <div className="grid grid-cols-2 gap-0 border-t border-slate-200">
+                      {[A, B].map((s, i) => (
+                        <div key={s.systemId} className={`p-5 ${i === 0 ? 'border-r border-slate-100 bg-slate-50' : 'bg-white'}`}>
+                          <h4 className="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-2">Layer products</h4>
+                          {renderLayerSummary(s)}
+                        </div>
+                      ))}
+                    </div>
+
+                    {/* ---- compare-modal action bar ---- */}
+                    <div className="flex items-center justify-end gap-2 px-6 py-3 border-t border-slate-200 bg-slate-50 rounded-b-2xl">
+                      <button
+                        type="button"
+                        onClick={closeCompareModal}
+                        className="px-3 py-1.5 text-sm bg-white text-slate-700 border border-slate-200 rounded-lg hover:bg-slate-100"
+                      >
+                        Close
+                      </button>
+                    </div>
+                  </>
+                );
+              })()}
             </div>
           </div>
         </div>
