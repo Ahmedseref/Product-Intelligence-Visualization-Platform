@@ -20,7 +20,7 @@ import {
   type CustomerField, type InsertCustomerField
 } from "@shared/schema";
 import { db } from "./db";
-import { eq, and, isNull, desc, sql } from "drizzle-orm";
+import { eq, and, or, isNull, desc, sql } from "drizzle-orm";
 
 export interface IStorage {
   getTreeNodes(): Promise<TreeNode[]>;
@@ -519,13 +519,113 @@ export class DatabaseStorage implements IStorage {
   }
 
   async getNextProformaId(): Promise<string> {
-    const result = await db.select({ maxId: sql<string>`MAX(${proformas.proformaId})` }).from(proformas);
-    const maxId = result[0]?.maxId;
-    if (!maxId) {
+    // Extract the numeric base from every proformaId (stripping -vN suffixes),
+    // then take the numeric MAX. This avoids lexicographic comparison pitfalls
+    // where e.g. "PI-0009-v2" > "PI-0010" as a string but 9 < 10 numerically.
+    const result = await db
+      .select({
+        maxNum: sql<number>`MAX(
+          CAST(
+            REGEXP_REPLACE(
+              REGEXP_REPLACE(${proformas.proformaId}, '-v[0-9]+$', ''),
+              '^PI-', ''
+            ) AS INTEGER
+          )
+        )`,
+      })
+      .from(proformas);
+    const maxNum = result[0]?.maxNum;
+    if (maxNum == null) {
       return "PI-0001";
     }
-    const num = parseInt(maxId.replace("PI-", ""), 10);
-    return `PI-${String(num + 1).padStart(4, "0")}`;
+    return `PI-${String(maxNum + 1).padStart(4, "0")}`;
+  }
+
+  // Find the next version number for a given base proforma (the original
+  // plus any existing versions linked to it).
+  async getNextVersionNumber(baseProformaId: string): Promise<number> {
+    // The "base" is the proforma whose parentProformaId is null AND whose
+    // proformaId matches, OR whose parentProformaId matches.
+    const rows = await db
+      .select({ version: proformas.version })
+      .from(proformas)
+      .where(
+        or(
+          eq(proformas.proformaId, baseProformaId),
+          eq(proformas.parentProformaId, baseProformaId),
+        ),
+      );
+    const maxV = rows.reduce((mx, r) => Math.max(mx, r.version ?? 1), 0);
+    return maxV + 1;
+  }
+
+  // Deep-copy a proforma (header + items + financials) into a new row.
+  // Used by both "Duplicate" (no parent link) and "New Version" (parent link).
+  async duplicateProforma(
+    sourceId: string,
+    newProformaId: string,
+    opts?: { parentProformaId?: string; version?: number },
+  ): Promise<Proforma> {
+    const source = await this.getProforma(sourceId);
+    if (!source) throw new Error(`Source proforma ${sourceId} not found`);
+
+    const now = new Date();
+    const newRow: InsertProforma = {
+      proformaId: newProformaId,
+      customerId: source.customerId,
+      customerName: source.customerName,
+      customerCountry: source.customerCountry,
+      customerContact: source.customerContact,
+      currency: source.currency,
+      status: 'draft',
+      notes: source.notes,
+      shipTo: source.shipTo,
+      portOfLoading: source.portOfLoading,
+      placeOfDestination: source.placeOfDestination,
+      finalPlaceOfDelivery: source.finalPlaceOfDelivery,
+      countryOfOrigin: source.countryOfOrigin,
+      transportationMode: source.transportationMode,
+      paymentTerms: source.paymentTerms,
+      deliveryTerms: source.deliveryTerms,
+      customColumns: source.customColumns,
+      hiddenColumns: source.hiddenColumns,
+      columnOrder: source.columnOrder,
+      totalFormula: source.totalFormula,
+      version: opts?.version ?? 1,
+      parentProformaId: opts?.parentProformaId ?? null,
+      date: now,
+    };
+    const created = await this.createProforma(newRow);
+
+    // Copy line items
+    const items = await this.getProformaItems(sourceId);
+    for (const it of items) {
+      await this.createProformaItem({
+        proformaId: newProformaId,
+        productId: it.productId,
+        customName: it.customName,
+        customDescription: it.customDescription,
+        customPrice: it.customPrice,
+        quantity: it.quantity,
+        customValues: it.customValues,
+        sortOrder: it.sortOrder,
+      });
+    }
+
+    // Copy financial steps
+    const fins = await this.getProformaFinancials(sourceId);
+    for (const f of fins) {
+      await this.createProformaFinancial({
+        proformaId: newProformaId,
+        name: f.name,
+        type: f.type,
+        valueType: f.valueType,
+        value: f.value,
+        orderIndex: f.orderIndex,
+      });
+    }
+
+    return created;
   }
 }
 

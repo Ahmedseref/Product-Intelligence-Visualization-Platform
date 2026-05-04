@@ -397,6 +397,10 @@ export interface ProformaData {
   // Optional row-total formula override. When null/empty/'default', row
   // totals use qty × unit_price. See shared/proformaFormula.ts.
   totalFormula?: string | null;
+  // Versioning: version number (1 = original). Versions > 1 have a
+  // parentProformaId linking them to the base invoice.
+  version?: number | null;
+  parentProformaId?: string | null;
   items?: ProformaItemData[];
   financials?: ProformaFinancialData[];
   customerFields?: CustomerFieldData[];

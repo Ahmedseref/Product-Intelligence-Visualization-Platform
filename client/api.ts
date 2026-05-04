@@ -706,6 +706,22 @@ export const api = {
     document.body.appendChild(a);
   },
 
+  async duplicateProforma(proformaId: string): Promise<any> {
+    const res = await authFetch(`${API_BASE}/proforma/${proformaId}/duplicate`, {
+      method: 'POST',
+    });
+    if (!res.ok) throw new Error('Failed to duplicate proforma');
+    return res.json();
+  },
+
+  async newProformaVersion(proformaId: string): Promise<any> {
+    const res = await authFetch(`${API_BASE}/proforma/${proformaId}/new-version`, {
+      method: 'POST',
+    });
+    if (!res.ok) throw new Error('Failed to create new version');
+    return res.json();
+  },
+
   async getCustomers(): Promise<any[]> {
     const res = await authFetch(`${API_BASE}/customers`);
     if (!res.ok) throw new Error('Failed to fetch customers');

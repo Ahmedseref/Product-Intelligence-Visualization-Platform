@@ -280,6 +280,9 @@ const ProformaInvoiceEditor: React.FC<ProformaInvoiceEditorProps> = ({
   // id the first time a brand-new invoice is saved.
   const [currentProformaId, setCurrentProformaId] = useState<string | null>(proformaId);
   const isNew = currentProformaId === null;
+  // Versioning metadata (read-only display; set during hydration).
+  const [versionNum, setVersionNum] = useState<number>(1);
+  const [parentProformaId, setParentProformaId] = useState<string | null>(null);
 
   // ── Server-loaded reference data ───────────────────────────────────────
   const [settings, setSettings] = useState<ProformaSettingsData>({});
@@ -438,6 +441,10 @@ const ProformaInvoiceEditor: React.FC<ProformaInvoiceEditorProps> = ({
     setHiddenColumns(Array.isArray(pf.hiddenColumns) ? (pf.hiddenColumns as string[]) : []);
     setColumnOrder(Array.isArray(pf.columnOrder) ? (pf.columnOrder as string[]) : []);
     setTotalFormula(pf.totalFormula ?? null);
+
+    // Versioning metadata (read-only)
+    setVersionNum(pf.version ?? 1);
+    setParentProformaId(pf.parentProformaId ?? null);
   }, []);
 
   // When the user picks a customer, mirror their fields into the preview.
@@ -822,6 +829,16 @@ const ProformaInvoiceEditor: React.FC<ProformaInvoiceEditorProps> = ({
             <span className="font-mono font-semibold text-blue-700 text-sm">
               {currentProformaId || 'NEW'}
             </span>
+            {versionNum > 1 && (
+              <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded bg-purple-50 text-purple-600 border border-purple-200">
+                v{versionNum}
+              </span>
+            )}
+            {parentProformaId && (
+              <span className="text-[10px] text-slate-400" title={`Version of ${parentProformaId}`}>
+                from {parentProformaId}
+              </span>
+            )}
           </div>
           <select
             value={status}

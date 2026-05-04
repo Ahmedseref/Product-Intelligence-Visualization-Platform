@@ -141,6 +141,47 @@ export function registerProformaRoutes(app: Express): void {
     }
   });
 
+  // ── Duplicate — creates a brand-new PI-XXXX copy (no parent link) ──
+  app.post("/api/proforma/:proformaId/duplicate", async (req, res) => {
+    try {
+      const newId = await storage.getNextProformaId();
+      const created = await storage.duplicateProforma(req.params.proformaId, newId);
+      const full = await buildFullProforma(newId);
+      refreshState.trigger();
+      res.status(201).json(full);
+    } catch (error: any) {
+      console.error("Error duplicating proforma:", error);
+      res.status(error.message?.includes("not found") ? 404 : 500)
+        .json({ error: error.message || "Failed to duplicate proforma" });
+    }
+  });
+
+  // ── New Version — creates PI-XXXX-vN linked to the base proforma ──
+  app.post("/api/proforma/:proformaId/new-version", async (req, res) => {
+    try {
+      const sourceId = req.params.proformaId;
+      // Resolve the true base: if the source is itself a version, follow
+      // its parentProformaId to the original.
+      const source = await storage.getProforma(sourceId);
+      if (!source) return res.status(404).json({ error: "Proforma not found" });
+      const baseId = source.parentProformaId || sourceId;
+
+      const nextVersion = await storage.getNextVersionNumber(baseId);
+      const newId = `${baseId}-v${nextVersion}`;
+      const created = await storage.duplicateProforma(sourceId, newId, {
+        parentProformaId: baseId,
+        version: nextVersion,
+      });
+      const full = await buildFullProforma(newId);
+      refreshState.trigger();
+      res.status(201).json(full);
+    } catch (error: any) {
+      console.error("Error creating proforma version:", error);
+      res.status(error.message?.includes("not found") ? 404 : 500)
+        .json({ error: error.message || "Failed to create version" });
+    }
+  });
+
   // ── Excel Export ───────────────────────────────────────────────────
   app.get("/api/proforma/:proformaId/export/excel", async (req, res) => {
     try {

@@ -371,6 +371,13 @@ export const proformas = pgTable("proformas", {
   // {col:Name}, {total}) the row total is computed by evaluating it for
   // each row, and the proforma subtotal aggregates those evaluated totals.
   totalFormula: text("total_formula"),
+  // Versioning: version number (1 = original, 2+ = revisions). The proformaId
+  // encodes the version suffix (e.g. PI-0001-v2) but we store the integer
+  // separately for easy sorting and max-version queries.
+  version: integer("version").default(1),
+  // Points to the base proformaId when this row is a version of an earlier
+  // invoice. NULL for standalone / original invoices and for duplicates.
+  parentProformaId: varchar("parent_proforma_id", { length: 50 }),
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow(),
 });
