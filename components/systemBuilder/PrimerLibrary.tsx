@@ -9,7 +9,7 @@ import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   Library, Plus, Search, X, Edit, Trash2, Save, Check, AlertCircle,
 } from 'lucide-react';
-import { Product, PrimerLibraryEntry } from '../../types';
+import { Product, PrimerLibraryEntry, QualificationTag } from '../../types';
 import { primerLibraryApi } from '../../client/api';
 
 // Closed list — these are the four families the library cares about. They're
@@ -80,6 +80,13 @@ const PrimerLibrary: React.FC<PrimerLibraryProps> = ({ products }) => {
   const [saving, setSaving] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
 
+  // Qualification-tagged primers ("source of truth" for products the user
+  // has already marked as primers in Product Qualification). We surface
+  // those that are NOT yet in the library as a one-click import section
+  // so the two systems stay linked instead of asking the user to retype
+  // substrate/humidity that was already captured upstream.
+  const [qualPrimerTags, setQualPrimerTags] = useState<QualificationTag[]>([]);
+
   // ── Load entries + vocab on mount ──
   const refresh = useCallback(async () => {
     setLoading(true);
@@ -93,6 +100,24 @@ const PrimerLibrary: React.FC<PrimerLibraryProps> = ({ products }) => {
       setLoading(false);
     }
   }, []);
+
+  // Fetch qualification tags once and keep only the ones whose layer
+  // position is "primer". The list endpoint already filters to
+  // is_system_ready = true, which matches what the System Builder cares
+  // about. Failures are non-fatal — the Suggested panel just hides.
+  const refreshQualTags = useCallback(async () => {
+    try {
+      const token = localStorage.getItem('auth_token');
+      const headers: HeadersInit = token ? { Authorization: `Bearer ${token}` } : {};
+      const res = await fetch('/api/qualification-tags', { headers });
+      if (!res.ok) return;
+      const rows: QualificationTag[] = await res.json();
+      setQualPrimerTags(rows.filter(r => (r.layerPosition || '').toLowerCase() === 'primer'));
+    } catch (e) {
+      console.error('Failed to load qualification tags for primer suggestions:', e);
+    }
+  }, []);
+  useEffect(() => { refreshQualTags(); }, [refreshQualTags]);
 
   useEffect(() => {
     refresh();
@@ -137,10 +162,38 @@ const PrimerLibrary: React.FC<PrimerLibraryProps> = ({ products }) => {
     });
   }, [entries, search, filterSubstrate, filterHumidity, filterSystemType]);
 
+  // Tags whose product isn't yet represented in the library — these are
+  // the candidates surfaced in the "Suggested from Product Qualification"
+  // panel so the user can promote them with one click. We compare on
+  // productId because the library uniqueness rule is per-product.
+  const suggestedFromQual = useMemo(() => {
+    const inLibrary = new Set(entries.map(e => e.productId));
+    return qualPrimerTags.filter(t => !inLibrary.has(t.productId));
+  }, [qualPrimerTags, entries]);
+
   // ── Form helpers ──
   const openCreateForm = () => {
     setEditingId(null);
     setForm(EMPTY_FORM);
+    setFormError(null);
+    setFormOpen(true);
+  };
+
+  // Open the create form pre-filled from a qualification tag so the user
+  // only has to confirm the system type(s) and save. We carry over the
+  // substrate list + humidity verbatim. The form remains in "create" mode
+  // (editingId stays null) so save flows through primerLibraryApi.create.
+  const openCreateFromTag = (tag: QualificationTag) => {
+    const product = products.find(p => p.id === tag.productId);
+    setEditingId(null);
+    setForm({
+      productId: tag.productId,
+      productSearch: product?.name || tag.productId,
+      compatibleSubstrates: tag.substrateTypes || [],
+      humidityTolerance: tag.humidityTolerance || '',
+      compatibleSystemTypes: [],
+      notes: 'Imported from Product Qualification',
+    });
     setFormError(null);
     setFormOpen(true);
   };
@@ -198,6 +251,9 @@ const PrimerLibrary: React.FC<PrimerLibraryProps> = ({ products }) => {
         });
       }
       await refresh();
+      // Re-pull qualification tags so any newly imported primer drops
+      // off the suggestion list immediately after save.
+      await refreshQualTags();
       closeForm();
     } catch (e: any) {
       setFormError(e?.message || 'Save failed');
@@ -290,6 +346,67 @@ const PrimerLibrary: React.FC<PrimerLibraryProps> = ({ products }) => {
           {SYSTEM_TYPES.map(t => <option key={t} value={t}>{t}</option>)}
         </select>
       </div>
+
+      {/* Suggested from Product Qualification — surfaces qualified primer
+          products that aren't yet in the library, so the user can keep
+          the two systems linked with a single click. Hidden when there
+          are no candidates, so it doesn't add noise once everything has
+          been promoted. */}
+      {suggestedFromQual.length > 0 && (
+        <div
+          className="mb-4 border border-amber-200 bg-amber-50/40 rounded-xl p-3"
+          data-testid="primer-qual-suggestions"
+        >
+          <div className="flex items-center gap-2 mb-2">
+            <Check size={14} className="text-amber-700" />
+            <h3 className="text-sm font-semibold text-amber-900">
+              Suggested from Product Qualification
+            </h3>
+            <span className="text-[11px] text-amber-700">
+              {suggestedFromQual.length} product{suggestedFromQual.length === 1 ? '' : 's'} tagged as primer · not yet in library
+            </span>
+          </div>
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-2">
+            {suggestedFromQual.map(tag => {
+              const product = products.find(p => p.id === tag.productId);
+              return (
+                <div
+                  key={tag.id}
+                  className="flex items-start justify-between gap-2 px-3 py-2 bg-white border border-amber-200 rounded-lg"
+                  data-testid={`primer-suggestion-${tag.productId}`}
+                >
+                  <div className="min-w-0 flex-1">
+                    <div className="text-sm font-medium text-slate-700 truncate" title={product?.name || tag.productId}>
+                      {product?.name || tag.productId}
+                    </div>
+                    <div className="text-[11px] text-slate-500 truncate">
+                      {product?.supplier || '—'}
+                    </div>
+                    <div className="mt-1 flex flex-wrap gap-1">
+                      {(tag.substrateTypes || []).slice(0, 3).map(s => (
+                        <span key={s} className="text-[10px] px-1.5 py-0.5 bg-slate-100 text-slate-700 rounded-full">{s}</span>
+                      ))}
+                      {tag.humidityTolerance && (
+                        <span className={`text-[10px] px-1.5 py-0.5 rounded-full ${humidityPillClass(tag.humidityTolerance)}`}>
+                          {tag.humidityTolerance}
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                  <button
+                    onClick={() => openCreateFromTag(tag)}
+                    className="shrink-0 px-2 py-1 bg-amber-600 text-white text-[11px] font-medium rounded hover:bg-amber-700 inline-flex items-center gap-1"
+                    title="Pre-fill the add form with this product's qualification data"
+                    data-testid={`add-suggestion-${tag.productId}`}
+                  >
+                    <Plus size={11} /> Add to library
+                  </button>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
 
       {/* Inline form panel */}
       {formOpen && (

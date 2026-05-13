@@ -453,6 +453,10 @@ export interface QualificationTag {
   humidityTolerance: string | null;
   dutyRating: string | null;
   finishType: string | null;
+  // Layer Position drives the engine's substrate/finish overrides. We rely
+  // on it in the Primer Library import flow to surface only those qualified
+  // products that the user has marked as primers.
+  layerPosition: string | null;
   qualifiedAt: string | null;
   qualifiedBy: string | null;
   isSystemReady: boolean;
