@@ -284,17 +284,22 @@ const SystemBuilder: React.FC<SystemBuilderProps> = ({ products, onProductUpdate
   // change while still on Step 2), re-resolve which Primer Library entries
   // would qualify. Substrate is passed only when exactly one was selected —
   // multi-substrate systems use an "any substrate" resolve so the user still
-  // sees a meaningful preview.
+  // sees a meaningful preview. Material type is INTENTIONALLY NOT applied
+  // here for the same reason as the legacy per-product picker (Step 2
+  // comment): an Epoxy primer under a PU base + topcoat is a common valid
+  // technique, and the wizard hasn't even asked for material type yet at
+  // this point — it's picked on Step 3. Filtering by it would silently hide
+  // perfectly valid library entries (e.g. a Polyurea-only primer when the
+  // wizard's default materialType is still 'epoxy').
   useEffect(() => {
     if (!quickSetupOpen || quickStep !== 2) return;
     let cancelled = false;
     const sub = quickSetup.substrate.length === 1 ? quickSetup.substrate[0] : null;
-    const sysType = QUICK_MATERIAL_TO_SYSTEM_TYPE[quickSetup.materialType];
-    primerLibraryApi.resolve({ substrate: sub, humidity: quickSetup.humidity || null, systemType: sysType })
+    primerLibraryApi.resolve({ substrate: sub, humidity: quickSetup.humidity || null })
       .then((rows) => { if (!cancelled) setQuickPrimerMatches(Array.isArray(rows) ? rows : []); })
       .catch(() => { if (!cancelled) setQuickPrimerMatches([]); });
     return () => { cancelled = true; };
-  }, [quickSetupOpen, quickStep, quickSetup.substrate, quickSetup.humidity, quickSetup.materialType]);
+  }, [quickSetupOpen, quickStep, quickSetup.substrate, quickSetup.humidity]);
   const [showAddLayer, setShowAddLayer] = useState(false);
   const [showAddProduct, setShowAddProduct] = useState<string | null>(null);
   const [selectedProductIds, setSelectedProductIds] = useState<string[]>([]);
