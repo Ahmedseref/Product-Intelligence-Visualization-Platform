@@ -236,9 +236,59 @@ export const systemLayers = pgTable("system_layers", {
   // bounds are surfaced as first-class fields.
   recoatMinHours: real("recoat_min_hours"),
   recoatMaxHours: real("recoat_max_hours"),
+  // ── Adaptive primer slot ──
+  // 'fixed' (default) keeps the legacy behaviour where the user manually
+  // assigns one or more products via system_product_options. 'adaptive' is
+  // only meaningful for primer-position layers and tells the spec sheet to
+  // resolve the actual product from the primer_library based on the
+  // system's substrate + humidity at spec time. NULL is treated as 'fixed'
+  // by every consumer so existing layers need no migration.
+  layerMode: varchar("layer_mode", { length: 20 }).default("fixed"),
+  // Optional pinned default primer from primer_library when layerMode is
+  // 'adaptive'. Stored as the primerLibrary.primerId varchar so the
+  // reference is portable across export/import.
+  defaultPrimerLibraryId: varchar("default_primer_library_id", { length: 100 }),
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow(),
 });
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Primer Library
+// A standalone collection of primers, each tagged with the conditions they
+// can serve. One library entry maps to one product; the same product can
+// appear multiple times if it covers different (substrate, humidity)
+// combinations under different system types. Adaptive primer slots in
+// system_layers resolve their product at spec time from this library based
+// on the system's substrate + humidity + material type.
+// ─────────────────────────────────────────────────────────────────────────────
+export const primerLibrary = pgTable("primer_library", {
+  id: serial("id").primaryKey(),
+  primerId: varchar("primer_id", { length: 100 }).notNull().unique(),
+  productId: varchar("product_id", { length: 100 }).notNull(),
+  // Denormalised display fields kept in sync on create/update so the
+  // library list never needs a join just to render product name + supplier.
+  productName: varchar("product_name", { length: 255 }),
+  supplier: varchar("supplier", { length: 255 }),
+  // Array of substrate strings drawn from qualification_vocabularies
+  // (vocab_type='substrate'), e.g. ["Concrete","Steel"].
+  compatibleSubstrates: jsonb("compatible_substrates").$type<string[]>().default([]),
+  // Single value drawn from qualification_vocabularies (vocab_type='humidity').
+  humidityTolerance: varchar("humidity_tolerance", { length: 100 }),
+  // Material types this primer can serve as the bonding coat for, e.g.
+  // ["Epoxy","PU"]. These are NOT in qualification_vocabularies — they're a
+  // closed library-specific list (Epoxy / PU / Polyurea / Acrylic).
+  compatibleSystemTypes: jsonb("compatible_system_types").$type<string[]>().default([]),
+  // Reserved for future flexibility — always 'primer' today.
+  layerPosition: varchar("layer_position", { length: 50 }).default("primer"),
+  notes: text("notes"),
+  // Soft-delete flag; library entries are never hard-deleted because layers
+  // may still pin them as default_primer_library_id.
+  isActive: boolean("is_active").default(true),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+export type PrimerLibraryEntry = typeof primerLibrary.$inferSelect;
+export type InsertPrimerLibraryEntry = typeof primerLibrary.$inferInsert;
 
 export const systemProductOptions = pgTable("system_product_options", {
   id: serial("id").primaryKey(),

@@ -1,0 +1,226 @@
+I need to add a Primer Library system and adaptive primer slot to the existing System Builder. This allows one system to work across multiple substrate conditions without duplicating the system for each primer variant. Read the full existing System Builder component, server/routes.ts, and shared/schema.ts fully before making any changes.
+
+---
+
+## Core concept
+
+Currently the primer layer in a system is a fixed product assignment — the user picks one or more products manually. The new model introduces two things:
+
+1. A Primer Library — a standalone collection of primers, each tagged with the substrate and humidity conditions they serve. Defined once, reused across all systems.
+
+2. An adaptive primer slot — a new mode for primer-type layers in the system builder. Instead of a fixed product, the layer resolves its product from the Primer Library at spec time based on the system's substrate and humidity parameters.
+
+This means one Epoxy SL system can serve Concrete/dry, Concrete/damp, and Steel substrates without being duplicated three times. Only the primer changes. The base coat and topcoat are always the same.
+
+---
+
+## Part 1 — Schema changes (shared/schema.ts)
+
+### New table: primer_library
+- id: serial primary key
+- primer_id: varchar(100) unique — auto-generated, format PL-0001
+- product_id: varchar(100) — references an existing product from the products table
+- product_name: varchar(255) — denormalized for display speed
+- supplier: varchar(255) — denormalized
+- compatible_substrates: jsonb — array of strings e.g. ["Concrete", "Steel"]
+- humidity_tolerance: varchar(50) — matches qualification vocabulary: Standard / Moisture-Tolerant / Damp-Surface / Underwater
+- compatible_system_types: jsonb — array e.g. ["Epoxy", "PU", "Polyurea", "Acrylic"] — which system material types this primer works with
+- layer_position: varchar(50) — always 'primer' (stored for future flexibility)
+- notes: text nullable — e.g. "Requires 24h cure before overcoat"
+- is_active: boolean default true
+- created_at: timestamp
+
+### Modified table: system_layers (or whatever the layer table is called — check schema)
+Add one nullable column:
+- layer_mode: varchar(20) default 'fixed' — either 'fixed' (current behavior) or 'adaptive'
+
+The adaptive mode only makes sense for primer-type layers (layer_position = 'primer'). For all other layer positions, layer_mode must always be 'fixed'. Existing layers all have null which should be treated as 'fixed' — no migration needed.
+
+Run npm run db:push after all schema changes.
+
+---
+
+## Part 2 — Primer Library API endpoints (server/routes.ts)
+
+Add these routes. Do not modify any existing routes.
+
+GET /api/primer-library
+Returns all active primer library entries. Supports optional query params:
+- ?substrate=Concrete — filter by compatible substrate
+- ?humidity=Standard — filter by humidity tolerance  
+- ?systemType=Epoxy — filter by compatible system type
+- ?search=term — filter by product name
+
+Response shape per entry:
+{
+  id, primer_id, product_id, product_name, supplier,
+  compatible_substrates, humidity_tolerance, compatible_system_types,
+  notes, is_active
+}
+
+POST /api/primer-library
+Creates a new primer library entry. Auto-generates primer_id as PL-0001, PL-0002 etc.
+Body: { product_id, compatible_substrates, humidity_tolerance, compatible_system_types, notes }
+Looks up product_name and supplier from the products table using product_id.
+
+PATCH /api/primer-library/:id
+Updates an existing entry. Accepts same fields as POST.
+
+DELETE /api/primer-library/:id
+Soft delete — sets is_active = false. Never hard deletes.
+
+GET /api/primer-library/resolve
+The key endpoint — resolves which primers from the library match a given system context.
+Query params (all optional):
+- substrate: string
+- humidity: string
+- systemType: string
+Returns filtered list of matching primers from the library, sorted by: exact humidity match first, then partial match.
+
+---
+
+## Part 3 — Primer Library UI (new tab inside System Builder)
+
+Add a "Primer Library" tab to the System Builder tab bar, between "Product Qualification" and "Builder". Use a Lucide icon (BookOpen or Library).
+
+### Primer Library tab layout
+
+Top bar:
+- Title: "Primer Library"
+- Count badge: "X primers defined"
+- "+ Add primer" button (primary)
+- Search input filtering by product name
+- Filter dropdowns: Substrate (All + vocabulary options) / Humidity (All + vocabulary options) / System type (All / Epoxy / PU / Polyurea / Acrylic)
+
+Primers displayed as a table with columns:
+- Product name (with product code below in muted text)
+- Supplier
+- Compatible substrates (shown as pills)
+- Humidity tolerance (shown as colored pill matching qualification color scheme: Standard=gray, Moisture-Tolerant=blue, Damp-Surface=amber, Underwater=teal)
+- Compatible system types (shown as pills)
+- Notes (truncated, expand on hover)
+- Actions: Edit / Deactivate
+
+### Add/Edit primer form (inline panel, not modal)
+Opens below the table or as a side panel when "+ Add primer" or Edit is clicked.
+
+Fields:
+- Product search: text input that searches GET /api/products?search=term — shows product name, code, supplier in dropdown results. Selecting a product fills product_id, product_name, supplier automatically.
+- Compatible substrates: multi-select using vocabulary closed list (Concrete / Steel / Wood / Screed / Asphalt / Ceramic / Existing Coating)
+- Humidity tolerance: single select (Standard / Moisture-Tolerant / Damp-Surface / Underwater)
+- Compatible system types: multi-select checkboxes (Epoxy / PU / Polyurea / Acrylic)
+- Notes: text input optional
+- Save / Cancel buttons
+
+Validation: product must be selected, at least one substrate, humidity must be set, at least one system type.
+
+---
+
+## Part 4 — Adaptive primer slot in the System Builder layer editor
+
+### Modifying the primer layer UI
+
+In the existing layer editor, primer-type layers (where layer_position = 'primer' in the layer's qualification tags, OR where the layer name contains "primer" case-insensitive) get a new UI element:
+
+A toggle at the top right of the primer layer card:
+- Left option: "Fixed products" (current behavior — user manually assigns products)
+- Right option: "Adaptive from library" (new behavior)
+
+This toggle sets layer_mode on that layer. Existing layers default to "Fixed products".
+
+### Fixed mode (layer_mode = 'fixed')
+Identical to current behavior. No changes. The user assigns products manually as today.
+
+### Adaptive mode (layer_mode = 'adaptive')
+
+When adaptive mode is selected, the manual product assignment area is replaced with:
+
+An "Adaptive primer slot" panel showing:
+
+1. A preview section: "Primers that will resolve for this system"
+   - Calls GET /api/primer-library/resolve?substrate={system_substrate}&humidity={system_humidity}&systemType={system_type}
+   - Shows the matching primers as read-only cards: product name, supplier, substrate tags, humidity tag
+   - If system parameters (substrate/humidity) are not set yet, shows a prompt: "Set system substrate and humidity parameters above to preview which primers will resolve"
+   - If no primers match, shows: "No primers in library match these conditions — add primers to the Primer Library tab"
+
+2. A "Default primer" selector:
+   - Optional — the user can pin one primer from the resolved list as the recommended default
+   - Shown as a dropdown populated with the resolved list
+   - Stored as default_primer_library_id on the layer record (add this nullable varchar column to the layers table)
+   - If no default is set, shows "No default — all matching primers are alternatives"
+
+3. A coverage summary:
+   - "This system will resolve a primer for: Concrete/Standard · Concrete/Moisture-Tolerant · Steel/Standard"
+   - Lists every substrate+humidity combination that has at least one matching primer in the library
+   - Gaps shown in amber: "No primer found for: Steel/Damp-Surface — add to Primer Library"
+
+### System parameters interaction
+When the system's substrate or humidity parameters change (the existing parameter header dropdowns), and the primer layer is in adaptive mode:
+- Re-fetch GET /api/primer-library/resolve with the updated parameters
+- Update the preview section immediately
+- Update the coverage summary
+
+### Build-up preview panel (right side)
+When a layer is in adaptive mode, the Build-Up Preview panel on the right shows the primer slot differently:
+- Instead of a product name, show: "Primer — adaptive (resolves from library)"
+- Show a small indicator: "N primers available" where N is the count from the resolved list
+- If system parameters are set, show which specific primer would be used: "→ PRIMER S 125 (Concrete/Standard)"
+
+### System Health section
+Add a new check to the existing System Health section:
+- If any primer layer is adaptive and has gaps (substrate+humidity combos with no matching primer), show amber warning: "Primer gaps detected — X conditions have no primer in library"
+- If all conditions are covered, show green: "All primer conditions covered"
+- If all primer layers are fixed (current behavior), show nothing new here
+
+---
+
+## Part 5 — Spec sheet output (System Preview tab)
+
+In the System Preview tab's detail panel, when a primer layer is adaptive:
+
+Replace the static primer product card with a conditional display:
+
+If viewing the system without a specific substrate/humidity selected:
+- Show a card titled "Primer — adaptive"
+- List all primers from the resolved library entries grouped by condition: "For Concrete/Standard: PRIMER S 125 (Grada)" etc.
+- Show a note: "Primer is selected based on site conditions at time of specification"
+
+If the system preview has substrate and humidity parameters set (from the system parameter header):
+- Show the single resolved primer as a normal product card
+- Add a small badge: "Selected for [Substrate] / [Humidity]"
+
+The spec sheet export (Export spec sheet button) should output the adaptive primer as a conditional table: one row per substrate+humidity combination with its resolved primer.
+
+---
+
+## Part 6 — Saving adaptive layer state
+
+The existing PATCH /api/systems/:id or layer update endpoint needs to accept and save:
+- layer_mode: 'fixed' | 'adaptive' on the layer record
+- default_primer_library_id: nullable varchar on the layer record (the pinned default primer)
+
+Check the existing layer update endpoint and extend it to handle these two new fields. Do not break existing layer saving behavior.
+
+---
+
+## Rules
+- Run npm run db:push after all schema changes
+- Do not modify any existing routes — only add new ones or extend existing ones by adding new optional fields
+- Existing systems with fixed primer layers must open and work exactly as before — no regression
+- layer_mode null must be treated as 'fixed' everywhere in the UI and API
+- The Primer Library tab must not affect the Builder, Analytics, Product Qualification, or System Preview tabs
+- All vocabulary lists (substrate, humidity) must use the same closed lists already defined in qualification_vocabularies table — do not hardcode them, fetch from GET /api/qualification-vocabularies
+- The adaptive slot UI must handle loading states gracefully — show a spinner while resolving
+- If GET /api/primer-library/resolve returns an empty array, never show a broken state — show the "add primers" prompt instead
+- Use Tailwind CSS and Lucide React matching the existing System Builder style
+- New component files: PrimerLibrary.tsx (the library tab), AdaptivePrimerSlot.tsx (the slot UI inside the layer card)
+- Import both into the existing System Builder component only
+
+After all changes, test:
+1. Add 3 primers to the library: Primer A (Concrete/Standard/Epoxy), Primer B (Concrete/Moisture-Tolerant/Epoxy), Primer C (Steel/Standard/Epoxy)
+2. Open the Antistatic Epoxy System, set system substrate to Concrete, humidity to Standard
+3. Switch the primer layer to adaptive mode — verify Primer A appears in the resolved preview
+4. Change humidity to Moisture-Tolerant — verify Primer B appears instead
+5. Check the coverage summary shows Steel/Moisture-Tolerant as a gap (amber warning)
+6. Verify the Build-Up Preview panel shows "→ Primer B" for the current parameters
+7. Open System Preview tab — verify the primer shows conditionally per substrate+humidity combo

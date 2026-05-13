@@ -991,6 +991,12 @@ export const systemsApi = {
       defaultProductId?: string | null;
       // Phase 3: optional per-layer substrate override
       layerSubstrateOverride?: string | null;
+      // Adaptive primer slot — primer-position layers can switch between
+      // 'fixed' (manual products) and 'adaptive' (resolved from Primer
+      // Library). When adaptive, defaultPrimerLibraryId optionally pins
+      // one library entry as the recommended default.
+      layerMode?: 'fixed' | 'adaptive' | null;
+      defaultPrimerLibraryId?: string | null;
       // ---- Installable-spec fields. All nullable; null clears the value. ----
       // kg of material per m² of substrate.
       consumptionRateKgM2?: number | null;
@@ -1150,6 +1156,72 @@ export const analyticsApi = {
   getFilters: async () => {
     const response = await fetch(`${API_BASE}/analytics/filters`, { headers: getAuthHeaders() });
     if (!response.ok) throw new Error('Failed to fetch filters');
+    return response.json();
+  },
+};
+
+// ── Primer Library ──
+// Thin wrapper around /api/primer-library. The `resolve` call is what the
+// adaptive primer slot uses to render the live "primers that will resolve
+// for this system" preview.
+export const primerLibraryApi = {
+  list: async (filters?: { substrate?: string; humidity?: string; systemType?: string; search?: string }) => {
+    const params = new URLSearchParams();
+    if (filters?.substrate) params.set('substrate', filters.substrate);
+    if (filters?.humidity) params.set('humidity', filters.humidity);
+    if (filters?.systemType) params.set('systemType', filters.systemType);
+    if (filters?.search) params.set('search', filters.search);
+    const qs = params.toString();
+    const response = await fetch(`${API_BASE}/primer-library${qs ? `?${qs}` : ''}`, { headers: getAuthHeaders() });
+    if (!response.ok) throw new Error('Failed to fetch primer library');
+    return response.json();
+  },
+  resolve: async (filters?: { substrate?: string | null; humidity?: string | null; systemType?: string | null }) => {
+    const params = new URLSearchParams();
+    if (filters?.substrate) params.set('substrate', filters.substrate);
+    if (filters?.humidity) params.set('humidity', filters.humidity);
+    if (filters?.systemType) params.set('systemType', filters.systemType);
+    const qs = params.toString();
+    const response = await fetch(`${API_BASE}/primer-library/resolve${qs ? `?${qs}` : ''}`, { headers: getAuthHeaders() });
+    if (!response.ok) throw new Error('Failed to resolve primer library');
+    return response.json();
+  },
+  create: async (data: {
+    productId: string;
+    compatibleSubstrates: string[];
+    humidityTolerance: string;
+    compatibleSystemTypes: string[];
+    notes?: string | null;
+  }) => {
+    const response = await fetch(`${API_BASE}/primer-library`, {
+      method: 'POST',
+      headers: { ...getAuthHeaders(), 'Content-Type': 'application/json' },
+      body: JSON.stringify(data),
+    });
+    if (!response.ok) throw new Error('Failed to create primer library entry');
+    return response.json();
+  },
+  update: async (id: number, data: Partial<{
+    productId: string;
+    compatibleSubstrates: string[];
+    humidityTolerance: string;
+    compatibleSystemTypes: string[];
+    notes: string | null;
+  }>) => {
+    const response = await fetch(`${API_BASE}/primer-library/${id}`, {
+      method: 'PATCH',
+      headers: { ...getAuthHeaders(), 'Content-Type': 'application/json' },
+      body: JSON.stringify(data),
+    });
+    if (!response.ok) throw new Error('Failed to update primer library entry');
+    return response.json();
+  },
+  deactivate: async (id: number) => {
+    const response = await fetch(`${API_BASE}/primer-library/${id}`, {
+      method: 'DELETE',
+      headers: getAuthHeaders(),
+    });
+    if (!response.ok) throw new Error('Failed to deactivate primer library entry');
     return response.json();
   },
 };

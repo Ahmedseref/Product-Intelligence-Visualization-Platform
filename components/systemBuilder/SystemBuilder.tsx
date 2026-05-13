@@ -9,11 +9,15 @@ import {
   Plus, Search, ChevronRight, ChevronDown, GripVertical, Trash2, Edit, Save, X, Info, 
   Download, Upload, Layers, Package, Star, StarOff, MoreVertical, Copy, 
   History, Eye, FileJson, FileSpreadsheet, ChevronUp, AlertCircle, Check,
-  BarChart3, FileUp, ShieldCheck, AlertTriangle, Sparkles, ArrowRight, ArrowLeft
+  BarChart3, FileUp, ShieldCheck, AlertTriangle, Sparkles, ArrowRight, ArrowLeft,
+  Library
 } from 'lucide-react';
 import SystemDashboard from './SystemDashboard';
 import SystemBuilderQualification from '../SystemBuilderQualification';
 import SystemBuilderPreview from '../SystemBuilderPreview';
+import PrimerLibrary from './PrimerLibrary';
+import AdaptivePrimerSlot from './AdaptivePrimerSlot';
+import { PrimerLibraryEntry } from '../../types';
 
 interface SystemBuilderProps {
   products: Product[];
@@ -30,7 +34,32 @@ interface SystemBuilderProps {
   onProductEdit?: (p: Product) => void;
 }
 
-type TabMode = 'builder' | 'analytics' | 'qualification' | 'preview';
+type TabMode = 'builder' | 'analytics' | 'qualification' | 'preview' | 'library';
+
+// ── Adaptive primer helpers ──
+// A layer is "primer-position" when its name contains "primer" (case-
+// insensitive) — same heuristic the qualification engine and Build-Up
+// Preview already use throughout the System Builder. The toggle and the
+// adaptive slot panel are only shown for these layers; everywhere else
+// layerMode is forced to 'fixed'.
+const isPrimerLayer = (layerName: string | null | undefined): boolean => {
+  if (!layerName) return false;
+  return /\bprimer\b/i.test(layerName);
+};
+
+// Infer the system's material/system type for the adaptive resolve filter.
+// Maps the system name + description to one of Epoxy / PU / Polyurea /
+// Acrylic. Returns null when nothing matches so the resolve call doesn't
+// constrain by type.
+const inferSystemType = (system: { name?: string | null; description?: string | null } | null | undefined): string | null => {
+  if (!system) return null;
+  const hay = `${system.name || ''} ${system.description || ''}`.toLowerCase();
+  if (/\bpolyurea\b/.test(hay)) return 'Polyurea';
+  if (/\bepoxy\b/.test(hay)) return 'Epoxy';
+  if (/\bacrylic\b/.test(hay)) return 'Acrylic';
+  if (/\b(pu|polyurethane)\b/.test(hay)) return 'PU';
+  return null;
+};
 
 // ----------------------------------------------------------------------------
 // SpecNumberInput
@@ -125,6 +154,11 @@ SpecNumberInput.displayName = 'SpecNumberInput';
 
 const SystemBuilder: React.FC<SystemBuilderProps> = ({ products, onProductUpdate, customFields, treeNodes, suppliers, usageAreas, units, colors, currentUser, onAddFieldDefinition, onAddTreeNode, onProductEdit }) => {
   const [activeTab, setActiveTab] = useState<TabMode>('builder');
+  // Map of layerId → resolved primer entries reported back by each
+  // AdaptivePrimerSlot. Used by Build-Up Preview and System Health to show
+  // the live "→ <resolved primer>" hint and detect coverage gaps without
+  // re-fetching from the right panel.
+  const [resolvedPrimersByLayer, setResolvedPrimersByLayer] = useState<Record<string, PrimerLibraryEntry[]>>({});
   const [systems, setSystems] = useState<SystemData[]>([]);
   const [selectedSystemId, setSelectedSystemId] = useState<string | null>(null);
   const [fullSystem, setFullSystem] = useState<SystemFull | null>(null);
@@ -394,6 +428,16 @@ const SystemBuilder: React.FC<SystemBuilderProps> = ({ products, onProductUpdate
     }
   }, []);
 
+  // Reset the resolved primer cache whenever the active system or its
+  // parameters change. Without this the System Health gap stat and the
+  // Build-Up Preview can briefly show resolved primers from the previous
+  // system/params (false-green) until each AdaptivePrimerSlot's async
+  // resolve returns and overwrites its slot. Keyed by id+substrate+humidity
+  // so any header change forces a parameter-driven re-resolve from scratch.
+  useEffect(() => {
+    setResolvedPrimersByLayer({});
+  }, [fullSystem?.id, fullSystem?.systemSubstrate, fullSystem?.systemHumidity]);
+
   const loadFullSystem = useCallback(async (systemId: string) => {
     setLoading(true);
     try {
@@ -559,12 +603,18 @@ const SystemBuilder: React.FC<SystemBuilderProps> = ({ products, onProductUpdate
           layer.dftMicrons != null ||
           layer.recoatMinHours != null ||
           layer.recoatMaxHours != null;
-        if (hasSpec) {
+        // Carry over adaptive primer slot config so duplicates serve the
+        // same conditions out of the box. Falls into the same updateLayer
+        // batch as the spec values to keep this to one network call.
+        const hasAdaptive = layer.layerMode === 'adaptive' || layer.defaultPrimerLibraryId;
+        if (hasSpec || hasAdaptive) {
           await systemsApi.updateLayer(newLayer.layerId, {
             consumptionRateKgM2: layer.consumptionRateKgM2 ?? null,
             dftMicrons: layer.dftMicrons ?? null,
             recoatMinHours: layer.recoatMinHours ?? null,
             recoatMaxHours: layer.recoatMaxHours ?? null,
+            layerMode: (layer.layerMode === 'adaptive' ? 'adaptive' : 'fixed'),
+            defaultPrimerLibraryId: layer.defaultPrimerLibraryId ?? null,
           });
         }
 
@@ -792,9 +842,17 @@ const SystemBuilder: React.FC<SystemBuilderProps> = ({ products, onProductUpdate
       }
     }
     const defaultCoverage = fullSystem.layers.filter(l => l.productOptions.some(o => o.isDefault)).length;
-    const status: 'green' | 'amber' | 'red' = conflictCount > 0 ? 'red' : (unqualifiedCount > 0 ? 'amber' : 'green');
-    return { conflictCount, unqualifiedCount, totalProducts, defaultCoverage, totalLayers: fullSystem.layers.length, firstConflictLayerId, status };
-  }, [fullSystem, getProductConflicts]);
+    // Adaptive primer gap check — for every primer-position layer in
+    // adaptive mode, look up the resolved entries reported back by the
+    // child AdaptivePrimerSlot. A layer with zero resolved entries is a
+    // gap (the library has no primer for the system's parameters), which
+    // promotes the overall status to at least amber.
+    const adaptivePrimerLayers = fullSystem.layers.filter(l => l.layerMode === 'adaptive');
+    const adaptivePrimerGaps = adaptivePrimerLayers.filter(l => (resolvedPrimersByLayer[l.layerId]?.length ?? 0) === 0).length;
+    const baseStatus: 'green' | 'amber' | 'red' = conflictCount > 0 ? 'red' : (unqualifiedCount > 0 ? 'amber' : 'green');
+    const status: 'green' | 'amber' | 'red' = adaptivePrimerGaps > 0 && baseStatus === 'green' ? 'amber' : baseStatus;
+    return { conflictCount, unqualifiedCount, totalProducts, defaultCoverage, totalLayers: fullSystem.layers.length, firstConflictLayerId, status, adaptivePrimerLayers: adaptivePrimerLayers.length, adaptivePrimerGaps };
+  }, [fullSystem, getProductConflicts, resolvedPrimersByLayer]);
 
   // For the build-up preview: per-layer aggregates of substrate compatibility,
   // duty agreement, and system-ready ratio. Returns null when no qualification
@@ -1092,6 +1150,7 @@ const SystemBuilder: React.FC<SystemBuilderProps> = ({ products, onProductUpdate
               <button onClick={() => setActiveTab('builder')} className="px-3 py-1 text-sm rounded-lg hover:bg-slate-100 text-slate-500">Builder</button>
               <button className="px-3 py-1 text-sm rounded-lg bg-blue-100 text-blue-700 font-medium">Analytics</button>
               <button onClick={() => setActiveTab('preview')} className="px-3 py-1 text-sm rounded-lg hover:bg-slate-100 text-slate-500 inline-flex items-center gap-1.5"><Eye size={14} />System Preview</button>
+              <button onClick={() => setActiveTab('library')} className="px-3 py-1 text-sm rounded-lg hover:bg-slate-100 text-slate-500 inline-flex items-center gap-1.5"><Library size={14} />Primer Library</button>
             </div>
           </div>
         </div>
@@ -1113,6 +1172,7 @@ const SystemBuilder: React.FC<SystemBuilderProps> = ({ products, onProductUpdate
               <button onClick={() => setActiveTab('builder')} className="px-3 py-1 text-sm rounded-lg hover:bg-slate-100 text-slate-500">Builder</button>
               <button onClick={() => setActiveTab('analytics')} className="px-3 py-1 text-sm rounded-lg hover:bg-slate-100 text-slate-500">Analytics</button>
               <button onClick={() => setActiveTab('preview')} className="px-3 py-1 text-sm rounded-lg hover:bg-slate-100 text-slate-500 inline-flex items-center gap-1.5"><Eye size={14} />System Preview</button>
+              <button onClick={() => setActiveTab('library')} className="px-3 py-1 text-sm rounded-lg hover:bg-slate-100 text-slate-500 inline-flex items-center gap-1.5"><Library size={14} />Primer Library</button>
             </div>
           </div>
         </div>
@@ -1137,6 +1197,7 @@ const SystemBuilder: React.FC<SystemBuilderProps> = ({ products, onProductUpdate
               <button onClick={() => setActiveTab('builder')} className="px-3 py-1 text-sm rounded-lg hover:bg-slate-100 text-slate-500">Builder</button>
               <button onClick={() => setActiveTab('analytics')} className="px-3 py-1 text-sm rounded-lg hover:bg-slate-100 text-slate-500">Analytics</button>
               <button className="px-3 py-1 text-sm rounded-lg bg-blue-100 text-blue-700 font-medium inline-flex items-center gap-1.5"><Eye size={14} />System Preview</button>
+              <button onClick={() => setActiveTab('library')} className="px-3 py-1 text-sm rounded-lg hover:bg-slate-100 text-slate-500 inline-flex items-center gap-1.5"><Library size={14} />Primer Library</button>
             </div>
           </div>
         </div>
@@ -1152,6 +1213,31 @@ const SystemBuilder: React.FC<SystemBuilderProps> = ({ products, onProductUpdate
     );
   }
 
+  // Primer Library tab — standalone editor for the shared primer library
+  // that adaptive primer slots resolve against. Reachable from every other
+  // tab via the Library button in the nav row.
+  if (activeTab === 'library') {
+    return (
+      <div className="h-full flex flex-col">
+        <div className="flex items-center justify-between px-6 py-4 border-b border-slate-200 bg-white">
+          <div>
+            <h1 className="text-xl font-bold text-slate-800">System Builder</h1>
+            <div className="flex items-center gap-1 mt-2">
+              <button onClick={() => setActiveTab('qualification')} className="px-3 py-1 text-sm rounded-lg hover:bg-slate-100 text-slate-500 inline-flex items-center gap-1.5"><ShieldCheck size={14} />Product Qualification</button>
+              <button onClick={() => setActiveTab('builder')} className="px-3 py-1 text-sm rounded-lg hover:bg-slate-100 text-slate-500">Builder</button>
+              <button onClick={() => setActiveTab('analytics')} className="px-3 py-1 text-sm rounded-lg hover:bg-slate-100 text-slate-500">Analytics</button>
+              <button onClick={() => setActiveTab('preview')} className="px-3 py-1 text-sm rounded-lg hover:bg-slate-100 text-slate-500 inline-flex items-center gap-1.5"><Eye size={14} />System Preview</button>
+              <button className="px-3 py-1 text-sm rounded-lg bg-blue-100 text-blue-700 font-medium inline-flex items-center gap-1.5"><Library size={14} />Primer Library</button>
+            </div>
+          </div>
+        </div>
+        <div className="flex-1 overflow-y-auto bg-slate-50">
+          <PrimerLibrary products={products} />
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="h-full flex flex-col">
       <div className="flex items-center justify-between px-6 py-4 border-b border-slate-200 bg-white">
@@ -1162,6 +1248,7 @@ const SystemBuilder: React.FC<SystemBuilderProps> = ({ products, onProductUpdate
             <button className="px-3 py-1 text-sm rounded-lg bg-blue-100 text-blue-700 font-medium">Builder</button>
             <button onClick={() => setActiveTab('analytics')} className="px-3 py-1 text-sm rounded-lg hover:bg-slate-100 text-slate-500">Analytics</button>
             <button onClick={() => setActiveTab('preview')} className="px-3 py-1 text-sm rounded-lg hover:bg-slate-100 text-slate-500 inline-flex items-center gap-1.5"><Eye size={14} />System Preview</button>
+            <button onClick={() => setActiveTab('library')} className="px-3 py-1 text-sm rounded-lg hover:bg-slate-100 text-slate-500 inline-flex items-center gap-1.5"><Library size={14} />Primer Library</button>
           </div>
         </div>
         <div className="flex items-center gap-2">
@@ -1818,7 +1905,66 @@ const SystemBuilder: React.FC<SystemBuilderProps> = ({ products, onProductUpdate
                         </label>
                       </div>
 
-                      {showAddProduct === layer.layerId && (
+                      {/* ── Adaptive primer toggle ──
+                          Only rendered for primer-position layers (name
+                          contains "primer"). Switching to "Adaptive" hides
+                          the manual product picker + product list below
+                          and renders the AdaptivePrimerSlot panel which
+                          resolves products from the Primer Library based
+                          on the system's parameters. */}
+                      {/* Always show the toggle when a layer is *currently*
+                          adaptive, even if its name no longer matches the
+                          primer regex — otherwise renaming a layer could
+                          strand it in adaptive mode with no UI to switch
+                          back to fixed and no product editing controls. */}
+                      {(isPrimerLayer(layer.layerName) || layer.layerMode === 'adaptive') && (
+                        <div className="px-3 py-1.5 bg-indigo-50/40 border-b border-indigo-100 flex items-center gap-2 text-[11px]">
+                          <Library size={12} className="text-indigo-600" />
+                          <span className="font-semibold text-indigo-700 uppercase tracking-wide text-[10px]">Primer mode</span>
+                          <div className="inline-flex rounded-md overflow-hidden border border-indigo-200" data-testid={`primer-mode-toggle-${layer.layerId}`}>
+                            <button
+                              type="button"
+                              onClick={() => systemsApi.updateLayer(layer.layerId, { layerMode: 'fixed', defaultPrimerLibraryId: null }).then(() => loadFullSystem(selectedSystemId!))}
+                              className={`px-2 py-0.5 text-[11px] font-medium ${(layer.layerMode || 'fixed') === 'fixed' ? 'bg-indigo-600 text-white' : 'bg-white text-slate-600 hover:bg-indigo-50'}`}
+                            >
+                              Fixed
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => systemsApi.updateLayer(layer.layerId, { layerMode: 'adaptive' }).then(() => loadFullSystem(selectedSystemId!))}
+                              className={`px-2 py-0.5 text-[11px] font-medium ${layer.layerMode === 'adaptive' ? 'bg-indigo-600 text-white' : 'bg-white text-slate-600 hover:bg-indigo-50'}`}
+                            >
+                              Adaptive
+                            </button>
+                          </div>
+                          <span className="text-[10px] text-slate-500 italic">
+                            {layer.layerMode === 'adaptive'
+                              ? 'Product resolved from Primer Library at spec time'
+                              : 'Manual product assignment'}
+                          </span>
+                        </div>
+                      )}
+
+                      {/* Adaptive primer slot panel — replaces the manual
+                          product UI below when this layer is in adaptive
+                          mode. The slot's resolve list is parameter-driven
+                          and updates live as the system header changes. */}
+                      {layer.layerMode === 'adaptive' && (
+                        <AdaptivePrimerSlot
+                          systemSubstrate={fullSystem.systemSubstrate}
+                          systemHumidity={fullSystem.systemHumidity}
+                          systemType={inferSystemType(fullSystem)}
+                          defaultPrimerLibraryId={layer.defaultPrimerLibraryId ?? null}
+                          onSetDefault={(primerId) =>
+                            systemsApi
+                              .updateLayer(layer.layerId, { defaultPrimerLibraryId: primerId })
+                              .then(() => loadFullSystem(selectedSystemId!))
+                          }
+                          onResolved={(entries) => setResolvedPrimersByLayer(prev => ({ ...prev, [layer.layerId]: entries }))}
+                        />
+                      )}
+
+                      {showAddProduct === layer.layerId && layer.layerMode !== 'adaptive' && (
                         <div className="px-3 py-2 bg-white border-b border-slate-100 border-l-4 border-l-green-400">
                           {/* Smart filter banner — visible whenever the search panel is open
                               so the user can always see what's being filtered AND has a way
@@ -1975,6 +2121,7 @@ const SystemBuilder: React.FC<SystemBuilderProps> = ({ products, onProductUpdate
                         </div>
                       )}
 
+                      {layer.layerMode !== 'adaptive' && (
                       <div className="divide-y divide-indigo-50/50 px-2 py-1.5 space-y-0.5">
                         {layer.productOptions.map((opt) => {
                           const fullProd = products.find(p => p.id === opt.productId);
@@ -2109,6 +2256,7 @@ const SystemBuilder: React.FC<SystemBuilderProps> = ({ products, onProductUpdate
                           </div>
                         )}
                       </div>
+                      )}
                     </div>
                     );
                   })}
@@ -2189,7 +2337,44 @@ const SystemBuilder: React.FC<SystemBuilderProps> = ({ products, onProductUpdate
                               </span>
                               <span className="text-xs font-semibold text-slate-700">{layer.layerName}</span>
                             </div>
-                            {defaultProducts.length > 0 ? (
+                            {/* Adaptive primer layers render their resolved
+                                library entries instead of the manual product
+                                options. The pinned default (if set) is
+                                surfaced first; otherwise we show the count
+                                of resolved alternatives. A red "no primer"
+                                line fires when the library covers no primer
+                                for the current parameters. */}
+                            {layer.layerMode === 'adaptive' ? (
+                              (() => {
+                                const resolved = resolvedPrimersByLayer[layer.layerId] || [];
+                                const pinned = layer.defaultPrimerLibraryId
+                                  ? resolved.find(r => r.primerId === layer.defaultPrimerLibraryId)
+                                  : null;
+                                if (resolved.length === 0) {
+                                  return (
+                                    <div className="ml-7 mt-1 text-[11px] text-amber-700 flex items-center gap-1">
+                                      <AlertTriangle size={9} className="text-amber-600" />
+                                      Adaptive — no primer in library matches the system parameters
+                                    </div>
+                                  );
+                                }
+                                return (
+                                  <div className="ml-7 mt-1 space-y-0.5">
+                                    <div className="text-[11px] text-indigo-700 flex items-center gap-1">
+                                      <Library size={9} className="text-indigo-600" />
+                                      {pinned ? (
+                                        <>
+                                          <Star size={8} className="text-amber-500" fill="currentColor" />
+                                          {pinned.productName || pinned.productId}
+                                        </>
+                                      ) : (
+                                        <>Adaptive · {resolved.length} primer{resolved.length === 1 ? '' : 's'} resolve</>
+                                      )}
+                                    </div>
+                                  </div>
+                                );
+                              })()
+                            ) : defaultProducts.length > 0 ? (
                               <div className="ml-7 mt-1 space-y-0.5">
                                 {defaultProducts.map((dp) => (
                                   <div key={dp.optionId} className="text-[11px] text-slate-500 flex items-center gap-1">
@@ -2262,6 +2447,13 @@ const SystemBuilder: React.FC<SystemBuilderProps> = ({ products, onProductUpdate
                     <div className="text-[11px] text-slate-600">
                       {systemHealth.defaultCoverage} of {systemHealth.totalLayers} layer{systemHealth.totalLayers === 1 ? '' : 's'} have a default set
                     </div>
+                    {systemHealth.adaptivePrimerLayers > 0 && (
+                      <div className={`text-[11px] mt-1 ${systemHealth.adaptivePrimerGaps > 0 ? 'text-amber-700' : 'text-slate-600'}`}>
+                        {systemHealth.adaptivePrimerGaps > 0
+                          ? `${systemHealth.adaptivePrimerGaps} adaptive primer layer${systemHealth.adaptivePrimerGaps === 1 ? '' : 's'} unresolved — add primers to the library`
+                          : `${systemHealth.adaptivePrimerLayers} adaptive primer layer${systemHealth.adaptivePrimerLayers === 1 ? '' : 's'} resolved`}
+                      </div>
+                    )}
                   </div>
                 </div>
               )}

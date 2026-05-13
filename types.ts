@@ -203,8 +203,35 @@ export interface SystemLayer {
   dftMicrons?: number | null;          // dry film thickness, μm
   recoatMinHours?: number | null;      // minimum hours before next coat
   recoatMaxHours?: number | null;      // maximum hours before next coat
+  // Adaptive primer slot. 'fixed' (default/null) → manual products via
+  // systemProductOptions. 'adaptive' → product is resolved at spec time
+  // from the Primer Library based on the system's substrate + humidity.
+  layerMode?: 'fixed' | 'adaptive' | null;
+  // Pinned default primer (primer_library.primerId) when layerMode is
+  // 'adaptive'. Optional — when null, all matching primers are alternatives.
+  defaultPrimerLibraryId?: string | null;
   createdAt: string;
   updatedAt: string;
+}
+
+// ── Primer Library ──
+// One row per primer-condition combination served by the library. Adaptive
+// primer slots resolve to one of these entries at spec time. Soft-deleted
+// entries (isActive=false) are excluded from the standard list but remain
+// in the table so historical references stay intact.
+export interface PrimerLibraryEntry {
+  id: number;
+  primerId: string;                       // PL-0001 etc.
+  productId: string;                      // products.productId
+  productName: string | null;
+  supplier: string | null;
+  compatibleSubstrates: string[];         // substrate vocab values
+  humidityTolerance: string | null;       // humidity vocab value
+  compatibleSystemTypes: string[];        // ["Epoxy","PU","Polyurea","Acrylic"]
+  layerPosition: string | null;           // always 'primer' today
+  notes: string | null;
+  isActive: boolean;
+  createdAt: string;
 }
 
 export interface SystemProductOption {

@@ -44,7 +44,8 @@
 
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Eye, X, Search, Edit3, Download, AlertCircle, Star, Layers, Check, GitCompare, Filter } from 'lucide-react';
-import { systemsApi } from '../client/api';
+import { systemsApi, primerLibraryApi } from '../client/api';
+import type { PrimerLibraryEntry } from '../types';
 import { useEscapeKey } from '../hooks/useEscapeKey';
 
 // We don't import API_BASE / getAuthHeaders from client/api.ts because they
@@ -103,6 +104,11 @@ type LayerRow = {
   dftMicrons?: number | null;
   recoatMinHours?: number | null;
   recoatMaxHours?: number | null;
+  // Adaptive primer mode: when 'adaptive', the layer renders a primer
+  // resolved from the Primer Library against the system parameters
+  // instead of a fixed productOptions list.
+  layerMode?: 'fixed' | 'adaptive' | null;
+  defaultPrimerLibraryId?: string | null;
 };
 
 type FullSystem = SystemRow & { layers: LayerRow[] };
@@ -297,6 +303,10 @@ export default function SystemBuilderPreview({ onEditInBuilder }: Props) {
   const [highlightLayerId, setHighlightLayerId] = useState<string | null>(null);
   // For the "alternatives" pill switcher: which optionId is active per layer.
   const [activeOptionByLayer, setActiveOptionByLayer] = useState<Record<string, string>>({});
+  // For adaptive primer layers in the open system: layerId → resolved
+  // PrimerLibraryEntry list. Populated once when the modal opens by
+  // calling primerLibraryApi.resolve for each adaptive primer layer.
+  const [resolvedPrimersByLayer, setResolvedPrimersByLayer] = useState<Record<string, PrimerLibraryEntry[]>>({});
 
   // Inline preview-note editor.
   const [noteText, setNoteText] = useState<string>('');
@@ -421,12 +431,22 @@ export default function SystemBuilderPreview({ onEditInBuilder }: Props) {
   }, [cardData, searchText, filterType, filterStatus, filterSubstrate]);
 
   // ---------- open modal: fetch full + initialise local state ----------
+  // openTokenRef is a monotonically-incrementing token used to detect
+  // out-of-order responses when the user opens a different system before
+  // the previous fetch completes. Each invocation captures its own token
+  // and bails out before mutating modal state if a newer call has begun.
+  const openTokenRef = useRef(0);
   const openModal = useCallback(async (systemId: string) => {
+    const token = ++openTokenRef.current;
     setOpenSystemId(systemId);
     setOpenLoading(true);
     setHighlightLayerId(null);
+    // Clear any stale primer resolutions from the previous open so the
+    // adaptive cards never briefly show data from another system.
+    setResolvedPrimersByLayer({});
     try {
       const full: FullSystem = await systemsApi.getSystemFull(systemId);
+      if (token !== openTokenRef.current) return;
       // Sort layers ascending so the cross-section can render bottom→top.
       full.layers = [...full.layers].sort((a, b) => (a.orderSequence ?? 0) - (b.orderSequence ?? 0));
       setOpenSystem(full);
@@ -438,11 +458,39 @@ export default function SystemBuilderPreview({ onEditInBuilder }: Props) {
       }
       setActiveOptionByLayer(initActive);
       setNoteText(full.previewNote || '');
+
+      // Resolve adaptive-primer layers against the library so the modal
+      // and the spec-sheet export both have the parameter-driven product
+      // list ready before the user sees the cards. Failures fall back to
+      // an empty resolution so the UI degrades gracefully ("no primer
+      // matches the system parameters") instead of breaking the modal.
+      const adaptiveLayers = full.layers.filter(l => l.layerMode === 'adaptive' && /\bprimer\b/i.test(l.layerName));
+      if (adaptiveLayers.length > 0) {
+        const sysType = (() => {
+          const text = `${full.name} ${full.description || ''}`.toLowerCase();
+          if (text.includes('polyurea')) return 'Polyurea';
+          if (text.includes('epoxy')) return 'Epoxy';
+          if (text.includes('acrylic')) return 'Acrylic';
+          if (/\bpu\b|polyurethane/.test(text)) return 'PU';
+          return null;
+        })();
+        const resolutions = await Promise.all(adaptiveLayers.map(l =>
+          primerLibraryApi.resolve({
+            substrate: full.systemSubstrate || undefined,
+            humidity: full.systemHumidity || undefined,
+            systemType: sysType || undefined,
+          }).then(list => [l.layerId, list] as const).catch(() => [l.layerId, [] as PrimerLibraryEntry[]] as const)
+        ));
+        if (token !== openTokenRef.current) return;
+        setResolvedPrimersByLayer(Object.fromEntries(resolutions));
+      } else {
+        setResolvedPrimersByLayer({});
+      }
     } catch (e) {
       console.error('Failed to load system:', e);
-      setOpenSystem(null);
+      if (token === openTokenRef.current) setOpenSystem(null);
     } finally {
-      setOpenLoading(false);
+      if (token === openTokenRef.current) setOpenLoading(false);
     }
   }, []);
 
@@ -702,10 +750,36 @@ export default function SystemBuilderPreview({ onEditInBuilder }: Props) {
       const l = openSystem.layers[i];
       const pos = inferLayerPositionFromSlotName(l.layerName) || 'unknown';
       lines.push(`  Layer ${i + 1}: ${l.layerName}  [${LAYER_COLORS[pos].label}]`);
-      const def = l.productOptions.find(o => o.isDefault) || l.productOptions[0];
-      if (def) {
-        lines.push(`    Default product: ${def.productName || '—'}  (${def.productStockCode || 'no code'})`);
-        lines.push(`    Supplier:        ${def.productSupplier || '—'}`);
+      // Adaptive primer layers print the resolved library entries instead
+      // of the (empty) productOptions list. The pinned default leads, and
+      // every other resolved entry is listed under "Adaptive options" so a
+      // contractor reading the spec sheet can see the full per-condition
+      // catalog at a glance.
+      if (l.layerMode === 'adaptive' && /\bprimer\b/i.test(l.layerName)) {
+        const resolved = resolvedPrimersByLayer[l.layerId] || [];
+        if (resolved.length === 0) {
+          lines.push('    [ADAPTIVE PRIMER]  No library match for the current system parameters');
+        } else {
+          const pinned = l.defaultPrimerLibraryId
+            ? resolved.find(r => r.primerId === l.defaultPrimerLibraryId)
+            : null;
+          const lead = pinned || resolved[0];
+          lines.push(`    [ADAPTIVE PRIMER]  Default: ${lead.productName || '—'}  (${lead.primerId})`);
+          lines.push(`    Supplier:        ${lead.supplier || '—'}`);
+          const rest = resolved.filter(r => r.primerId !== lead.primerId);
+          if (rest.length) {
+            lines.push(`    Adaptive options:`);
+            for (const r of rest) {
+              lines.push(`      - ${r.productName || '—'}  (${r.primerId})  · supplier: ${r.supplier || '—'}`);
+            }
+          }
+        }
+      } else {
+        const def = l.productOptions.find(o => o.isDefault) || l.productOptions[0];
+        if (def) {
+          lines.push(`    Default product: ${def.productName || '—'}  (${def.productStockCode || 'no code'})`);
+          lines.push(`    Supplier:        ${def.productSupplier || '—'}`);
+        }
       }
       // Installable-spec values per layer. Each is independently optional;
       // we emit only the lines that have a value so the spec sheet stays
@@ -717,9 +791,12 @@ export default function SystemBuilderPreview({ onEditInBuilder }: Props) {
       if (consumption) lines.push(`    Consumption:     ${consumption}`);
       if (dft)         lines.push(`    Dry film (DFT):  ${dft}`);
       if (recoat)      lines.push(`    Recoat window:   ${recoat}`);
-      const others = l.productOptions.filter(o => o !== def);
-      if (others.length) {
-        lines.push(`    Alternatives:    ${others.map(o => o.productName).filter(Boolean).join(', ')}`);
+      if (!(l.layerMode === 'adaptive' && /\bprimer\b/i.test(l.layerName))) {
+        const def = l.productOptions.find(o => o.isDefault) || l.productOptions[0];
+        const others = l.productOptions.filter(o => o !== def);
+        if (others.length) {
+          lines.push(`    Alternatives:    ${others.map(o => o.productName).filter(Boolean).join(', ')}`);
+        }
       }
     }
     if (openSystem.previewNote) {
@@ -736,7 +813,7 @@ export default function SystemBuilderPreview({ onEditInBuilder }: Props) {
     a.click();
     document.body.removeChild(a);
     URL.revokeObjectURL(url);
-  }, [openSystem]);
+  }, [openSystem, resolvedPrimersByLayer]);
 
   // =========================================================================
   // RENDER
@@ -1157,7 +1234,54 @@ export default function SystemBuilderPreview({ onEditInBuilder }: Props) {
                                 </span>
                               </div>
 
-                              {!active ? (
+                              {/* Adaptive primer layer: render the resolved
+                                  Primer Library list rather than the manual
+                                  productOptions, since adaptive layers don't
+                                  have any products attached. The pinned
+                                  default is starred; if the system params
+                                  have no library match we show the friendly
+                                  "no primer matches" line. */}
+                              {l.layerMode === 'adaptive' && /\bprimer\b/i.test(l.layerName) ? (
+                                (() => {
+                                  const resolved = resolvedPrimersByLayer[l.layerId] || [];
+                                  if (resolved.length === 0) {
+                                    return (
+                                      <div className="text-xs text-amber-700 italic flex items-center gap-1.5" data-testid={`preview-adaptive-empty-${l.layerId}`}>
+                                        <AlertCircle size={12} /> Adaptive primer — no library match for the current parameters
+                                      </div>
+                                    );
+                                  }
+                                  const pinned = l.defaultPrimerLibraryId
+                                    ? resolved.find(r => r.primerId === l.defaultPrimerLibraryId)
+                                    : null;
+                                  const lead = pinned || resolved[0];
+                                  const others = resolved.filter(r => r.primerId !== lead.primerId);
+                                  return (
+                                    <div data-testid={`preview-adaptive-${l.layerId}`}>
+                                      <div className="text-sm font-semibold text-slate-800 flex items-center gap-1.5">
+                                        {pinned && <Star size={12} className="text-amber-500 fill-amber-500" />}
+                                        {lead.productName || lead.primerId}
+                                        <span className="ml-1 text-[10px] uppercase tracking-wider px-1.5 py-0.5 rounded-full bg-indigo-50 text-indigo-700 border border-indigo-200">
+                                          Adaptive
+                                        </span>
+                                      </div>
+                                      <div className="text-[11px] text-slate-500 mt-0.5">
+                                        {lead.supplier || '—'}
+                                        <span className="ml-2 text-slate-400">
+                                          Resolved from Primer Library · {resolved.length} match{resolved.length === 1 ? '' : 'es'}
+                                        </span>
+                                      </div>
+                                      {others.length > 0 && (
+                                        <div className="mt-2 text-[11px] text-slate-500">
+                                          <span className="text-slate-400">Alt: </span>
+                                          {others.slice(0, 3).map(r => r.productName || r.primerId).join(', ')}
+                                          {others.length > 3 && ` +${others.length - 3} more`}
+                                        </div>
+                                      )}
+                                    </div>
+                                  );
+                                })()
+                              ) : !active ? (
                                 <div className="text-xs text-slate-400 italic flex items-center gap-1.5">
                                   <AlertCircle size={12} /> No product assigned
                                 </div>
