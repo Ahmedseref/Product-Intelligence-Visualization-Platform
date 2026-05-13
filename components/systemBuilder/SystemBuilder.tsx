@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { SystemData, SystemFull, SystemLayer, SystemProductOption, Product, Sector, CustomField, TreeNode, Supplier, User } from '../../types';
-import { systemsApi } from '../../client/api';
+import { systemsApi, primerLibraryApi } from '../../client/api';
 import { useEscapeKey } from '../../hooks/useEscapeKey';
 import ProductDetailsModal from '../ProductDetailsModal';
 import ProductForm from '../ProductForm';
@@ -187,6 +187,14 @@ const SystemBuilder: React.FC<SystemBuilderProps> = ({ products, onProductUpdate
     // be selected when several products match (e.g. a bonding primer + a
     // moisture-tolerant primer used together).
     primerProductIds: string[];
+    // Phase 5 — Primer Library link. When useAdaptivePrimer is true, the
+    // wizard creates the primer layer in **adaptive** mode (layerMode='adaptive')
+    // and the actual products are resolved at render time from the Primer
+    // Library based on the system's substrate/humidity/material type. The
+    // per-product picker (primerProductIds) is hidden in that mode.
+    // adaptivePrimerLibraryId optionally pins one library entry as the default.
+    useAdaptivePrimer: boolean;
+    adaptivePrimerLibraryId: string | null;
     // Step 3 layers: the post-primer layers (base coat, topcoat, etc). Primers
     // are intentionally NOT in this list — they live in primerProductIds. On
     // Create, each selected primer is prepended as its own layer in the order
@@ -253,8 +261,40 @@ const SystemBuilder: React.FC<SystemBuilderProps> = ({ products, onProductUpdate
     humidity: '',
     duty: '',
     primerProductIds: [],
+    useAdaptivePrimer: false,
+    adaptivePrimerLibraryId: null,
     layers: QUICK_SKELETONS.epoxy.map(n => ({ name: n, productId: null })),
   });
+  // (forward-declared so the Step 2 effect below can reference it via closure)
+  // Phase 5 — live preview of which Primer Library entries match the Step 1
+  // parameters. Refreshed whenever the user enters Step 2 (or those parameters
+  // change while on Step 2) so the adaptive panel always reflects the current
+  // intent. Empty array means "no library matches" → adaptive toggle is hidden.
+  const [quickPrimerMatches, setQuickPrimerMatches] = useState<Array<{
+    primerId: string; productId: string; productName: string; supplier: string | null;
+    compatibleSubstrates: string[]; humidityTolerance: string; compatibleSystemTypes: string[];
+  }>>([]);
+  // Map the wizard's lowercase materialType to the Primer Library's canonical
+  // system-type labels. Returns null for 'generic' so the resolve call doesn't
+  // filter by system type at all (any-material primers all qualify).
+  const QUICK_MATERIAL_TO_SYSTEM_TYPE: Record<QuickSetup['materialType'], string | null> = {
+    epoxy: 'Epoxy', pu: 'PU', polyurea: 'Polyurea', acrylic: 'Acrylic', generic: null,
+  };
+  // Phase 5 — whenever the user enters Step 2 (or the Step 1 parameters
+  // change while still on Step 2), re-resolve which Primer Library entries
+  // would qualify. Substrate is passed only when exactly one was selected —
+  // multi-substrate systems use an "any substrate" resolve so the user still
+  // sees a meaningful preview.
+  useEffect(() => {
+    if (!quickSetupOpen || quickStep !== 2) return;
+    let cancelled = false;
+    const sub = quickSetup.substrate.length === 1 ? quickSetup.substrate[0] : null;
+    const sysType = QUICK_MATERIAL_TO_SYSTEM_TYPE[quickSetup.materialType];
+    primerLibraryApi.resolve({ substrate: sub, humidity: quickSetup.humidity || null, systemType: sysType })
+      .then((rows) => { if (!cancelled) setQuickPrimerMatches(Array.isArray(rows) ? rows : []); })
+      .catch(() => { if (!cancelled) setQuickPrimerMatches([]); });
+    return () => { cancelled = true; };
+  }, [quickSetupOpen, quickStep, quickSetup.substrate, quickSetup.humidity, quickSetup.materialType]);
   const [showAddLayer, setShowAddLayer] = useState(false);
   const [showAddProduct, setShowAddProduct] = useState<string | null>(null);
   const [selectedProductIds, setSelectedProductIds] = useState<string[]>([]);
@@ -1302,7 +1342,8 @@ const SystemBuilder: React.FC<SystemBuilderProps> = ({ products, onProductUpdate
                 onClick={() => {
                   // Phase 4: open Quick Setup wizard. Reset to a fresh state so
                   // it always starts on Step 1 with the default skeleton.
-                  setQuickSetup({ name: '', materialType: 'epoxy', substrate: [], humidity: '', duty: '', primerProductIds: [], layers: QUICK_SKELETONS.epoxy.map(n => ({ name: n, productId: null })) });
+                  setQuickSetup({ name: '', materialType: 'epoxy', substrate: [], humidity: '', duty: '', primerProductIds: [], useAdaptivePrimer: false, adaptivePrimerLibraryId: null, layers: QUICK_SKELETONS.epoxy.map(n => ({ name: n, productId: null })) });
+                  setQuickPrimerMatches([]);
                   setQuickStep(1);
                   setQuickSetupOpen(true);
                   // Pull the latest qualification tags so any product the user
@@ -2648,11 +2689,90 @@ const SystemBuilder: React.FC<SystemBuilderProps> = ({ products, onProductUpdate
                     primerProductIds: cur.includes(id) ? cur.filter(x => x !== id) : [...cur, id],
                   });
                 };
+                const adaptiveAvailable = quickPrimerMatches.length > 0;
                 return (
                   <div className="space-y-3">
                     <p className="text-xs text-slate-500">
                       Pick one or more primers for this system. The list below is filtered by the parameters from Step&nbsp;1 — only system-ready products that look like primers (tagged or named) are shown. If you pick several, they all live on the <strong>same primer layer</strong> as alternatives — the first one you tick is the default, the others are swap-in options.
                     </p>
+                    {/* Phase 5 — Primer Library link. Show an "Adaptive (from
+                        Primer Library)" panel above the manual product list
+                        whenever any library entries match the Step 1 parameters.
+                        Toggling it on creates the primer layer in adaptive mode
+                        on Save — the per-product picker is hidden in that mode
+                        because the adaptive layer resolves products live. */}
+                    {adaptiveAvailable && (
+                      <div className={`border rounded-lg p-3 ${quickSetup.useAdaptivePrimer ? 'border-amber-300 bg-amber-50/40' : 'border-slate-200 bg-white'}`}>
+                        <label className="flex items-start gap-2 cursor-pointer">
+                          <input
+                            type="checkbox"
+                            checked={quickSetup.useAdaptivePrimer}
+                            onChange={(e) => setQuickSetup({
+                              ...quickSetup,
+                              useAdaptivePrimer: e.target.checked,
+                              // When switching to adaptive mode, clear the manual
+                              // primer picks so they don't sneak into the saved
+                              // layer alongside the adaptive resolution.
+                              primerProductIds: e.target.checked ? [] : quickSetup.primerProductIds,
+                              adaptivePrimerLibraryId: e.target.checked ? quickSetup.adaptivePrimerLibraryId : null,
+                            })}
+                            className="mt-0.5 w-3.5 h-3.5 accent-amber-600"
+                          />
+                          <div className="flex-1 min-w-0">
+                            <div className="flex items-center gap-2 flex-wrap">
+                              <span className="text-sm font-semibold text-slate-800">Use adaptive primer (from Primer Library)</span>
+                              <span className="px-1.5 py-0.5 text-[10px] rounded bg-amber-100 text-amber-700 border border-amber-200">{quickPrimerMatches.length} match{quickPrimerMatches.length === 1 ? '' : 'es'}</span>
+                              <span className="px-1.5 py-0.5 text-[10px] rounded bg-indigo-50 text-indigo-700 border border-indigo-100">recommended</span>
+                            </div>
+                            <p className="text-[11px] text-slate-500 mt-0.5">
+                              Resolves primers live from the Primer Library based on the system's substrate, humidity and material type. New products added to the library later automatically appear in this slot — no manual edit needed.
+                            </p>
+                          </div>
+                        </label>
+                        {quickSetup.useAdaptivePrimer && (
+                          <div className="mt-3 space-y-2">
+                            <div className="max-h-48 overflow-y-auto divide-y divide-amber-100 border border-amber-100 rounded bg-white">
+                              {quickPrimerMatches.map((m) => {
+                                const isDefault = quickSetup.adaptivePrimerLibraryId === m.primerId;
+                                return (
+                                  <label key={m.primerId} className={`flex items-start gap-2 px-2 py-1.5 text-sm cursor-pointer hover:bg-amber-50/40 ${isDefault ? 'bg-amber-50/60' : ''}`}>
+                                    <input
+                                      type="radio"
+                                      name="quick-adaptive-default"
+                                      checked={isDefault}
+                                      onChange={() => setQuickSetup({ ...quickSetup, adaptivePrimerLibraryId: m.primerId })}
+                                      className="mt-1 accent-amber-600"
+                                    />
+                                    <div className="flex-1 min-w-0">
+                                      <div className="flex items-center gap-2 flex-wrap">
+                                        <span className="text-slate-800 font-medium truncate">{m.productName}</span>
+                                        {m.supplier && <span className="text-[11px] text-slate-400">· {m.supplier}</span>}
+                                        {isDefault && <span className="px-1.5 py-0.5 text-[9px] rounded bg-emerald-50 text-emerald-700 border border-emerald-100">default</span>}
+                                      </div>
+                                      <div className="flex items-center gap-1 flex-wrap mt-0.5">
+                                        {(m.compatibleSubstrates || []).slice(0, 4).map(s => (
+                                          <span key={s} className="px-1.5 py-0.5 text-[9px] rounded bg-slate-100 text-slate-600">{s}</span>
+                                        ))}
+                                        {m.humidityTolerance && <span className="px-1.5 py-0.5 text-[9px] rounded bg-blue-50 text-blue-700">H: {m.humidityTolerance}</span>}
+                                      </div>
+                                    </div>
+                                  </label>
+                                );
+                              })}
+                            </div>
+                            <p className="text-[11px] text-amber-700">
+                              {quickSetup.adaptivePrimerLibraryId
+                                ? <>Default pinned. The other matches stay available as swap-in alternatives.</>
+                                : <>Pick a default (optional). If left unset, the first resolved entry will be used by default.</>}
+                            </p>
+                          </div>
+                        )}
+                      </div>
+                    )}
+                    {/* Manual per-product picker — hidden when adaptive mode
+                        is on, because the two modes are mutually exclusive on
+                        the same layer. */}
+                    {!quickSetup.useAdaptivePrimer && (
                     <div className="border border-slate-200 rounded-lg p-3">
                       <div className="flex items-center justify-between mb-2">
                         <div className="flex items-center gap-2">
@@ -2721,6 +2841,14 @@ const SystemBuilder: React.FC<SystemBuilderProps> = ({ products, onProductUpdate
                         </p>
                       )}
                     </div>
+                    )}
+                    {/* Footnote when adaptive mode is on — explains where the
+                        manual product picker went so the user isn't confused. */}
+                    {quickSetup.useAdaptivePrimer && (
+                      <p className="text-[11px] text-slate-500 italic">
+                        Manual product picker is hidden while adaptive mode is on. To pick specific primer products instead, untick the adaptive option above.
+                      </p>
+                    )}
                   </div>
                 );
               })()}
@@ -2735,7 +2863,16 @@ const SystemBuilder: React.FC<SystemBuilderProps> = ({ products, onProductUpdate
                       ONE Primer layer as alternatives, so we render them
                       grouped under a single layer #1 row — the first one is
                       flagged as the default. */}
-                  {quickSetup.primerProductIds.length > 0 && (
+                  {quickSetup.useAdaptivePrimer && (
+                    <div className="bg-amber-50 border border-amber-200 rounded px-2 py-1.5 text-[11px] text-amber-800">
+                      <div className="flex items-center gap-2">
+                        <span className="w-4 h-4 rounded-full bg-amber-200 text-amber-800 flex items-center justify-center text-[9px] font-bold">1</span>
+                        <span className="font-semibold">Primer layer · Adaptive (Primer Library)</span>
+                        <span className="ml-auto text-amber-600">{quickPrimerMatches.length} resolved match{quickPrimerMatches.length === 1 ? '' : 'es'} (set in Step 2 — go back to change)</span>
+                      </div>
+                    </div>
+                  )}
+                  {!quickSetup.useAdaptivePrimer && quickSetup.primerProductIds.length > 0 && (
                     <div className="bg-slate-50 border border-slate-200 rounded px-2 py-1.5 text-[11px] text-slate-500">
                       <div className="flex items-center gap-2 mb-1">
                         <span className="w-4 h-4 rounded-full bg-indigo-100 text-indigo-700 flex items-center justify-center text-[9px] font-bold">1</span>
@@ -2958,7 +3095,21 @@ const SystemBuilder: React.FC<SystemBuilderProps> = ({ products, onProductUpdate
                         // The first one ticked becomes the default; the rest
                         // are non-default alternatives the user can swap to.
                         let layerOrder = 1;
-                        if (quickSetup.primerProductIds.length > 0) {
+                        // Phase 5 — when adaptive mode is on, create the
+                        // primer layer in 'adaptive' mode and skip product
+                        // options entirely. The layer resolves its products
+                        // live from the Primer Library at render time, with
+                        // adaptivePrimerLibraryId as the optional pinned
+                        // default. Otherwise fall back to the legacy fixed
+                        // mode where each picked product becomes an option.
+                        if (quickSetup.useAdaptivePrimer) {
+                          const primerLayer = await systemsApi.createLayer({ systemId: newId, layerName: 'Primer', orderSequence: layerOrder++ });
+                          const primerLayerId = (primerLayer as any).layerId || (primerLayer as any).id;
+                          await systemsApi.updateLayer(primerLayerId, {
+                            layerMode: 'adaptive',
+                            defaultPrimerLibraryId: quickSetup.adaptivePrimerLibraryId,
+                          });
+                        } else if (quickSetup.primerProductIds.length > 0) {
                           const primerLayer = await systemsApi.createLayer({ systemId: newId, layerName: 'Primer', orderSequence: layerOrder++ });
                           const primerLayerId = (primerLayer as any).layerId || (primerLayer as any).id;
                           for (let i = 0; i < quickSetup.primerProductIds.length; i++) {
