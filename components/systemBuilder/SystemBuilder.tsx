@@ -169,7 +169,7 @@ const SystemBuilder: React.FC<SystemBuilderProps> = ({ products, onProductUpdate
   // Phase 4: Quick Setup wizard state. Only used for the NEW system flow —
   // never opened when editing an existing system.
   const [quickSetupOpen, setQuickSetupOpen] = useState(false);
-  const [quickStep, setQuickStep] = useState<1 | 2 | 3 | 4>(1);
+  const [quickStep, setQuickStep] = useState<1 | 2 | 3>(1);
   const [quickBusy, setQuickBusy] = useState(false);
   type QuickLayerSlot = { name: string; productId: string | null };
   type QuickSetup = {
@@ -2579,13 +2579,17 @@ const SystemBuilder: React.FC<SystemBuilderProps> = ({ products, onProductUpdate
                 <X size={18} />
               </button>
             </div>
-            {/* Step pills — 4 steps now: Parameters → Primer → Material & Layers → Pick Products */}
+            {/* Step pills — 3 steps: Parameters (incl. material + layer skeleton) → Primer → Pick Products.
+                Material type used to live on its own Step 3 between Primer and
+                Pick Products, but it doesn't influence the primer pool, so we
+                merged it into Step 1 alongside substrate / humidity / duty.
+                That cuts a click and keeps related parameters together. */}
             <div className="px-5 py-2 flex items-center gap-2 border-b border-slate-100 bg-slate-50">
-              {[1, 2, 3, 4].map(s => (
+              {[1, 2, 3].map(s => (
                 <div key={s} className={`flex items-center gap-1.5 text-xs font-medium ${quickStep >= s ? 'text-indigo-700' : 'text-slate-400'}`}>
                   <span className={`w-5 h-5 rounded-full flex items-center justify-center text-[10px] font-bold ${quickStep >= s ? 'bg-indigo-600 text-white' : 'bg-slate-200 text-slate-500'}`}>{s}</span>
-                  {s === 1 ? 'Parameters' : s === 2 ? 'Primer' : s === 3 ? 'Material & Layers' : 'Pick Products'}
-                  {s < 4 && <ChevronRight size={12} className="text-slate-300" />}
+                  {s === 1 ? 'Parameters & Layers' : s === 2 ? 'Primer' : 'Pick Products'}
+                  {s < 3 && <ChevronRight size={12} className="text-slate-300" />}
                 </div>
               ))}
             </div>
@@ -2654,7 +2658,47 @@ const SystemBuilder: React.FC<SystemBuilderProps> = ({ products, onProductUpdate
                       </select>
                     </div>
                   </div>
-                  <p className="text-[11px] text-slate-500">These parameters power the primer pool in Step 2, the per-layer product suggestions in Step 4, and the conflict detection after creation.</p>
+                  <p className="text-[11px] text-slate-500">These parameters power the primer pool in Step 2, the per-layer product suggestions in Step 3, and the conflict detection after creation.</p>
+
+                  {/* Material type + post-primer layer skeleton (was Step 3 — merged here).
+                      Material type doesn't affect the primer pool (cross-material
+                      primers are valid), but it DOES seed the post-primer layer
+                      names and filter Step 3's product suggestions, so it lives
+                      with the rest of the system parameters. */}
+                  <div className="pt-3 border-t border-slate-100">
+                    <label className="block text-xs font-semibold text-slate-600 mb-2">Material type — sets the suggested layer skeleton and filters Step 3 product suggestions</label>
+                    <div className="grid grid-cols-5 gap-2">
+                      {(Object.keys(QUICK_SKELETONS) as Array<QuickSetup['materialType']>).map(mt => (
+                        <button key={mt} type="button" onClick={() => setQuickSetup({ ...quickSetup, materialType: mt, layers: QUICK_SKELETONS[mt].map(n => ({ name: n, productId: null })) })} className={`px-3 py-2 text-xs font-medium rounded-lg border ${quickSetup.materialType === mt ? 'border-indigo-500 bg-indigo-50 text-indigo-700' : 'border-slate-200 bg-white text-slate-600 hover:border-slate-300'}`}>
+                          {mt === 'pu' ? 'PU' : mt[0].toUpperCase() + mt.slice(1)}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                  <div>
+                    <div className="flex items-center justify-between mb-2">
+                      <label className="text-xs font-semibold text-slate-600">Suggested layers (rename or remove as needed)</label>
+                      <button type="button" onClick={() => setQuickSetup({ ...quickSetup, layers: [...quickSetup.layers, { name: 'New Layer', productId: null }] })} className="text-xs text-indigo-600 hover:text-indigo-700 inline-flex items-center gap-1">
+                        <Plus size={12} /> Add layer
+                      </button>
+                    </div>
+                    <div className="space-y-1.5">
+                      {quickSetup.layers.map((slot, i) => (
+                        <div key={i} className="flex items-center gap-2">
+                          {/* Slot index labels are offset by 1 to leave room
+                              for the Primer layer that's picked in Step 2 —
+                              regardless of fixed/adaptive mode, picking any
+                              primer means the first post-primer layer is #2. */}
+                          <span className="w-5 h-5 rounded-full bg-indigo-100 text-indigo-700 flex items-center justify-center text-[10px] font-bold">
+                            {i + 2}
+                          </span>
+                          <input type="text" value={slot.name} onChange={(e) => { const ls = [...quickSetup.layers]; ls[i] = { ...ls[i], name: e.target.value }; setQuickSetup({ ...quickSetup, layers: ls }); }} className="flex-1 px-2 py-1 text-sm border border-slate-200 rounded" />
+                          <button type="button" onClick={() => setQuickSetup({ ...quickSetup, layers: quickSetup.layers.filter((_, j) => j !== i) })} className="p-1 text-slate-400 hover:text-red-500"><Trash2 size={13} /></button>
+                        </div>
+                      ))}
+                    </div>
+                    <p className="mt-1 text-[10px] text-slate-400">Layer #1 will be the Primer you pick in Step 2 (or skipped if you pick none).</p>
+                  </div>
                 </div>
               )}
 
@@ -2858,97 +2902,20 @@ const SystemBuilder: React.FC<SystemBuilderProps> = ({ products, onProductUpdate
                 );
               })()}
 
-              {/* STEP 3 — pick the material type → seeds the post-primer layer
-                  skeleton. The user can rename, remove, or add layers freely.
-                  The primer is shown above as a read-only reminder so the user
-                  always sees the full layer order. */}
-              {quickStep === 3 && (
-                <div className="space-y-3">
-                  {/* Read-only primer reminder. All selected primers live on
-                      ONE Primer layer as alternatives, so we render them
-                      grouped under a single layer #1 row — the first one is
-                      flagged as the default. */}
-                  {quickSetup.useAdaptivePrimer && (
-                    <div className="bg-amber-50 border border-amber-200 rounded px-2 py-1.5 text-[11px] text-amber-800">
-                      <div className="flex items-center gap-2">
-                        <span className="w-4 h-4 rounded-full bg-amber-200 text-amber-800 flex items-center justify-center text-[9px] font-bold">1</span>
-                        <span className="font-semibold">Primer layer · Adaptive (Primer Library)</span>
-                        <span className="ml-auto text-amber-600">{quickPrimerMatches.length} resolved match{quickPrimerMatches.length === 1 ? '' : 'es'} (set in Step 2 — go back to change)</span>
-                      </div>
-                    </div>
-                  )}
-                  {!quickSetup.useAdaptivePrimer && quickSetup.primerProductIds.length > 0 && (
-                    <div className="bg-slate-50 border border-slate-200 rounded px-2 py-1.5 text-[11px] text-slate-500">
-                      <div className="flex items-center gap-2 mb-1">
-                        <span className="w-4 h-4 rounded-full bg-indigo-100 text-indigo-700 flex items-center justify-center text-[9px] font-bold">1</span>
-                        <span className="font-semibold text-slate-700">Primer layer</span>
-                        <span className="text-slate-400">·</span>
-                        <span>{quickSetup.primerProductIds.length} {quickSetup.primerProductIds.length === 1 ? 'product' : 'alternatives'}</span>
-                        <span className="ml-auto text-slate-400">(set in Step 2 — go back to change)</span>
-                      </div>
-                      <ul className="ml-6 space-y-0.5">
-                        {quickSetup.primerProductIds.map((id, i) => {
-                          const sel = products.find(p => p.id === id);
-                          return (
-                            <li key={id} className="flex items-center gap-2">
-                              <span className="text-slate-400">•</span>
-                              <span className="text-slate-700">{sel?.name || '—'}</span>
-                              {i === 0 && (
-                                <span className="px-1.5 py-0.5 text-[9px] rounded bg-emerald-50 text-emerald-700 border border-emerald-100">default</span>
-                              )}
-                            </li>
-                          );
-                        })}
-                      </ul>
-                    </div>
-                  )}
-                  <div>
-                    <label className="block text-xs font-semibold text-slate-600 mb-2">Material type — sets the suggested layer skeleton</label>
-                    <div className="grid grid-cols-5 gap-2">
-                      {(Object.keys(QUICK_SKELETONS) as Array<QuickSetup['materialType']>).map(mt => (
-                        <button key={mt} type="button" onClick={() => setQuickSetup({ ...quickSetup, materialType: mt, layers: QUICK_SKELETONS[mt].map(n => ({ name: n, productId: null })) })} className={`px-3 py-2 text-xs font-medium rounded-lg border ${quickSetup.materialType === mt ? 'border-indigo-500 bg-indigo-50 text-indigo-700' : 'border-slate-200 bg-white text-slate-600 hover:border-slate-300'}`}>
-                          {mt === 'pu' ? 'PU' : mt[0].toUpperCase() + mt.slice(1)}
-                        </button>
-                      ))}
-                    </div>
-                  </div>
-                  <div>
-                    <div className="flex items-center justify-between mb-2">
-                      <label className="text-xs font-semibold text-slate-600">Suggested layers (rename or remove as needed)</label>
-                      <button type="button" onClick={() => setQuickSetup({ ...quickSetup, layers: [...quickSetup.layers, { name: 'New Layer', productId: null }] })} className="text-xs text-indigo-600 hover:text-indigo-700 inline-flex items-center gap-1">
-                        <Plus size={12} /> Add layer
-                      </button>
-                    </div>
-                    <div className="space-y-1.5">
-                      {quickSetup.layers.map((slot, i) => (
-                        <div key={i} className="flex items-center gap-2">
-                          {/* Slot index labels are offset by the number of
-                              selected primers — those occupy the first slots,
-                              so e.g. with 2 primers the first post-primer
-                              layer is shown as #3. */}
-                          <span className="w-5 h-5 rounded-full bg-indigo-100 text-indigo-700 flex items-center justify-center text-[10px] font-bold">
-                            {i + 1 + quickSetup.primerProductIds.length}
-                          </span>
-                          <input type="text" value={slot.name} onChange={(e) => { const ls = [...quickSetup.layers]; ls[i] = { ...ls[i], name: e.target.value }; setQuickSetup({ ...quickSetup, layers: ls }); }} className="flex-1 px-2 py-1 text-sm border border-slate-200 rounded" />
-                          <button type="button" onClick={() => setQuickSetup({ ...quickSetup, layers: quickSetup.layers.filter((_, j) => j !== i) })} className="p-1 text-slate-400 hover:text-red-500"><Trash2 size={13} /></button>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                </div>
-              )}
+              {/* (Old Step 3 "Material & Layers" was merged into Step 1 —
+                  material type + the editable layer skeleton now sit with
+                  the rest of the system parameters.) */}
 
-              {/* STEP 4 — for each post-primer layer slot, list products that match BOTH:
-                    - the system-wide parameters from Step 1 (substrate / humidity / duty), AND
-                    - the layer position inferred from the slot name in Step 3, AND
-                    - the material type chosen in Step 3.
+              {/* STEP 3 (was Step 4) — for each post-primer layer slot, list products that match BOTH:
+                    - the system-wide parameters from Step 1 (substrate / humidity / duty / material type), AND
+                    - the layer position inferred from the slot name (also Step 1).
                   Products that haven't been qualified for a layer position
                   yet are still shown (legacy fallback) so the user is never
                   blocked by un-tagged products. */}
-              {quickStep === 4 && (
+              {quickStep === 3 && (
                 <div className="space-y-4">
                   <p className="text-xs text-slate-500">
-                    Pick a default product for each layer (optional). Products are filtered by the parameters from Step 1 <em>and</em> the layer position inferred from each slot name in Step 3
+                    Pick a default product for each layer (optional). Products are filtered by the parameters from Step 1 <em>and</em> the layer position inferred from each slot name
                     {quickSetup.materialType !== 'generic' && (
                       <> — only <strong>{quickSetup.materialType === 'pu' ? 'PU/Polyurethane' : quickSetup.materialType[0].toUpperCase() + quickSetup.materialType.slice(1)}</strong> products (matched by taxonomy or name) are shown.</>
                     )}
@@ -3047,22 +3014,22 @@ const SystemBuilder: React.FC<SystemBuilderProps> = ({ products, onProductUpdate
               )}
             </div>
 
-            {/* Footer — Back / Next / Create. Only the Create button (Step 4) writes to the DB. */}
+            {/* Footer — Back / Next / Create. Only the Create button (Step 3) writes to the DB. */}
             <div className="px-5 py-3 border-t border-slate-200 flex items-center justify-between bg-slate-50">
               <button onClick={() => setQuickSetupOpen(false)} className="text-xs text-slate-500 hover:text-slate-700" disabled={quickBusy}>Cancel & use empty editor</button>
               <div className="flex items-center gap-2">
                 {quickStep > 1 && (
                   <button
-                    onClick={() => setQuickStep((s) => (s > 1 ? ((s - 1) as 1 | 2 | 3 | 4) : 1))}
+                    onClick={() => setQuickStep((s) => (s > 1 ? ((s - 1) as 1 | 2 | 3) : 1))}
                     className="px-3 py-1.5 text-sm bg-white border border-slate-200 text-slate-600 rounded-lg hover:bg-slate-100 inline-flex items-center gap-1"
                     disabled={quickBusy}
                   >
                     <ArrowLeft size={14} /> Back
                   </button>
                 )}
-                {quickStep < 4 ? (
+                {quickStep < 3 ? (
                   <button
-                    onClick={() => setQuickStep((s) => (s < 4 ? ((s + 1) as 1 | 2 | 3 | 4) : 4))}
+                    onClick={() => setQuickStep((s) => (s < 3 ? ((s + 1) as 1 | 2 | 3) : 3))}
                     disabled={quickStep === 1 && !quickSetup.name.trim()}
                     className="px-3 py-1.5 text-sm bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 disabled:opacity-40 inline-flex items-center gap-1"
                   >
