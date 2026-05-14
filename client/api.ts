@@ -1165,10 +1165,11 @@ export const analyticsApi = {
 // adaptive primer slot uses to render the live "primers that will resolve
 // for this system" preview.
 export const primerLibraryApi = {
-  list: async (filters?: { substrate?: string; humidity?: string; systemType?: string; search?: string }) => {
+  list: async (filters?: { substrate?: string; humidity?: string; duty?: string; systemType?: string; search?: string }) => {
     const params = new URLSearchParams();
     if (filters?.substrate) params.set('substrate', filters.substrate);
     if (filters?.humidity) params.set('humidity', filters.humidity);
+    if (filters?.duty) params.set('duty', filters.duty);
     if (filters?.systemType) params.set('systemType', filters.systemType);
     if (filters?.search) params.set('search', filters.search);
     const qs = params.toString();
@@ -1176,10 +1177,11 @@ export const primerLibraryApi = {
     if (!response.ok) throw new Error('Failed to fetch primer library');
     return response.json();
   },
-  resolve: async (filters?: { substrate?: string | null; humidity?: string | null; systemType?: string | null }) => {
+  resolve: async (filters?: { substrate?: string | null; humidity?: string | null; duty?: string | null; systemType?: string | null }) => {
     const params = new URLSearchParams();
     if (filters?.substrate) params.set('substrate', filters.substrate);
     if (filters?.humidity) params.set('humidity', filters.humidity);
+    if (filters?.duty) params.set('duty', filters.duty);
     if (filters?.systemType) params.set('systemType', filters.systemType);
     const qs = params.toString();
     const response = await fetch(`${API_BASE}/primer-library/resolve${qs ? `?${qs}` : ''}`, { headers: getAuthHeaders() });
@@ -1190,6 +1192,7 @@ export const primerLibraryApi = {
     productId: string;
     compatibleSubstrates: string[];
     humidityTolerance: string;
+    dutyRating?: string | null;
     compatibleSystemTypes: string[];
     notes?: string | null;
   }) => {
@@ -1205,6 +1208,7 @@ export const primerLibraryApi = {
     productId: string;
     compatibleSubstrates: string[];
     humidityTolerance: string;
+    dutyRating: string | null;
     compatibleSystemTypes: string[];
     notes: string | null;
   }>) => {

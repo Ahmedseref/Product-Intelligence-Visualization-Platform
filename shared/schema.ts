@@ -274,6 +274,9 @@ export const primerLibrary = pgTable("primer_library", {
   compatibleSubstrates: jsonb("compatible_substrates").$type<string[]>().default([]),
   // Single value drawn from qualification_vocabularies (vocab_type='humidity').
   humidityTolerance: varchar("humidity_tolerance", { length: 100 }),
+  // Single value drawn from qualification_vocabularies (vocab_type='duty'),
+  // e.g. "Light","Medium","Heavy". Nullable — pre-existing rows have no duty.
+  dutyRating: varchar("duty_rating", { length: 100 }),
   // Material types this primer can serve as the bonding coat for, e.g.
   // ["Epoxy","PU"]. These are NOT in qualification_vocabularies — they're a
   // closed library-specific list (Epoxy / PU / Polyurea / Acrylic).

@@ -295,11 +295,11 @@ const SystemBuilder: React.FC<SystemBuilderProps> = ({ products, onProductUpdate
     if (!quickSetupOpen || quickStep !== 2) return;
     let cancelled = false;
     const sub = quickSetup.substrate.length === 1 ? quickSetup.substrate[0] : null;
-    primerLibraryApi.resolve({ substrate: sub, humidity: quickSetup.humidity || null })
+    primerLibraryApi.resolve({ substrate: sub, humidity: quickSetup.humidity || null, duty: quickSetup.duty || null })
       .then((rows) => { if (!cancelled) setQuickPrimerMatches(Array.isArray(rows) ? rows : []); })
       .catch(() => { if (!cancelled) setQuickPrimerMatches([]); });
     return () => { cancelled = true; };
-  }, [quickSetupOpen, quickStep, quickSetup.substrate, quickSetup.humidity]);
+  }, [quickSetupOpen, quickStep, quickSetup.substrate, quickSetup.humidity, quickSetup.duty]);
   const [showAddLayer, setShowAddLayer] = useState(false);
   const [showAddProduct, setShowAddProduct] = useState<string | null>(null);
   const [selectedProductIds, setSelectedProductIds] = useState<string[]>([]);
@@ -1999,6 +1999,7 @@ const SystemBuilder: React.FC<SystemBuilderProps> = ({ products, onProductUpdate
                         <AdaptivePrimerSlot
                           systemSubstrate={fullSystem.systemSubstrate}
                           systemHumidity={fullSystem.systemHumidity}
+                          systemDuty={fullSystem.systemDuty}
                           systemType={inferSystemType(fullSystem)}
                           defaultPrimerLibraryId={layer.defaultPrimerLibraryId ?? null}
                           onSetDefault={(primerId) =>

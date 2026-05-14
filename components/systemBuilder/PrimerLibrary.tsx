@@ -47,6 +47,7 @@ interface FormState {
   productSearch: string;
   compatibleSubstrates: string[];
   humidityTolerance: string;
+  dutyRating: string;
   compatibleSystemTypes: string[];
   notes: string;
 }
@@ -56,13 +57,14 @@ const EMPTY_FORM: FormState = {
   productSearch: '',
   compatibleSubstrates: [],
   humidityTolerance: '',
+  dutyRating: '',
   compatibleSystemTypes: [],
   notes: '',
 };
 
 const PrimerLibrary: React.FC<PrimerLibraryProps> = ({ products }) => {
   const [entries, setEntries] = useState<PrimerLibraryEntry[]>([]);
-  const [vocab, setVocab] = useState<{ substrate: VocabOption[]; humidity: VocabOption[] }>({ substrate: [], humidity: [] });
+  const [vocab, setVocab] = useState<{ substrate: VocabOption[]; humidity: VocabOption[]; duty: VocabOption[] }>({ substrate: [], humidity: [], duty: [] });
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -70,6 +72,7 @@ const PrimerLibrary: React.FC<PrimerLibraryProps> = ({ products }) => {
   const [search, setSearch] = useState('');
   const [filterSubstrate, setFilterSubstrate] = useState<string>('');
   const [filterHumidity, setFilterHumidity] = useState<string>('');
+  const [filterDuty, setFilterDuty] = useState<string>('');
   const [filterSystemType, setFilterSystemType] = useState<string>('');
 
   // Add / edit form state. `editingId` is null when creating, an entry id
@@ -138,6 +141,7 @@ const PrimerLibrary: React.FC<PrimerLibraryProps> = ({ products }) => {
         setVocab({
           substrate: pickActive(grouped.substrate),
           humidity: pickActive(grouped.humidity),
+          duty: pickActive(grouped.duty),
         });
       } catch (e) {
         console.error('Failed to load vocabularies:', e);
@@ -153,6 +157,7 @@ const PrimerLibrary: React.FC<PrimerLibraryProps> = ({ products }) => {
     return entries.filter((e) => {
       if (filterSubstrate && !(e.compatibleSubstrates || []).includes(filterSubstrate)) return false;
       if (filterHumidity && e.humidityTolerance !== filterHumidity) return false;
+      if (filterDuty && e.dutyRating !== filterDuty) return false;
       if (filterSystemType && !(e.compatibleSystemTypes || []).includes(filterSystemType)) return false;
       if (q) {
         const hay = `${e.productName || ''} ${e.supplier || ''} ${e.primerId}`.toLowerCase();
@@ -160,7 +165,7 @@ const PrimerLibrary: React.FC<PrimerLibraryProps> = ({ products }) => {
       }
       return true;
     });
-  }, [entries, search, filterSubstrate, filterHumidity, filterSystemType]);
+  }, [entries, search, filterSubstrate, filterHumidity, filterDuty, filterSystemType]);
 
   // Tags whose product isn't yet represented in the library — these are
   // the candidates surfaced in the "Suggested from Product Qualification"
@@ -191,6 +196,7 @@ const PrimerLibrary: React.FC<PrimerLibraryProps> = ({ products }) => {
       productSearch: product?.name || tag.productId,
       compatibleSubstrates: tag.substrateTypes || [],
       humidityTolerance: tag.humidityTolerance || '',
+      dutyRating: tag.dutyRating || '',
       compatibleSystemTypes: [],
       notes: 'Imported from Product Qualification',
     });
@@ -205,6 +211,7 @@ const PrimerLibrary: React.FC<PrimerLibraryProps> = ({ products }) => {
       productSearch: entry.productName || '',
       compatibleSubstrates: entry.compatibleSubstrates || [],
       humidityTolerance: entry.humidityTolerance || '',
+      dutyRating: entry.dutyRating || '',
       compatibleSystemTypes: entry.compatibleSystemTypes || [],
       notes: entry.notes || '',
     });
@@ -238,6 +245,7 @@ const PrimerLibrary: React.FC<PrimerLibraryProps> = ({ products }) => {
           productId: form.productId,
           compatibleSubstrates: form.compatibleSubstrates,
           humidityTolerance: form.humidityTolerance,
+          dutyRating: form.dutyRating || null,
           compatibleSystemTypes: form.compatibleSystemTypes,
           notes: form.notes || null,
         });
@@ -246,6 +254,7 @@ const PrimerLibrary: React.FC<PrimerLibraryProps> = ({ products }) => {
           productId: form.productId,
           compatibleSubstrates: form.compatibleSubstrates,
           humidityTolerance: form.humidityTolerance,
+          dutyRating: form.dutyRating || null,
           compatibleSystemTypes: form.compatibleSystemTypes,
           notes: form.notes || null,
         });
@@ -335,6 +344,15 @@ const PrimerLibrary: React.FC<PrimerLibraryProps> = ({ products }) => {
         >
           <option value="">All humidity</option>
           {vocab.humidity.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+        </select>
+        <select
+          value={filterDuty}
+          onChange={(e) => setFilterDuty(e.target.value)}
+          className="text-sm border border-slate-200 rounded-lg px-2 py-1.5 bg-white focus:ring-2 focus:ring-indigo-500 outline-none"
+          data-testid="filter-duty"
+        >
+          <option value="">All duty</option>
+          {vocab.duty.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
         </select>
         <select
           value={filterSystemType}
@@ -509,6 +527,24 @@ const PrimerLibrary: React.FC<PrimerLibraryProps> = ({ products }) => {
               </select>
             </div>
 
+            {/* Duty (single, optional). Duty mirrors the Product Qualification
+                "duty" vocabulary so a primer's rating lines up with the
+                duty filter on the adaptive resolve. Left optional because
+                some primers are duty-agnostic — the resolve treats null
+                dutyRating as "universal" so omitting it is non-destructive. */}
+            <div>
+              <label className="block text-xs font-medium text-slate-600 mb-1">Duty</label>
+              <select
+                value={form.dutyRating}
+                onChange={(e) => setForm(f => ({ ...f, dutyRating: e.target.value }))}
+                className="w-full text-sm border border-slate-200 rounded-lg px-2 py-1.5 bg-white focus:ring-2 focus:ring-indigo-500 outline-none"
+                data-testid="form-duty"
+              >
+                <option value="">— Any —</option>
+                {vocab.duty.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+              </select>
+            </div>
+
             {/* System types (multi checkbox) */}
             <div>
               <label className="block text-xs font-medium text-slate-600 mb-1">Compatible system types *</label>
@@ -591,6 +627,7 @@ const PrimerLibrary: React.FC<PrimerLibraryProps> = ({ products }) => {
               <th className="px-3 py-2 font-semibold">Supplier</th>
               <th className="px-3 py-2 font-semibold">Substrates</th>
               <th className="px-3 py-2 font-semibold">Humidity</th>
+              <th className="px-3 py-2 font-semibold">Duty</th>
               <th className="px-3 py-2 font-semibold">System Types</th>
               <th className="px-3 py-2 font-semibold">Notes</th>
               <th className="px-3 py-2 font-semibold text-right">Actions</th>
@@ -598,10 +635,10 @@ const PrimerLibrary: React.FC<PrimerLibraryProps> = ({ products }) => {
           </thead>
           <tbody className="divide-y divide-slate-100">
             {loading && (
-              <tr><td colSpan={7} className="px-3 py-6 text-center text-slate-400">Loading…</td></tr>
+              <tr><td colSpan={8} className="px-3 py-6 text-center text-slate-400">Loading…</td></tr>
             )}
             {!loading && filtered.length === 0 && (
-              <tr><td colSpan={7} className="px-3 py-6 text-center text-slate-400">
+              <tr><td colSpan={8} className="px-3 py-6 text-center text-slate-400">
                 {entries.length === 0 ? 'No primers yet — add one to get started.' : 'No primers match your filters.'}
               </td></tr>
             )}
@@ -625,6 +662,13 @@ const PrimerLibrary: React.FC<PrimerLibraryProps> = ({ products }) => {
                       {e.humidityTolerance}
                     </span>
                   ) : '—'}
+                </td>
+                <td className="px-3 py-2">
+                  {e.dutyRating ? (
+                    <span className="text-[10px] px-2 py-0.5 rounded-full font-medium bg-slate-100 text-slate-700">
+                      {e.dutyRating}
+                    </span>
+                  ) : <span className="text-[10px] text-slate-400">—</span>}
                 </td>
                 <td className="px-3 py-2">
                   <div className="flex flex-wrap gap-1">

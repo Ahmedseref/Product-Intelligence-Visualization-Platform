@@ -18,6 +18,10 @@ interface AdaptivePrimerSlotProps {
   // "set parameters first" prompt instead of resolving anything.
   systemSubstrate: string | null | undefined;
   systemHumidity: string | null | undefined;
+  // The system's duty rating from the parameter header. Forwarded to the
+  // resolve filter so a Heavy-duty system doesn't surface Light-only
+  // primers. Pass null to skip the duty filter.
+  systemDuty?: string | null | undefined;
   // Inferred material/system type for the adaptive resolve filter
   // (Epoxy / PU / Polyurea / Acrylic). Pass null to skip the type filter.
   systemType: string | null;
@@ -35,7 +39,7 @@ interface AdaptivePrimerSlotProps {
 }
 
 const AdaptivePrimerSlot: React.FC<AdaptivePrimerSlotProps> = ({
-  systemSubstrate, systemHumidity, systemType,
+  systemSubstrate, systemHumidity, systemDuty, systemType,
   defaultPrimerLibraryId, onSetDefault, refreshKey, onResolved,
 }) => {
   const [resolved, setResolved] = useState<PrimerLibraryEntry[]>([]);
@@ -55,9 +59,18 @@ const AdaptivePrimerSlot: React.FC<AdaptivePrimerSlotProps> = ({
       primerLibraryApi.resolve({
         substrate: systemSubstrate || undefined,
         humidity: systemHumidity || undefined,
+        duty: systemDuty || undefined,
         systemType: systemType || undefined,
       }),
-      primerLibraryApi.list({ systemType: systemType || undefined }),
+      // Coverage list must use the same duty rule as resolve, otherwise the
+      // gap summary can claim coverage from primers that are excluded for
+      // the current systemDuty. (Null duty = universal, mirroring resolve.)
+      primerLibraryApi.list({ systemType: systemType || undefined })
+        .then((rows: PrimerLibraryEntry[]) =>
+          systemDuty
+            ? (rows || []).filter(p => !p.dutyRating || p.dutyRating === systemDuty)
+            : (rows || [])
+        ),
     ])
       .then(([res, all]) => {
         if (cancelled) return;
@@ -73,7 +86,7 @@ const AdaptivePrimerSlot: React.FC<AdaptivePrimerSlotProps> = ({
       });
     return () => { cancelled = true; };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [systemSubstrate, systemHumidity, systemType, refreshKey]);
+  }, [systemSubstrate, systemHumidity, systemDuty, systemType, refreshKey]);
 
   // Coverage summary — for every (substrate, humidity) combination across
   // all active library primers (filtered by systemType when given), check

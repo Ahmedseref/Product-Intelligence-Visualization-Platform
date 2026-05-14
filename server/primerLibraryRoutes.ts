@@ -37,9 +37,10 @@ export function registerPrimerLibraryRoutes(app: Express): void {
   // Drizzle and the library is small enough that scanning is cheap.
   app.get("/api/primer-library", async (req, res) => {
     try {
-      const { substrate, humidity, systemType, search } = req.query as {
+      const { substrate, humidity, duty, systemType, search } = req.query as {
         substrate?: string;
         humidity?: string;
+        duty?: string;
         systemType?: string;
         search?: string;
       };
@@ -53,6 +54,7 @@ export function registerPrimerLibraryRoutes(app: Express): void {
       const filtered = rows.filter((r) => {
         if (substrate && !(r.compatibleSubstrates || []).includes(substrate)) return false;
         if (humidity && r.humidityTolerance !== humidity) return false;
+        if (duty && r.dutyRating !== duty) return false;
         if (systemType && !(r.compatibleSystemTypes || []).includes(systemType)) return false;
         if (search) {
           const q = search.toLowerCase();
@@ -77,9 +79,10 @@ export function registerPrimerLibraryRoutes(app: Express): void {
   // active primers, useful for previews while parameters are being chosen).
   app.get("/api/primer-library/resolve", async (req, res) => {
     try {
-      const { substrate, humidity, systemType } = req.query as {
+      const { substrate, humidity, duty, systemType } = req.query as {
         substrate?: string;
         humidity?: string;
+        duty?: string;
         systemType?: string;
       };
 
@@ -91,6 +94,10 @@ export function registerPrimerLibraryRoutes(app: Express): void {
       const matched = rows.filter((r) => {
         if (substrate && !(r.compatibleSubstrates || []).includes(substrate)) return false;
         if (systemType && !(r.compatibleSystemTypes || []).includes(systemType)) return false;
+        // Duty is treated like substrate/systemType — a hard filter when
+        // provided. Rows with no dutyRating are kept (treated as universal)
+        // to stay consistent with the "no humidity = universal" pattern.
+        if (duty && r.dutyRating && r.dutyRating !== duty) return false;
         // Humidity is intentionally NOT a hard filter — we still want to
         // surface near-matches so the UI can show "alternatives". Exact
         // matches are simply ranked first below.
@@ -128,6 +135,7 @@ export function registerPrimerLibraryRoutes(app: Express): void {
         productId,
         compatibleSubstrates,
         humidityTolerance,
+        dutyRating,
         compatibleSystemTypes,
         notes,
       } = req.body || {};
@@ -157,6 +165,7 @@ export function registerPrimerLibraryRoutes(app: Express): void {
           supplier: product?.supplier ?? null,
           compatibleSubstrates,
           humidityTolerance,
+          dutyRating: dutyRating ?? null,
           compatibleSystemTypes,
           layerPosition: "primer",
           notes: notes ?? null,
@@ -184,6 +193,7 @@ export function registerPrimerLibraryRoutes(app: Express): void {
         "productId",
         "compatibleSubstrates",
         "humidityTolerance",
+        "dutyRating",
         "compatibleSystemTypes",
         "notes",
       ] as const;

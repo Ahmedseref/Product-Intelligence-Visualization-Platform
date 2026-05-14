@@ -227,6 +227,7 @@ export interface PrimerLibraryEntry {
   supplier: string | null;
   compatibleSubstrates: string[];         // substrate vocab values
   humidityTolerance: string | null;       // humidity vocab value
+  dutyRating: string | null;              // duty vocab value (Light/Medium/Heavy/…)
   compatibleSystemTypes: string[];        // ["Epoxy","PU","Polyurea","Acrylic"]
   layerPosition: string | null;           // always 'primer' today
   notes: string | null;
