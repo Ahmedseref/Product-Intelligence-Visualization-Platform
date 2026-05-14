@@ -1229,3 +1229,56 @@ export const primerLibraryApi = {
     return response.json();
   },
 };
+
+// Saved primer-resolution snapshots (substrates/humidity/duty/systemType +
+// optional pinned default primer). Created from an adaptive primer slot
+// and reusable across systems by applying the template to another slot.
+export const primerTemplatesApi = {
+  list: async () => {
+    const response = await fetch(`${API_BASE}/primer-templates`, { headers: getAuthHeaders() });
+    if (!response.ok) throw new Error('Failed to fetch primer templates');
+    return response.json();
+  },
+  create: async (data: {
+    name: string;
+    substrates?: string[];
+    humidityTolerance?: string | null;
+    dutyRating?: string | null;
+    compatibleSystemTypes?: string[];
+    defaultPrimerLibraryId?: string | null;
+    notes?: string | null;
+  }) => {
+    const response = await fetch(`${API_BASE}/primer-templates`, {
+      method: 'POST',
+      headers: { ...getAuthHeaders(), 'Content-Type': 'application/json' },
+      body: JSON.stringify(data),
+    });
+    if (!response.ok) throw new Error('Failed to create primer template');
+    return response.json();
+  },
+  update: async (id: number, data: Partial<{
+    name: string;
+    substrates: string[];
+    humidityTolerance: string | null;
+    dutyRating: string | null;
+    compatibleSystemTypes: string[];
+    defaultPrimerLibraryId: string | null;
+    notes: string | null;
+  }>) => {
+    const response = await fetch(`${API_BASE}/primer-templates/${id}`, {
+      method: 'PATCH',
+      headers: { ...getAuthHeaders(), 'Content-Type': 'application/json' },
+      body: JSON.stringify(data),
+    });
+    if (!response.ok) throw new Error('Failed to update primer template');
+    return response.json();
+  },
+  deactivate: async (id: number) => {
+    const response = await fetch(`${API_BASE}/primer-templates/${id}`, {
+      method: 'DELETE',
+      headers: getAuthHeaders(),
+    });
+    if (!response.ok) throw new Error('Failed to deactivate primer template');
+    return response.json();
+  },
+};

@@ -235,6 +235,23 @@ export interface PrimerLibraryEntry {
   createdAt: string;
 }
 
+// A saved snapshot of primer-resolution criteria, reusable across systems.
+// Created from an adaptive primer slot ("Save as template") and applied
+// from another slot to reuse the same parameter set + pinned default.
+export interface PrimerTemplate {
+  id: number;
+  templateId: string;                     // PT-0001 etc.
+  name: string;
+  substrates: string[];
+  humidityTolerance: string | null;
+  dutyRating: string | null;
+  compatibleSystemTypes: string[];
+  defaultPrimerLibraryId: string | null;  // primer_library.primerId
+  notes: string | null;
+  isActive: boolean;
+  createdAt: string;
+}
+
 export interface SystemProductOption {
   id: number;
   optionId: string;

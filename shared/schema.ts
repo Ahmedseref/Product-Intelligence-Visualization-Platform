@@ -293,6 +293,30 @@ export const primerLibrary = pgTable("primer_library", {
 export type PrimerLibraryEntry = typeof primerLibrary.$inferSelect;
 export type InsertPrimerLibraryEntry = typeof primerLibrary.$inferInsert;
 
+// Saved snapshots of primer-resolution criteria. The user creates one from
+// any system's adaptive primer slot ("Save as template"), and can apply it
+// to another system's slot to instantly reuse the same parameter set +
+// pinned default. Templates do NOT mutate primer_library rows — they only
+// store filter criteria + an optional defaultPrimerLibraryId pin.
+export const primerTemplates = pgTable("primer_templates", {
+  id: serial("id").primaryKey(),
+  templateId: varchar("template_id", { length: 100 }).notNull().unique(),
+  name: varchar("name", { length: 255 }).notNull(),
+  // Snapshot of the originating system's parameters at save time.
+  substrates: jsonb("substrates").$type<string[]>().default([]),
+  humidityTolerance: varchar("humidity_tolerance", { length: 100 }),
+  dutyRating: varchar("duty_rating", { length: 100 }),
+  compatibleSystemTypes: jsonb("compatible_system_types").$type<string[]>().default([]),
+  // Optional pinned primer (PL-XXXX from primer_library.primerId). When
+  // applied to a layer, this becomes the layer's default_primer_library_id.
+  defaultPrimerLibraryId: varchar("default_primer_library_id", { length: 100 }),
+  notes: text("notes"),
+  isActive: boolean("is_active").default(true),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+export type PrimerTemplate = typeof primerTemplates.$inferSelect;
+export type InsertPrimerTemplate = typeof primerTemplates.$inferInsert;
+
 export const systemProductOptions = pgTable("system_product_options", {
   id: serial("id").primaryKey(),
   optionId: varchar("option_id", { length: 100 }).notNull().unique(),
