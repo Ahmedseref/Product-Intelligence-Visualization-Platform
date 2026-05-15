@@ -7,7 +7,7 @@
 // ─────────────────────────────────────────────────────────────────────────────
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import {
-  Library, Plus, Search, X, Edit, Trash2, Save, Check, AlertCircle, Layers, Star, Sparkles,
+  Library, Plus, Search, X, Edit, Trash2, Save, Check, AlertCircle, Layers, Star, Sparkles, FolderPlus,
 } from 'lucide-react';
 import { Product, PrimerLibraryEntry, PrimerGroup, QualificationTag } from '../../types';
 import { primerLibraryApi, primerGroupsApi } from '../../client/api';
@@ -122,6 +122,11 @@ const PrimerLibrary: React.FC<PrimerLibraryProps> = ({ products }) => {
     defaultPrimerLibraryId: string;
   }>({ name: '', description: '', primerLibraryIds: [], defaultPrimerLibraryId: '' });
   const [groupMemberSearch, setGroupMemberSearch] = useState('');
+  // Per-row "add to group" popover. Tracks which primer's picker is open
+  // (only one at a time) and which group is currently being toggled so we
+  // can disable the row to avoid double-clicks during the round-trip.
+  const [groupPickerPrimerId, setGroupPickerPrimerId] = useState<string | null>(null);
+  const [groupPickerBusyId, setGroupPickerBusyId] = useState<number | null>(null);
   const [groupSaving, setGroupSaving] = useState(false);
   const [groupError, setGroupError] = useState<string | null>(null);
 
@@ -402,6 +407,38 @@ const PrimerLibrary: React.FC<PrimerLibraryProps> = ({ products }) => {
       setGroupSaving(false);
     }
   };
+  // Toggle a single primer in/out of a group from the per-row picker.
+  // We optimistically build the next member list, persist via the existing
+  // group update endpoint, and refresh local group state. If the primer
+  // being removed was the group's default, we promote the next remaining
+  // member (or null when the group ends up empty — but server validation
+  // rejects empty groups, so we surface that as an alert and bail).
+  const togglePrimerInGroup = async (group: PrimerGroup, primerId: string) => {
+    const isMember = group.primerLibraryIds.includes(primerId);
+    const nextIds = isMember
+      ? group.primerLibraryIds.filter(id => id !== primerId)
+      : [...group.primerLibraryIds, primerId];
+    if (isMember && nextIds.length === 0) {
+      alert(`"${group.name}" needs at least one primer. Delete the group instead, or add another primer first.`);
+      return;
+    }
+    const nextDefault = isMember && group.defaultPrimerLibraryId === primerId
+      ? (nextIds[0] || null)
+      : group.defaultPrimerLibraryId;
+    setGroupPickerBusyId(group.id);
+    try {
+      await primerGroupsApi.update(group.id, {
+        primerLibraryIds: nextIds,
+        defaultPrimerLibraryId: nextDefault,
+      });
+      await refreshGroups();
+    } catch (e: any) {
+      alert(e?.message || 'Failed to update group membership');
+    } finally {
+      setGroupPickerBusyId(null);
+    }
+  };
+
   const handleDeleteGroup = async (g: PrimerGroup) => {
     if (!confirm(`Delete group "${g.name}"? Layers already pinned to its primer will keep that pin.`)) return;
     try {
@@ -1374,9 +1411,93 @@ const PrimerLibrary: React.FC<PrimerLibraryProps> = ({ products }) => {
                   <div className="truncate max-w-[200px]">{e.notes || '—'}</div>
                 </td>
                 <td className="px-3 py-2 text-right">
+                  {/* Add-to-group picker. A primer can belong to many groups,
+                      so this is a checkbox list of all active groups with
+                      the current memberships pre-checked. Toggling persists
+                      immediately so the user gets in/out without opening
+                      the larger group editor. The button shows a small dot
+                      when this primer is already a member of any group. */}
+                  <span className="relative inline-block">
+                    {(() => {
+                      const memberOf = groups.filter(g => g.primerLibraryIds.includes(e.primerId)).length;
+                      const open = groupPickerPrimerId === e.primerId;
+                      return (
+                        <>
+                          <button
+                            onClick={() => setGroupPickerPrimerId(open ? null : e.primerId)}
+                            className={`p-1 rounded ml-1 relative ${open ? 'text-indigo-700 bg-indigo-50' : 'text-slate-400 hover:text-indigo-600 hover:bg-indigo-50'}`}
+                            title={memberOf > 0 ? `In ${memberOf} group${memberOf === 1 ? '' : 's'} — click to manage` : 'Add to group'}
+                            data-testid={`primer-add-to-group-${e.primerId}`}
+                          >
+                            <FolderPlus size={14} />
+                            {memberOf > 0 && (
+                              <span className="absolute -top-0.5 -right-0.5 min-w-[14px] h-[14px] px-1 bg-indigo-600 text-white text-[9px] font-semibold rounded-full flex items-center justify-center">
+                                {memberOf}
+                              </span>
+                            )}
+                          </button>
+                          {open && (
+                            <>
+                              {/* Click-away catcher. Sits behind the popover
+                                  but above the rest of the page so any
+                                  outside click closes the picker. */}
+                              <div
+                                className="fixed inset-0 z-30"
+                                onClick={() => setGroupPickerPrimerId(null)}
+                              />
+                              <div
+                                className="absolute right-0 top-full mt-1 z-40 w-64 bg-white border border-slate-200 rounded-lg shadow-lg p-2 text-left"
+                                data-testid={`primer-group-picker-${e.primerId}`}
+                              >
+                                <div className="text-[11px] font-semibold text-slate-500 uppercase tracking-wide px-1 pb-1 flex items-center justify-between">
+                                  <span>Add to group</span>
+                                  <button
+                                    onClick={() => setGroupPickerPrimerId(null)}
+                                    className="text-slate-400 hover:text-slate-600"
+                                    title="Close"
+                                  >
+                                    <X size={12} />
+                                  </button>
+                                </div>
+                                {groups.length === 0 ? (
+                                  <div className="px-1 py-2 text-xs text-slate-500">
+                                    No groups yet. Create one in the Primer groups panel above.
+                                  </div>
+                                ) : (
+                                  <div className="max-h-56 overflow-y-auto">
+                                    {groups.map(g => {
+                                      const checked = g.primerLibraryIds.includes(e.primerId);
+                                      const busy = groupPickerBusyId === g.id;
+                                      return (
+                                        <label
+                                          key={g.id}
+                                          className={`flex items-center gap-2 px-1.5 py-1 rounded text-xs hover:bg-slate-50 cursor-pointer ${busy ? 'opacity-50' : ''}`}
+                                        >
+                                          <input
+                                            type="checkbox"
+                                            checked={checked}
+                                            disabled={busy}
+                                            onChange={() => togglePrimerInGroup(g, e.primerId)}
+                                            className="accent-indigo-600"
+                                            data-testid={`primer-group-toggle-${e.primerId}-${g.groupId}`}
+                                          />
+                                          <span className="flex-1 truncate text-slate-700" title={g.name}>{g.name}</span>
+                                          <span className="text-[10px] font-mono text-slate-400">{g.groupId}</span>
+                                        </label>
+                                      );
+                                    })}
+                                  </div>
+                                )}
+                              </div>
+                            </>
+                          )}
+                        </>
+                      );
+                    })()}
+                  </span>
                   <button
                     onClick={() => openEditForm(e)}
-                    className="p-1 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded"
+                    className="p-1 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded ml-1"
                     title="Edit"
                   >
                     <Edit size={14} />
