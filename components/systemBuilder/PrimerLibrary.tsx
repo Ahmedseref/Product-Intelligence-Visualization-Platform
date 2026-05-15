@@ -48,7 +48,14 @@ interface FormState {
   compatibleSubstrates: string[];
   humidityTolerance: string;
   dutyRating: string;
+  // Closed-list selections only (Epoxy/PU/…). Custom "Other" types live in
+  // otherSystemType and are merged into the saved compatibleSystemTypes
+  // array on submit, so the persisted shape stays a flat string[].
   compatibleSystemTypes: string[];
+  // Free-text custom system type (e.g. "Bitumen Membrane"). Empty string
+  // means the user hasn't ticked Other. Comma-separated values are
+  // accepted so a primer can carry more than one custom type.
+  otherSystemType: string;
   notes: string;
 }
 
@@ -59,8 +66,20 @@ const EMPTY_FORM: FormState = {
   humidityTolerance: '',
   dutyRating: '',
   compatibleSystemTypes: [],
+  otherSystemType: '',
   notes: '',
 };
+
+// Split a stored compatibleSystemTypes array into (closed-list types,
+// custom "Other" string). Used when opening the edit form so any custom
+// types persist into the Other text input and are not silently dropped.
+function splitSystemTypes(all: string[] | null | undefined): { closed: string[]; other: string } {
+  const list = all || [];
+  const closedSet = new Set<string>(SYSTEM_TYPES);
+  const closed = list.filter(t => closedSet.has(t));
+  const others = list.filter(t => !closedSet.has(t));
+  return { closed, other: others.join(', ') };
+}
 
 const PrimerLibrary: React.FC<PrimerLibraryProps> = ({ products }) => {
   const [entries, setEntries] = useState<PrimerLibraryEntry[]>([]);
@@ -237,6 +256,7 @@ const PrimerLibrary: React.FC<PrimerLibraryProps> = ({ products }) => {
       humidityTolerance: tag.humidityTolerance || '',
       dutyRating: tag.dutyRating || '',
       compatibleSystemTypes: [],
+      otherSystemType: '',
       notes: 'Imported from Product Qualification',
     });
     setFormError(null);
@@ -244,6 +264,7 @@ const PrimerLibrary: React.FC<PrimerLibraryProps> = ({ products }) => {
   };
 
   const openEditForm = (entry: PrimerLibraryEntry) => {
+    const split = splitSystemTypes(entry.compatibleSystemTypes);
     setEditingId(entry.id);
     setForm({
       productId: entry.productId,
@@ -251,7 +272,8 @@ const PrimerLibrary: React.FC<PrimerLibraryProps> = ({ products }) => {
       compatibleSubstrates: entry.compatibleSubstrates || [],
       humidityTolerance: entry.humidityTolerance || '',
       dutyRating: entry.dutyRating || '',
-      compatibleSystemTypes: entry.compatibleSystemTypes || [],
+      compatibleSystemTypes: split.closed,
+      otherSystemType: split.other,
       notes: entry.notes || '',
     });
     setFormError(null);
@@ -265,11 +287,23 @@ const PrimerLibrary: React.FC<PrimerLibraryProps> = ({ products }) => {
     setFormError(null);
   };
 
+  // Merge closed-list selections + the free-text "Other" field into the
+  // single string[] the API persists. Other accepts comma-separated values
+  // so a primer can declare multiple custom material types in one go.
+  const mergedSystemTypes = (): string[] => {
+    const others = form.otherSystemType
+      .split(',')
+      .map(s => s.trim())
+      .filter(Boolean);
+    // De-dupe in case the user typed "Epoxy" into the Other field too.
+    return Array.from(new Set([...form.compatibleSystemTypes, ...others]));
+  };
+
   const validate = (): string | null => {
     if (!form.productId) return 'Select a product';
     if (form.compatibleSubstrates.length === 0) return 'Pick at least one substrate';
     if (!form.humidityTolerance) return 'Set humidity tolerance';
-    if (form.compatibleSystemTypes.length === 0) return 'Pick at least one system type';
+    if (mergedSystemTypes().length === 0) return 'Pick at least one system type (or specify a custom one in Other)';
     return null;
   };
 
@@ -278,6 +312,7 @@ const PrimerLibrary: React.FC<PrimerLibraryProps> = ({ products }) => {
     if (err) { setFormError(err); return; }
     setSaving(true);
     setFormError(null);
+    const types = mergedSystemTypes();
     try {
       if (editingId == null) {
         await primerLibraryApi.create({
@@ -285,7 +320,7 @@ const PrimerLibrary: React.FC<PrimerLibraryProps> = ({ products }) => {
           compatibleSubstrates: form.compatibleSubstrates,
           humidityTolerance: form.humidityTolerance,
           dutyRating: form.dutyRating || null,
-          compatibleSystemTypes: form.compatibleSystemTypes,
+          compatibleSystemTypes: types,
           notes: form.notes || null,
         });
       } else {
@@ -294,7 +329,7 @@ const PrimerLibrary: React.FC<PrimerLibraryProps> = ({ products }) => {
           compatibleSubstrates: form.compatibleSubstrates,
           humidityTolerance: form.humidityTolerance,
           dutyRating: form.dutyRating || null,
-          compatibleSystemTypes: form.compatibleSystemTypes,
+          compatibleSystemTypes: types,
           notes: form.notes || null,
         });
       }
@@ -640,6 +675,13 @@ const PrimerLibrary: React.FC<PrimerLibraryProps> = ({ products }) => {
         >
           <option value="">All system types</option>
           {SYSTEM_TYPES.map(t => <option key={t} value={t}>{t}</option>)}
+          {/* Custom "Other" types discovered in saved entries — surfaced in
+              the filter so users can narrow by their own material types
+              (e.g. Bitumen Membrane) without retyping. */}
+          {Array.from(new Set<string>(entries.flatMap(e => (e.compatibleSystemTypes || []))))
+            .filter((t: string) => !(SYSTEM_TYPES as readonly string[]).includes(t))
+            .sort()
+            .map((t: string) => <option key={t} value={t}>{t}</option>)}
         </select>
       </div>
 
@@ -1166,10 +1208,14 @@ const PrimerLibrary: React.FC<PrimerLibraryProps> = ({ products }) => {
               </select>
             </div>
 
-            {/* System types (multi checkbox) */}
+            {/* System types (multi checkbox + free-text Other). Closed list
+                covers the four chemistries we ship with; Other lets the
+                user tag primers for material types we don't enumerate
+                (e.g. "Bitumen Membrane"). Comma-separate to declare
+                multiple customs at once. */}
             <div>
               <label className="block text-xs font-medium text-slate-600 mb-1">Compatible system types *</label>
-              <div className="flex flex-wrap gap-3">
+              <div className="flex flex-wrap items-center gap-3">
                 {SYSTEM_TYPES.map(t => {
                   const active = form.compatibleSystemTypes.includes(t);
                   return (
@@ -1189,7 +1235,30 @@ const PrimerLibrary: React.FC<PrimerLibraryProps> = ({ products }) => {
                     </label>
                   );
                 })}
+                <label className="flex items-center gap-1.5 text-sm text-slate-700 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={form.otherSystemType.trim().length > 0}
+                    onChange={(e) => setForm(f => ({
+                      ...f,
+                      // Unticking clears the field entirely so it's not
+                      // silently saved when the user changes their mind.
+                      otherSystemType: e.target.checked ? (f.otherSystemType || '') : '',
+                    }))}
+                    className="accent-indigo-600"
+                    data-testid="form-system-type-other-toggle"
+                  />
+                  Other
+                </label>
               </div>
+              <input
+                type="text"
+                value={form.otherSystemType}
+                onChange={(e) => setForm(f => ({ ...f, otherSystemType: e.target.value }))}
+                placeholder='e.g. Bitumen Membrane (separate multiple with commas)'
+                className="mt-2 w-full text-sm border border-slate-200 rounded-lg px-2 py-1.5 bg-white focus:ring-2 focus:ring-indigo-500 outline-none"
+                data-testid="form-system-type-other-input"
+              />
             </div>
 
             {/* Notes */}
