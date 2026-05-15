@@ -886,7 +886,17 @@ const SystemBuilder: React.FC<SystemBuilderProps> = ({ products, onProductUpdate
         }
       }
     }
-    const defaultCoverage = fullSystem.layers.filter(l => l.productOptions.some(o => o.isDefault)).length;
+    // A layer counts toward "default coverage" if it has either an
+    // explicit productOption flagged isDefault (fixed mode) or a pinned
+    // adaptive primer (defaultPrimerLibraryId set) that actually resolves.
+    const defaultCoverage = fullSystem.layers.filter(l => {
+      if (l.layerMode === 'adaptive') {
+        if (!l.defaultPrimerLibraryId) return false;
+        const r = resolvedPrimersByLayer[l.layerId] || [];
+        return r.some(x => x.primerId === l.defaultPrimerLibraryId);
+      }
+      return l.productOptions.some(o => o.isDefault);
+    }).length;
     // Adaptive primer gap check — for every primer-position layer in
     // adaptive mode, look up the resolved entries reported back by the
     // child AdaptivePrimerSlot. A layer with zero resolved entries is a
@@ -2378,13 +2388,35 @@ const SystemBuilder: React.FC<SystemBuilderProps> = ({ products, onProductUpdate
                 </div>
                 <div className="bg-white rounded-lg p-3 border border-slate-200">
                   <div className="text-2xl font-bold text-emerald-600">
-                    {fullSystem.layers.reduce((sum, l) => sum + l.productOptions.length, 0)}
+                    {fullSystem.layers.reduce((sum, l) => {
+                      // Adaptive layers don't have explicit productOptions —
+                      // their product list is the live primer-library
+                      // resolve. Count those instead so the summary
+                      // doesn't read 0 when the user has set up an
+                      // adaptive primer layer with a group pinned.
+                      if (l.layerMode === 'adaptive') {
+                        return sum + (resolvedPrimersByLayer[l.layerId]?.length ?? 0);
+                      }
+                      return sum + l.productOptions.length;
+                    }, 0)}
                   </div>
                   <div className="text-xs text-slate-500">Products</div>
                 </div>
                 <div className="bg-white rounded-lg p-3 border border-slate-200">
                   <div className="text-2xl font-bold text-amber-600">
-                    {fullSystem.layers.reduce((sum, l) => sum + l.productOptions.filter((o) => o.isDefault).length, 0)}
+                    {fullSystem.layers.reduce((sum, l) => {
+                      // Adaptive layers contribute 1 default when a primer
+                      // is pinned AND that primer is in the live resolve
+                      // set (otherwise the pin is stale for these
+                      // parameters). Fixed layers count their isDefault
+                      // productOptions.
+                      if (l.layerMode === 'adaptive') {
+                        if (!l.defaultPrimerLibraryId) return sum;
+                        const r = resolvedPrimersByLayer[l.layerId] || [];
+                        return sum + (r.some(x => x.primerId === l.defaultPrimerLibraryId) ? 1 : 0);
+                      }
+                      return sum + l.productOptions.filter((o) => o.isDefault).length;
+                    }, 0)}
                   </div>
                   <div className="text-xs text-slate-500">Defaults</div>
                 </div>

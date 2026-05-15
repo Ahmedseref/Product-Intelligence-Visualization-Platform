@@ -91,7 +91,8 @@ const AdaptivePrimerSlot: React.FC<AdaptivePrimerSlotProps> = ({
         if (cancelled) return;
         setResolved(res || []);
         setAllActive(all || []);
-        if (onResolved) onResolved(res || []);
+        // onResolved is fired by the effectiveResolved effect below,
+        // which respects group filtering when a group is pinned.
       })
       .catch((e) => {
         if (!cancelled) setError(e?.message || 'Failed to load primers');
@@ -175,6 +176,29 @@ const AdaptivePrimerSlot: React.FC<AdaptivePrimerSlotProps> = ({
     ) || null;
   }, [groups, defaultPrimerLibraryId]);
 
+  // When a group is pinned, the user is explicitly restricting the layer
+  // to that group's curated members — so the resolve preview should only
+  // show primers that are BOTH (a) members of that group and (b) valid
+  // for the system's parameters. Without this filter the user sees every
+  // matching library primer and is confused why their group choice
+  // didn't narrow anything down. With no group pinned, behaviour is
+  // unchanged: every matching library primer is shown as an alternative.
+  const effectiveResolved = useMemo(() => {
+    if (!sourceGroup) return resolved;
+    const memberIds = new Set(sourceGroup.primerLibraryIds || []);
+    return resolved.filter(r => memberIds.has(r.primerId));
+  }, [resolved, sourceGroup]);
+
+  // Report the effective resolved list upward so the layer header badge
+  // and the system summary product count reflect what the user actually
+  // sees here (not the unfiltered library match).
+  useEffect(() => {
+    if (onResolved) onResolved(effectiveResolved);
+    // We deliberately exclude onResolved from deps to avoid re-firing
+    // when the parent's callback identity changes.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [effectiveResolved]);
+
   return (
     <div className="px-3 py-3 bg-indigo-50/30 border-b border-indigo-100" data-testid="adaptive-primer-slot">
       <div className="flex items-center gap-2 mb-2">
@@ -200,13 +224,21 @@ const AdaptivePrimerSlot: React.FC<AdaptivePrimerSlotProps> = ({
           <div className="text-xs text-slate-500 italic px-2 py-2 bg-white/70 rounded border border-dashed border-slate-300">
             Pick a substrate in System Parameters above to preview which primers will resolve.
           </div>
-        ) : resolved.length === 0 ? (
+        ) : effectiveResolved.length === 0 ? (
           <div className="text-xs text-amber-700 px-2 py-2 bg-amber-50 border border-amber-200 rounded flex items-center gap-1.5">
-            <AlertTriangle size={12} /> No primers in library match these conditions — add primers to the Primer Library tab.
+            <AlertTriangle size={12} />
+            {sourceGroup
+              ? `No member of "${sourceGroup.name}" matches this system's conditions. Pick a different group, or add a matching primer to the group in the Primer Library.`
+              : 'No primers in library match these conditions — add primers to the Primer Library tab.'}
           </div>
         ) : (
           <div className="space-y-1.5">
-            {resolved.map(p => (
+            {sourceGroup && (
+              <div className="text-[10px] text-indigo-600 italic mb-1">
+                Restricted to members of group <span className="font-semibold">{sourceGroup.name}</span>. Switch to "No default" above to see every matching library primer.
+              </div>
+            )}
+            {effectiveResolved.map(p => (
               <div
                 key={p.id}
                 className={`flex items-center gap-2 px-2.5 py-1.5 rounded border transition-colors ${defaultPrimerLibraryId === p.primerId ? 'bg-amber-50 border-amber-300' : 'bg-white border-slate-200'}`}
