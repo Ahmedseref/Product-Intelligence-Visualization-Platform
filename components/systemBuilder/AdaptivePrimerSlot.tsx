@@ -128,7 +128,11 @@ const AdaptivePrimerSlot: React.FC<AdaptivePrimerSlotProps> = ({
     return { covered, gaps };
   }, [allActive]);
 
-  const paramsSet = !!systemSubstrate && !!systemHumidity;
+  // Humidity is optional in the system header ("— Any —" = null). When the
+  // user leaves it blank we still want to preview every primer for the
+  // chosen substrate rather than blocking with the "set parameters" prompt.
+  // Substrate is the only hard gate.
+  const paramsSet = !!systemSubstrate;
 
   // Apply a group to this layer. We constrain the pinned primer to one
   // that's actually in the currently resolved list for the system's
@@ -194,7 +198,7 @@ const AdaptivePrimerSlot: React.FC<AdaptivePrimerSlotProps> = ({
         </div>
         {!paramsSet ? (
           <div className="text-xs text-slate-500 italic px-2 py-2 bg-white/70 rounded border border-dashed border-slate-300">
-            Set system substrate and humidity parameters above to preview which primers will resolve.
+            Pick a substrate in System Parameters above to preview which primers will resolve.
           </div>
         ) : resolved.length === 0 ? (
           <div className="text-xs text-amber-700 px-2 py-2 bg-amber-50 border border-amber-200 rounded flex items-center gap-1.5">
@@ -272,9 +276,11 @@ const AdaptivePrimerSlot: React.FC<AdaptivePrimerSlotProps> = ({
           </select>
           {sourceGroup && defaultPrimerLibraryId && (
             <div className="text-[10px] text-slate-400 mt-1">
-              resolves to <span className="font-medium text-indigo-600">
+              For this system's parameters, this group resolves to{' '}
+              <span className="font-medium text-indigo-600">
                 {resolved.find(p => p.primerId === defaultPrimerLibraryId)?.productName || defaultPrimerLibraryId}
               </span>
+              {' '}— if that's not what you want, edit the group's members in the Primer Library tab.
             </div>
           )}
           {groupApplyNote && (
@@ -285,32 +291,40 @@ const AdaptivePrimerSlot: React.FC<AdaptivePrimerSlotProps> = ({
         </div>
       )}
 
-      {/* Coverage summary */}
+      {/* Library coverage summary — informational only. Tells the user
+          which substrate/humidity combos their *whole library* covers
+          (not this specific layer), so they can spot gaps to fill in
+          before specifying systems for those conditions. Collapsed by
+          default to reduce noise. */}
       {allActive.length > 0 && (
-        <div>
-          <div className="text-[11px] font-semibold text-slate-600 uppercase mb-1.5">Coverage</div>
-          {coverage.covered.length > 0 && (
-            <div className="text-[11px] text-slate-600 flex items-start gap-1.5 mb-1">
-              <Check size={11} className="text-emerald-600 mt-0.5 flex-shrink-0" />
-              <span>
-                <span className="font-medium">Covered:</span>{' '}
-                {coverage.covered.slice(0, 6).map(c => `${c.substrate}/${c.humidity}`).join(' · ')}
-                {coverage.covered.length > 6 && ` (+${coverage.covered.length - 6} more)`}
-              </span>
-            </div>
-          )}
-          {coverage.gaps.length > 0 && (
-            <div className="text-[11px] text-amber-700 flex items-start gap-1.5">
-              <AlertTriangle size={11} className="text-amber-600 mt-0.5 flex-shrink-0" />
-              <span>
-                <span className="font-medium">No primer found for:</span>{' '}
-                {coverage.gaps.slice(0, 6).map(c => `${c.substrate}/${c.humidity}`).join(' · ')}
-                {coverage.gaps.length > 6 && ` (+${coverage.gaps.length - 6} more)`}
-                {' — add to Primer Library'}
-              </span>
-            </div>
-          )}
-        </div>
+        <details className="mt-3 group">
+          <summary className="text-[11px] font-semibold text-slate-600 uppercase cursor-pointer hover:text-slate-800 select-none">
+            Library coverage <span className="text-[10px] font-normal text-slate-400 normal-case">(across your whole Primer Library — not this layer)</span>
+          </summary>
+          <div className="mt-1.5">
+            {coverage.covered.length > 0 && (
+              <div className="text-[11px] text-slate-600 flex items-start gap-1.5 mb-1">
+                <Check size={11} className="text-emerald-600 mt-0.5 flex-shrink-0" />
+                <span>
+                  <span className="font-medium">Library can handle:</span>{' '}
+                  {coverage.covered.slice(0, 6).map(c => `${c.substrate}/${c.humidity}`).join(' · ')}
+                  {coverage.covered.length > 6 && ` (+${coverage.covered.length - 6} more)`}
+                </span>
+              </div>
+            )}
+            {coverage.gaps.length > 0 && (
+              <div className="text-[11px] text-amber-700 flex items-start gap-1.5">
+                <AlertTriangle size={11} className="text-amber-600 mt-0.5 flex-shrink-0" />
+                <span>
+                  <span className="font-medium">Library is missing primers for:</span>{' '}
+                  {coverage.gaps.slice(0, 6).map(c => `${c.substrate}/${c.humidity}`).join(' · ')}
+                  {coverage.gaps.length > 6 && ` (+${coverage.gaps.length - 6} more)`}
+                  {' — add them to the Primer Library tab.'}
+                </span>
+              </div>
+            )}
+          </div>
+        </details>
       )}
     </div>
   );

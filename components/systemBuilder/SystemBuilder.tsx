@@ -1860,9 +1860,43 @@ const SystemBuilder: React.FC<SystemBuilderProps> = ({ products, onProductUpdate
                           <>
                             <span className="flex-1 text-sm font-semibold text-slate-700">{layer.layerName}</span>
                             {layer.notes && <span className="text-xs text-slate-400 truncate max-w-[200px]">{layer.notes}</span>}
-                            <span className={`text-xs ${lc.countText} ${lc.countBg} px-2 py-0.5 rounded-full font-medium`}>
-                              {layer.productOptions.length} product{layer.productOptions.length !== 1 ? 's' : ''}
-                            </span>
+                            {/* In adaptive mode the layer's product list is
+                                resolved live from the Primer Library, so the
+                                badge mirrors how many primers actually
+                                resolve for the current system parameters
+                                (or "from group" when the user pinned one).
+                                In fixed mode it's the static product count. */}
+                            {layer.layerMode === 'adaptive' ? (
+                              (() => {
+                                const resolvedHere = resolvedPrimersByLayer[layer.layerId] || [];
+                                const pinned = layer.defaultPrimerLibraryId
+                                  ? resolvedHere.find(r => r.primerId === layer.defaultPrimerLibraryId)
+                                  : null;
+                                const label = pinned
+                                  ? `1 pinned · ${resolvedHere.length} match`
+                                  : resolvedHere.length === 0
+                                    ? 'no match'
+                                    : `${resolvedHere.length} match${resolvedHere.length === 1 ? '' : 'es'}`;
+                                return (
+                                  <span
+                                    className={`text-xs px-2 py-0.5 rounded-full font-medium ${
+                                      pinned
+                                        ? 'bg-amber-50 text-amber-700'
+                                        : resolvedHere.length === 0
+                                          ? 'bg-amber-50 text-amber-700'
+                                          : 'bg-indigo-50 text-indigo-700'
+                                    }`}
+                                    title="Adaptive layer — count of primers resolved from the Primer Library for this system's parameters"
+                                  >
+                                    {label}
+                                  </span>
+                                );
+                              })()
+                            ) : (
+                              <span className={`text-xs ${lc.countText} ${lc.countBg} px-2 py-0.5 rounded-full font-medium`}>
+                                {layer.productOptions.length} product{layer.productOptions.length !== 1 ? 's' : ''}
+                              </span>
+                            )}
                             <button
                               onClick={() => {
                                 setEditingLayer(layer.layerId);
