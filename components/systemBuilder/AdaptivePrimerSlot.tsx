@@ -262,6 +262,24 @@ const AdaptivePrimerSlot: React.FC<AdaptivePrimerSlotProps> = ({
                     {p.humidityTolerance && (
                       <span className="px-1 py-0.5 bg-blue-50 text-blue-700 rounded">{p.humidityTolerance}</span>
                     )}
+                    {/* Group memberships — every group this primer belongs
+                        to. Helps the user understand why a given primer
+                        appears here (it was pulled in by a group they
+                        pinned) and which other groups would also surface
+                        it. We use the same Layers icon style as the
+                        group selector for visual consistency. */}
+                    {groups
+                      .filter(g => (g.primerLibraryIds || []).includes(p.primerId))
+                      .map(g => (
+                        <span
+                          key={g.groupId}
+                          className="inline-flex items-center gap-1 px-1.5 py-0.5 bg-indigo-50 text-indigo-700 rounded"
+                          title={`Member of group "${g.name}" (${g.groupId})`}
+                        >
+                          <Layers size={9} />
+                          {g.name}
+                        </span>
+                      ))}
                   </div>
                 </div>
               </div>
