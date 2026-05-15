@@ -210,6 +210,11 @@ export interface SystemLayer {
   // Pinned default primer (primer_library.primerId) when layerMode is
   // 'adaptive'. Optional — when null, all matching primers are alternatives.
   defaultPrimerLibraryId?: string | null;
+  // Pinned primer group (primer_groups.groupId) when layerMode is
+  // 'adaptive'. Source of truth for which group the user selected in
+  // the adaptive slot dropdown — primers can belong to multiple
+  // groups so deriving from defaultPrimerLibraryId alone is ambiguous.
+  defaultPrimerGroupId?: string | null;
   createdAt: string;
   updatedAt: string;
 }

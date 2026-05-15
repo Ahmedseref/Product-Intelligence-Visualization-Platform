@@ -2046,9 +2046,15 @@ const SystemBuilder: React.FC<SystemBuilderProps> = ({ products, onProductUpdate
                           systemDuty={fullSystem.systemDuty}
                           systemType={inferSystemType(fullSystem)}
                           defaultPrimerLibraryId={layer.defaultPrimerLibraryId ?? null}
-                          onSetDefault={(primerId) =>
+                          defaultPrimerGroupId={layer.defaultPrimerGroupId ?? null}
+                          onSetDefault={(primerId, groupId) =>
                             systemsApi
-                              .updateLayer(layer.layerId, { defaultPrimerLibraryId: primerId })
+                              .updateLayer(layer.layerId, {
+                                defaultPrimerLibraryId: primerId,
+                                // Only forward groupId when the caller passed it
+                                // (undefined means "leave existing group pin").
+                                ...(groupId !== undefined ? { defaultPrimerGroupId: groupId } : {}),
+                              })
                               .then(() => loadFullSystem(selectedSystemId!))
                           }
                           onResolved={(entries) => setResolvedPrimersByLayer(prev => ({ ...prev, [layer.layerId]: entries }))}

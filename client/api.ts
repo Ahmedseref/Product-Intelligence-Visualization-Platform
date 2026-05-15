@@ -997,6 +997,8 @@ export const systemsApi = {
       // one library entry as the recommended default.
       layerMode?: 'fixed' | 'adaptive' | null;
       defaultPrimerLibraryId?: string | null;
+      // Source-of-truth pin for the chosen group in the adaptive slot.
+      defaultPrimerGroupId?: string | null;
       // ---- Installable-spec fields. All nullable; null clears the value. ----
       // kg of material per m² of substrate.
       consumptionRateKgM2?: number | null;

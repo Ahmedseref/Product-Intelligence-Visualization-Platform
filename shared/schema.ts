@@ -248,6 +248,13 @@ export const systemLayers = pgTable("system_layers", {
   // 'adaptive'. Stored as the primerLibrary.primerId varchar so the
   // reference is portable across export/import.
   defaultPrimerLibraryId: varchar("default_primer_library_id", { length: 100 }),
+  // Optional pinned primer GROUP. Source of truth for "which group did
+  // the user pick in the adaptive slot dropdown". A primer can belong
+  // to several groups, so deriving the chosen group from the pinned
+  // primer alone is ambiguous — this column resolves that ambiguity.
+  // Stored as the primerGroups.groupId varchar (e.g. "PG-0001") for
+  // export/import portability. Null = no group chosen.
+  defaultPrimerGroupId: varchar("default_primer_group_id", { length: 100 }),
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow(),
 });

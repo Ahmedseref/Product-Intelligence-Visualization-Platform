@@ -27,8 +27,14 @@ interface AdaptivePrimerSlotProps {
   systemType: string | null;
   // Pinned default primer id (primer_library.primerId). Optional.
   defaultPrimerLibraryId: string | null | undefined;
-  // Persists changes to the parent layer (default primer pin).
-  onSetDefault: (primerId: string | null) => void | Promise<void>;
+  // Pinned primer group id (primer_groups.groupId). Source of truth for
+  // which group the user picked in the dropdown — a single primer can
+  // belong to multiple groups, so storing only the resolved primer is
+  // ambiguous. Optional.
+  defaultPrimerGroupId?: string | null | undefined;
+  // Persists changes to the parent layer (default primer pin + the
+  // group the user picked, so the dropdown remembers it accurately).
+  onSetDefault: (primerId: string | null, groupId?: string | null) => void | Promise<void>;
   // External counter that the parent bumps when a primer was added/edited
   // in the library tab in another window — drives a refresh.
   refreshKey?: number;
@@ -40,7 +46,7 @@ interface AdaptivePrimerSlotProps {
 
 const AdaptivePrimerSlot: React.FC<AdaptivePrimerSlotProps> = ({
   systemSubstrate, systemHumidity, systemDuty, systemType,
-  defaultPrimerLibraryId, onSetDefault, refreshKey, onResolved,
+  defaultPrimerLibraryId, defaultPrimerGroupId, onSetDefault, refreshKey, onResolved,
 }) => {
   const [resolved, setResolved] = useState<PrimerLibraryEntry[]>([]);
   const [allActive, setAllActive] = useState<PrimerLibraryEntry[]>([]);
@@ -163,7 +169,7 @@ const AdaptivePrimerSlot: React.FC<AdaptivePrimerSlotProps> = ({
         ? g.defaultPrimerLibraryId
         : (members.find(m => resolvedIds.has(m)) || null);
     if (matchingPin) {
-      await onSetDefault(matchingPin);
+      await onSetDefault(matchingPin, g.groupId);
       if (g.defaultPrimerLibraryId && matchingPin !== g.defaultPrimerLibraryId) {
         setGroupApplyNote(`Group default isn't compatible with this system's conditions — pinned the next matching member instead.`);
       }
@@ -172,22 +178,26 @@ const AdaptivePrimerSlot: React.FC<AdaptivePrimerSlotProps> = ({
       // the dropdown shows the picked group. The resolve preview
       // will surface the empty-state message explaining why.
       const fallbackPin = g.defaultPrimerLibraryId || members[0] || null;
-      if (fallbackPin) {
-        await onSetDefault(fallbackPin);
-      }
+      await onSetDefault(fallbackPin, g.groupId);
       setGroupApplyNote(`No member of "${g.name}" matches this system's substrate / humidity / duty — group is selected but won't resolve to any primer until you adjust the parameters or the group's members.`);
     }
   };
 
-  // The currently pinned default's group, if any — purely for showing
-  // "(from group: …)" in the dropdown so the user knows where it came from.
+  // Selected group for this layer. Prefer the explicit defaultPrimerGroupId
+  // pin (source of truth — survives across renders, unambiguous when the
+  // pinned primer is in multiple groups). Fall back to deriving from the
+  // pinned primer for legacy layers saved before defaultPrimerGroupId
+  // existed.
   const sourceGroup = useMemo(() => {
+    if (defaultPrimerGroupId) {
+      return groups.find(g => g.groupId === defaultPrimerGroupId) || null;
+    }
     if (!defaultPrimerLibraryId) return null;
     return groups.find(g =>
       g.defaultPrimerLibraryId === defaultPrimerLibraryId
       || (g.primerLibraryIds || []).includes(defaultPrimerLibraryId)
     ) || null;
-  }, [groups, defaultPrimerLibraryId]);
+  }, [groups, defaultPrimerLibraryId, defaultPrimerGroupId]);
 
   // When a group is pinned, the user is explicitly restricting the layer
   // to that group's curated members — so the resolve preview should only
@@ -321,7 +331,7 @@ const AdaptivePrimerSlot: React.FC<AdaptivePrimerSlotProps> = ({
             value={sourceGroup?.groupId || ''}
             onChange={(e) => {
               const next = e.target.value;
-              if (!next) onSetDefault(null);
+              if (!next) onSetDefault(null, null);
               else handleApplyGroup(next);
             }}
             className="w-full text-xs border border-slate-200 rounded-lg px-2 py-1.5 bg-white focus:ring-2 focus:ring-indigo-500 outline-none"
