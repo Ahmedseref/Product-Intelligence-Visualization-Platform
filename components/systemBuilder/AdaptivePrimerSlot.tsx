@@ -240,47 +240,41 @@ const AdaptivePrimerSlot: React.FC<AdaptivePrimerSlotProps> = ({
           primer. Hidden when no groups exist so the slot stays minimal. */}
       {resolved.length > 0 && (
         <div className="mb-3">
-          <div className="flex items-center justify-between mb-1.5 gap-2">
-            <div className="text-[11px] font-semibold text-slate-600 uppercase">Default primer</div>
-            {groups.length > 0 && (
-              <div className="flex items-center gap-1.5" title="One-click pin from a group defined in the Primer Library tab">
-                <Layers size={11} className="text-indigo-500" />
-                {/* Action-only selector: it's never bound to current state,
-                    it just dispatches handleApplyGroup. The "from group…"
-                    provenance line below shows where the current pin came
-                    from, so we don't conflate display with input. */}
-                <select
-                  value=""
-                  onChange={(e) => { handleApplyGroup(e.target.value); e.currentTarget.value = ''; }}
-                  className="text-[11px] border border-slate-200 rounded px-1.5 py-0.5 bg-white focus:ring-2 focus:ring-indigo-500 outline-none max-w-[180px]"
-                  data-testid="adaptive-primer-group-select"
-                >
-                  <option value="">Use group…</option>
-                  {groups.map(g => (
-                    <option key={g.groupId} value={g.groupId}>
-                      {g.name} ({(g.primerLibraryIds || []).length})
-                    </option>
-                  ))}
-                </select>
-              </div>
-            )}
+          <div className="flex items-center gap-1.5 mb-1.5">
+            <Layers size={11} className="text-indigo-500" />
+            <div className="text-[11px] font-semibold text-slate-600 uppercase">Default group</div>
           </div>
+          {/* Adaptive mode is intentionally group-first: individual primers
+              are picked by the group's resolution at spec time, so the
+              user only ever chooses a GROUP here. The currently-pinned
+              primer's group (if any) is selected, and switching groups
+              dispatches handleApplyGroup which re-pins to the new
+              group's default within the resolved set. */}
           <select
-            value={defaultPrimerLibraryId || ''}
-            onChange={(e) => onSetDefault(e.target.value || null)}
+            value={sourceGroup?.groupId || ''}
+            onChange={(e) => {
+              const next = e.target.value;
+              if (!next) onSetDefault(null);
+              else handleApplyGroup(next);
+            }}
             className="w-full text-xs border border-slate-200 rounded-lg px-2 py-1.5 bg-white focus:ring-2 focus:ring-indigo-500 outline-none"
-            data-testid="adaptive-default-primer-select"
+            data-testid="adaptive-default-group-select"
           >
             <option value="">No default — all matching primers are alternatives</option>
-            {resolved.map(p => (
-              <option key={p.primerId} value={p.primerId}>
-                {p.productName || p.productId} ({p.primerId})
+            {groups.length === 0 && (
+              <option value="" disabled>No groups yet — create one in Primer Library</option>
+            )}
+            {groups.map(g => (
+              <option key={g.groupId} value={g.groupId}>
+                {g.name} ({(g.primerLibraryIds || []).length})
               </option>
             ))}
           </select>
-          {sourceGroup && (
+          {sourceGroup && defaultPrimerLibraryId && (
             <div className="text-[10px] text-slate-400 mt-1">
-              from group <span className="font-medium text-indigo-600">{sourceGroup.name}</span>
+              resolves to <span className="font-medium text-indigo-600">
+                {resolved.find(p => p.primerId === defaultPrimerLibraryId)?.productName || defaultPrimerLibraryId}
+              </span>
             </div>
           )}
           {groupApplyNote && (
