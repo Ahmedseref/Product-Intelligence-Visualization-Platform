@@ -150,19 +150,32 @@ const AdaptivePrimerSlot: React.FC<AdaptivePrimerSlotProps> = ({
     if (!g) return;
     const resolvedIds = new Set(resolved.map(r => r.primerId));
     const members = g.primerLibraryIds || [];
-    let pin: string | null = null;
-    if (g.defaultPrimerLibraryId && resolvedIds.has(g.defaultPrimerLibraryId)) {
-      pin = g.defaultPrimerLibraryId;
-    } else {
-      pin = members.find(m => resolvedIds.has(m)) || null;
-    }
-    if (pin) {
-      await onSetDefault(pin);
-      if (g.defaultPrimerLibraryId && pin !== g.defaultPrimerLibraryId) {
+    // Try to pin to a member that actually resolves for the current
+    // system parameters first. If none of the group's members match,
+    // we still record the user's choice by pinning the group's own
+    // default member (or its first member) — the sourceGroup memo
+    // looks up the group via primerLibraryIds membership, so the
+    // dropdown correctly reflects the selected group either way.
+    // Without this fallback, picking an "off-spec" group from the
+    // dropdown silently no-ops and the UI looks unclickable.
+    const matchingPin =
+      (g.defaultPrimerLibraryId && resolvedIds.has(g.defaultPrimerLibraryId))
+        ? g.defaultPrimerLibraryId
+        : (members.find(m => resolvedIds.has(m)) || null);
+    if (matchingPin) {
+      await onSetDefault(matchingPin);
+      if (g.defaultPrimerLibraryId && matchingPin !== g.defaultPrimerLibraryId) {
         setGroupApplyNote(`Group default isn't compatible with this system's conditions — pinned the next matching member instead.`);
       }
     } else {
-      setGroupApplyNote(`No primers in "${g.name}" match this system's substrate / humidity / duty.`);
+      // Persist the group selection even though nothing resolves so
+      // the dropdown shows the picked group. The resolve preview
+      // will surface the empty-state message explaining why.
+      const fallbackPin = g.defaultPrimerLibraryId || members[0] || null;
+      if (fallbackPin) {
+        await onSetDefault(fallbackPin);
+      }
+      setGroupApplyNote(`No member of "${g.name}" matches this system's substrate / humidity / duty — group is selected but won't resolve to any primer until you adjust the parameters or the group's members.`);
     }
   };
 
