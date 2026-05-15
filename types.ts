@@ -235,19 +235,16 @@ export interface PrimerLibraryEntry {
   createdAt: string;
 }
 
-// A saved snapshot of primer-resolution criteria, reusable across systems.
-// Created from an adaptive primer slot ("Save as template") and applied
-// from another slot to reuse the same parameter set + pinned default.
-export interface PrimerTemplate {
+// A named bundle of primer_library entries. Managed in the Primer
+// Library tab. Picking a group in a system's adaptive primer slot pins
+// the group's default member as that layer's default primer.
+export interface PrimerGroup {
   id: number;
-  templateId: string;                     // PT-0001 etc.
+  groupId: string;                        // PG-0001 etc.
   name: string;
-  substrates: string[];
-  humidityTolerance: string | null;
-  dutyRating: string | null;
-  compatibleSystemTypes: string[];
-  defaultPrimerLibraryId: string | null;  // primer_library.primerId
-  notes: string | null;
+  description: string | null;
+  primerLibraryIds: string[];             // member primer_library.primerId list
+  defaultPrimerLibraryId: string | null;  // must be one of primerLibraryIds
   isActive: boolean;
   createdAt: string;
 }

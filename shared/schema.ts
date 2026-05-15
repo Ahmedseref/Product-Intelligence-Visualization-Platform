@@ -293,29 +293,26 @@ export const primerLibrary = pgTable("primer_library", {
 export type PrimerLibraryEntry = typeof primerLibrary.$inferSelect;
 export type InsertPrimerLibraryEntry = typeof primerLibrary.$inferInsert;
 
-// Saved snapshots of primer-resolution criteria. The user creates one from
-// any system's adaptive primer slot ("Save as template"), and can apply it
-// to another system's slot to instantly reuse the same parameter set +
-// pinned default. Templates do NOT mutate primer_library rows — they only
-// store filter criteria + an optional defaultPrimerLibraryId pin.
-export const primerTemplates = pgTable("primer_templates", {
+// Named bundles of primer_library entries — managed entirely from the
+// Primer Library tab. A group has a list of member primer ids and one
+// optional "default" member. In a system's adaptive primer slot, picking
+// a group is a single one-click action that pins the group's default as
+// the layer's default primer. Groups never mutate primer_library rows.
+export const primerGroups = pgTable("primer_groups", {
   id: serial("id").primaryKey(),
-  templateId: varchar("template_id", { length: 100 }).notNull().unique(),
+  groupId: varchar("group_id", { length: 100 }).notNull().unique(),
   name: varchar("name", { length: 255 }).notNull(),
-  // Snapshot of the originating system's parameters at save time.
-  substrates: jsonb("substrates").$type<string[]>().default([]),
-  humidityTolerance: varchar("humidity_tolerance", { length: 100 }),
-  dutyRating: varchar("duty_rating", { length: 100 }),
-  compatibleSystemTypes: jsonb("compatible_system_types").$type<string[]>().default([]),
-  // Optional pinned primer (PL-XXXX from primer_library.primerId). When
-  // applied to a layer, this becomes the layer's default_primer_library_id.
+  description: text("description"),
+  // Member primers, stored as the primerLibrary.primerId varchars
+  // (e.g. ["PL-0003", "PL-0007"]). Order is preserved as authored.
+  primerLibraryIds: jsonb("primer_library_ids").$type<string[]>().default([]),
+  // Optional pinned default member — must be one of primerLibraryIds.
   defaultPrimerLibraryId: varchar("default_primer_library_id", { length: 100 }),
-  notes: text("notes"),
   isActive: boolean("is_active").default(true),
   createdAt: timestamp("created_at").defaultNow(),
 });
-export type PrimerTemplate = typeof primerTemplates.$inferSelect;
-export type InsertPrimerTemplate = typeof primerTemplates.$inferInsert;
+export type PrimerGroup = typeof primerGroups.$inferSelect;
+export type InsertPrimerGroup = typeof primerGroups.$inferInsert;
 
 export const systemProductOptions = pgTable("system_product_options", {
   id: serial("id").primaryKey(),

@@ -1230,55 +1230,54 @@ export const primerLibraryApi = {
   },
 };
 
-// Saved primer-resolution snapshots (substrates/humidity/duty/systemType +
-// optional pinned default primer). Created from an adaptive primer slot
-// and reusable across systems by applying the template to another slot.
-export const primerTemplatesApi = {
+// Named bundles of primer_library entries. Managed in the Primer Library
+// tab; consumed by the adaptive primer slot as one-click pins.
+export const primerGroupsApi = {
   list: async () => {
-    const response = await fetch(`${API_BASE}/primer-templates`, { headers: getAuthHeaders() });
-    if (!response.ok) throw new Error('Failed to fetch primer templates');
+    const response = await fetch(`${API_BASE}/primer-groups`, { headers: getAuthHeaders() });
+    if (!response.ok) throw new Error('Failed to fetch primer groups');
     return response.json();
   },
   create: async (data: {
     name: string;
-    substrates?: string[];
-    humidityTolerance?: string | null;
-    dutyRating?: string | null;
-    compatibleSystemTypes?: string[];
+    description?: string | null;
+    primerLibraryIds?: string[];
     defaultPrimerLibraryId?: string | null;
-    notes?: string | null;
   }) => {
-    const response = await fetch(`${API_BASE}/primer-templates`, {
+    const response = await fetch(`${API_BASE}/primer-groups`, {
       method: 'POST',
       headers: { ...getAuthHeaders(), 'Content-Type': 'application/json' },
       body: JSON.stringify(data),
     });
-    if (!response.ok) throw new Error('Failed to create primer template');
+    if (!response.ok) {
+      const err = await response.json().catch(() => ({}));
+      throw new Error(err.error || 'Failed to create primer group');
+    }
     return response.json();
   },
   update: async (id: number, data: Partial<{
     name: string;
-    substrates: string[];
-    humidityTolerance: string | null;
-    dutyRating: string | null;
-    compatibleSystemTypes: string[];
+    description: string | null;
+    primerLibraryIds: string[];
     defaultPrimerLibraryId: string | null;
-    notes: string | null;
   }>) => {
-    const response = await fetch(`${API_BASE}/primer-templates/${id}`, {
+    const response = await fetch(`${API_BASE}/primer-groups/${id}`, {
       method: 'PATCH',
       headers: { ...getAuthHeaders(), 'Content-Type': 'application/json' },
       body: JSON.stringify(data),
     });
-    if (!response.ok) throw new Error('Failed to update primer template');
+    if (!response.ok) {
+      const err = await response.json().catch(() => ({}));
+      throw new Error(err.error || 'Failed to update primer group');
+    }
     return response.json();
   },
   deactivate: async (id: number) => {
-    const response = await fetch(`${API_BASE}/primer-templates/${id}`, {
+    const response = await fetch(`${API_BASE}/primer-groups/${id}`, {
       method: 'DELETE',
       headers: getAuthHeaders(),
     });
-    if (!response.ok) throw new Error('Failed to deactivate primer template');
+    if (!response.ok) throw new Error('Failed to deactivate primer group');
     return response.json();
   },
 };

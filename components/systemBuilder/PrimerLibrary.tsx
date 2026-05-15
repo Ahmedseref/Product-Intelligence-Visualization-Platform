@@ -7,10 +7,10 @@
 // ─────────────────────────────────────────────────────────────────────────────
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import {
-  Library, Plus, Search, X, Edit, Trash2, Save, Check, AlertCircle,
+  Library, Plus, Search, X, Edit, Trash2, Save, Check, AlertCircle, Layers, Star,
 } from 'lucide-react';
-import { Product, PrimerLibraryEntry, QualificationTag } from '../../types';
-import { primerLibraryApi } from '../../client/api';
+import { Product, PrimerLibraryEntry, PrimerGroup, QualificationTag } from '../../types';
+import { primerLibraryApi, primerGroupsApi } from '../../client/api';
 
 // Closed list — these are the four families the library cares about. They're
 // not in qualification_vocabularies because they're library-specific.
@@ -89,6 +89,33 @@ const PrimerLibrary: React.FC<PrimerLibraryProps> = ({ products }) => {
   // so the two systems stay linked instead of asking the user to retype
   // substrate/humidity that was already captured upstream.
   const [qualPrimerTags, setQualPrimerTags] = useState<QualificationTag[]>([]);
+
+  // ── Groups state ──
+  // Named bundles of primer_library entries. Created/edited inline here;
+  // consumed by the System Builder's adaptive primer slot as one-click pins.
+  const [groups, setGroups] = useState<PrimerGroup[]>([]);
+  const [groupFormOpen, setGroupFormOpen] = useState(false);
+  const [editingGroupId, setEditingGroupId] = useState<number | null>(null);
+  const [groupForm, setGroupForm] = useState<{
+    name: string;
+    description: string;
+    primerLibraryIds: string[];
+    defaultPrimerLibraryId: string;
+  }>({ name: '', description: '', primerLibraryIds: [], defaultPrimerLibraryId: '' });
+  const [groupMemberSearch, setGroupMemberSearch] = useState('');
+  const [groupSaving, setGroupSaving] = useState(false);
+  const [groupError, setGroupError] = useState<string | null>(null);
+
+  const refreshGroups = useCallback(async () => {
+    try {
+      const rows: PrimerGroup[] = await primerGroupsApi.list();
+      setGroups(rows);
+    } catch (e: any) {
+      // Non-fatal — groups section just stays empty.
+      console.error('Failed to load primer groups:', e);
+    }
+  }, []);
+  useEffect(() => { refreshGroups(); }, [refreshGroups]);
 
   // ── Load entries + vocab on mount ──
   const refresh = useCallback(async () => {
@@ -271,6 +298,87 @@ const PrimerLibrary: React.FC<PrimerLibraryProps> = ({ products }) => {
     }
   };
 
+  // ── Group form helpers ──
+  const openCreateGroup = () => {
+    setEditingGroupId(null);
+    setGroupForm({ name: '', description: '', primerLibraryIds: [], defaultPrimerLibraryId: '' });
+    setGroupMemberSearch('');
+    setGroupError(null);
+    setGroupFormOpen(true);
+  };
+  const openEditGroup = (g: PrimerGroup) => {
+    setEditingGroupId(g.id);
+    setGroupForm({
+      name: g.name,
+      description: g.description || '',
+      primerLibraryIds: g.primerLibraryIds || [],
+      defaultPrimerLibraryId: g.defaultPrimerLibraryId || '',
+    });
+    setGroupMemberSearch('');
+    setGroupError(null);
+    setGroupFormOpen(true);
+  };
+  const closeGroupForm = () => {
+    setGroupFormOpen(false);
+    setEditingGroupId(null);
+    setGroupError(null);
+  };
+  const toggleGroupMember = (primerId: string) => {
+    setGroupForm(f => {
+      const has = f.primerLibraryIds.includes(primerId);
+      const next = has ? f.primerLibraryIds.filter(x => x !== primerId) : [...f.primerLibraryIds, primerId];
+      // If we removed the current default, clear it.
+      const nextDefault = !next.includes(f.defaultPrimerLibraryId) ? '' : f.defaultPrimerLibraryId;
+      return { ...f, primerLibraryIds: next, defaultPrimerLibraryId: nextDefault };
+    });
+  };
+  const handleSaveGroup = async () => {
+    const name = groupForm.name.trim();
+    if (!name) { setGroupError('Name is required'); return; }
+    if (groupForm.primerLibraryIds.length === 0) { setGroupError('Add at least one primer'); return; }
+    setGroupSaving(true);
+    setGroupError(null);
+    try {
+      const payload = {
+        name,
+        description: groupForm.description.trim() || null,
+        primerLibraryIds: groupForm.primerLibraryIds,
+        defaultPrimerLibraryId: groupForm.defaultPrimerLibraryId || null,
+      };
+      if (editingGroupId == null) await primerGroupsApi.create(payload);
+      else await primerGroupsApi.update(editingGroupId, payload);
+      await refreshGroups();
+      closeGroupForm();
+    } catch (e: any) {
+      setGroupError(e?.message || 'Save failed');
+    } finally {
+      setGroupSaving(false);
+    }
+  };
+  const handleDeleteGroup = async (g: PrimerGroup) => {
+    if (!confirm(`Delete group "${g.name}"? Layers already pinned to its primer will keep that pin.`)) return;
+    try {
+      await primerGroupsApi.deactivate(g.id);
+      await refreshGroups();
+    } catch (e: any) {
+      alert(e?.message || 'Failed to delete group');
+    }
+  };
+
+  // Members shown in the group form's picker — entries optionally filtered
+  // by the small inline search; we also surface already-selected members
+  // even if they don't match the search so the user always sees what they
+  // already added.
+  const groupMemberOptions = useMemo(() => {
+    const q = groupMemberSearch.trim().toLowerCase();
+    return entries.filter(e => {
+      if (groupForm.primerLibraryIds.includes(e.primerId)) return true;
+      if (!q) return true;
+      const hay = `${e.productName || ''} ${e.supplier || ''} ${e.primerId}`.toLowerCase();
+      return hay.includes(q);
+    });
+  }, [entries, groupMemberSearch, groupForm.primerLibraryIds]);
+
   const handleDeactivate = async (entry: PrimerLibraryEntry) => {
     if (!confirm(`Deactivate "${entry.productName || entry.primerId}"? It can be re-added later if needed.`)) return;
     try {
@@ -364,6 +472,219 @@ const PrimerLibrary: React.FC<PrimerLibraryProps> = ({ products }) => {
           {SYSTEM_TYPES.map(t => <option key={t} value={t}>{t}</option>)}
         </select>
       </div>
+
+      {/* Groups — named bundles of primers reusable across systems. The
+          adaptive primer slot in the System Builder consumes these as a
+          single dropdown that pins the group's default member as the
+          layer's default. All maintenance lives here so the slot itself
+          stays minimal. Collapsed by default once any groups exist. */}
+      <details className="mb-4 border border-indigo-200 bg-indigo-50/30 rounded-xl" open={groups.length === 0 || groupFormOpen} data-testid="primer-groups-section">
+        <summary className="px-3 py-2 cursor-pointer select-none flex items-center gap-2 text-sm font-semibold text-indigo-800">
+          <Layers size={14} className="text-indigo-600" />
+          Primer groups
+          <span className="text-[11px] font-normal text-indigo-600/80">
+            {groups.length} group{groups.length === 1 ? '' : 's'} · reusable across systems
+          </span>
+          <button
+            type="button"
+            onClick={(e) => { e.preventDefault(); openCreateGroup(); }}
+            className="ml-auto px-2 py-1 bg-indigo-600 text-white text-[11px] font-medium rounded hover:bg-indigo-700 inline-flex items-center gap-1"
+            data-testid="add-primer-group-button"
+          >
+            <Plus size={11} /> New group
+          </button>
+        </summary>
+
+        <div className="px-3 pb-3 space-y-2">
+          {/* Existing groups list */}
+          {groups.length === 0 && !groupFormOpen && (
+            <div className="text-xs text-slate-500 italic px-2 py-3">
+              No groups yet. Create a group to bundle several primers together (e.g. "Damp Concrete Pack") and reuse it from any system's adaptive primer slot.
+            </div>
+          )}
+          {groups.map(g => {
+            const memberRows = (g.primerLibraryIds || [])
+              .map(pid => entries.find(e => e.primerId === pid))
+              .filter((x): x is PrimerLibraryEntry => !!x);
+            return (
+              <div key={g.id} className="bg-white border border-slate-200 rounded-lg p-2.5" data-testid={`primer-group-${g.groupId}`}>
+                <div className="flex items-start gap-2">
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2">
+                      <span className="font-mono text-[10px] text-slate-400">{g.groupId}</span>
+                      <span className="text-sm font-semibold text-slate-700 truncate">{g.name}</span>
+                      <span className="text-[11px] text-slate-400">· {(g.primerLibraryIds || []).length} member{(g.primerLibraryIds || []).length === 1 ? '' : 's'}</span>
+                    </div>
+                    {g.description && (
+                      <div className="text-[11px] text-slate-500 mt-0.5">{g.description}</div>
+                    )}
+                    <div className="mt-1.5 flex flex-wrap gap-1">
+                      {memberRows.map(m => {
+                        const isDefault = g.defaultPrimerLibraryId === m.primerId;
+                        return (
+                          <span
+                            key={m.primerId}
+                            className={`text-[10px] px-1.5 py-0.5 rounded-full inline-flex items-center gap-1 ${isDefault ? 'bg-amber-100 text-amber-800 border border-amber-300' : 'bg-slate-100 text-slate-700'}`}
+                            title={isDefault ? 'Default — pinned when this group is applied' : undefined}
+                          >
+                            {isDefault && <Star size={9} fill="currentColor" />}
+                            {m.productName || m.primerId}
+                          </span>
+                        );
+                      })}
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-1 shrink-0">
+                    <button
+                      type="button"
+                      onClick={() => openEditGroup(g)}
+                      className="p-1 text-slate-400 hover:text-indigo-600"
+                      title="Edit group"
+                      data-testid={`edit-primer-group-${g.groupId}`}
+                    >
+                      <Edit size={12} />
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => handleDeleteGroup(g)}
+                      className="p-1 text-slate-400 hover:text-red-600"
+                      title="Delete group"
+                      data-testid={`delete-primer-group-${g.groupId}`}
+                    >
+                      <Trash2 size={12} />
+                    </button>
+                  </div>
+                </div>
+              </div>
+            );
+          })}
+
+          {/* Inline group form */}
+          {groupFormOpen && (
+            <div className="bg-white border border-indigo-300 rounded-lg p-3" data-testid="primer-group-form">
+              <div className="flex items-center justify-between mb-2">
+                <h4 className="text-sm font-semibold text-slate-800">
+                  {editingGroupId == null ? 'New primer group' : 'Edit primer group'}
+                </h4>
+                <button onClick={closeGroupForm} className="p-1 hover:bg-slate-100 rounded text-slate-400">
+                  <X size={14} />
+                </button>
+              </div>
+
+              {groupError && (
+                <div className="mb-2 px-2 py-1.5 bg-red-50 border border-red-200 text-red-700 text-xs rounded flex items-center gap-1.5">
+                  <AlertCircle size={12} /> {groupError}
+                </div>
+              )}
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mb-3">
+                <div>
+                  <label className="block text-xs font-medium text-slate-600 mb-1">Name *</label>
+                  <input
+                    type="text"
+                    value={groupForm.name}
+                    onChange={(e) => setGroupForm(f => ({ ...f, name: e.target.value }))}
+                    placeholder="e.g. Damp Concrete Pack"
+                    className="w-full text-sm border border-slate-200 rounded-lg px-2 py-1.5 bg-white focus:ring-2 focus:ring-indigo-500 outline-none"
+                    data-testid="group-name-input"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-medium text-slate-600 mb-1">Description</label>
+                  <input
+                    type="text"
+                    value={groupForm.description}
+                    onChange={(e) => setGroupForm(f => ({ ...f, description: e.target.value }))}
+                    placeholder="Optional context"
+                    className="w-full text-sm border border-slate-200 rounded-lg px-2 py-1.5 bg-white focus:ring-2 focus:ring-indigo-500 outline-none"
+                    data-testid="group-description-input"
+                  />
+                </div>
+              </div>
+
+              <div className="mb-2">
+                <div className="flex items-center justify-between mb-1">
+                  <label className="text-xs font-medium text-slate-600">Members ({groupForm.primerLibraryIds.length} selected)</label>
+                  <input
+                    type="text"
+                    value={groupMemberSearch}
+                    onChange={(e) => setGroupMemberSearch(e.target.value)}
+                    placeholder="Filter primers"
+                    className="text-[11px] border border-slate-200 rounded px-2 py-0.5 bg-white focus:ring-2 focus:ring-indigo-500 outline-none w-44"
+                  />
+                </div>
+                <div className="max-h-48 overflow-y-auto border border-slate-200 rounded bg-slate-50 p-1.5 space-y-1">
+                  {groupMemberOptions.length === 0 ? (
+                    <div className="text-[11px] text-slate-400 italic px-2 py-2">No primers match that filter.</div>
+                  ) : groupMemberOptions.map(m => {
+                    const checked = groupForm.primerLibraryIds.includes(m.primerId);
+                    return (
+                      <label
+                        key={m.primerId}
+                        className={`flex items-center gap-2 px-2 py-1 rounded cursor-pointer text-[11px] ${checked ? 'bg-indigo-50' : 'bg-white hover:bg-slate-100'} border border-slate-200`}
+                      >
+                        <input
+                          type="checkbox"
+                          checked={checked}
+                          onChange={() => toggleGroupMember(m.primerId)}
+                          className="rounded text-indigo-600 focus:ring-indigo-500"
+                          data-testid={`group-member-${m.primerId}`}
+                        />
+                        <span className="font-mono text-slate-400">{m.primerId}</span>
+                        <span className="font-medium text-slate-700 truncate flex-1">{m.productName || m.productId}</span>
+                        {m.supplier && <span className="text-slate-400 truncate">{m.supplier}</span>}
+                      </label>
+                    );
+                  })}
+                </div>
+              </div>
+
+              {groupForm.primerLibraryIds.length > 0 && (
+                <div className="mb-3">
+                  <label className="block text-xs font-medium text-slate-600 mb-1">
+                    Default primer (pinned when this group is applied)
+                  </label>
+                  <select
+                    value={groupForm.defaultPrimerLibraryId}
+                    onChange={(e) => setGroupForm(f => ({ ...f, defaultPrimerLibraryId: e.target.value }))}
+                    className="w-full text-sm border border-slate-200 rounded-lg px-2 py-1.5 bg-white focus:ring-2 focus:ring-indigo-500 outline-none"
+                    data-testid="group-default-select"
+                  >
+                    <option value="">No default — applying the group leaves the slot's pin empty</option>
+                    {groupForm.primerLibraryIds.map(pid => {
+                      const m = entries.find(e => e.primerId === pid);
+                      return (
+                        <option key={pid} value={pid}>
+                          {m?.productName || pid} ({pid})
+                        </option>
+                      );
+                    })}
+                  </select>
+                </div>
+              )}
+
+              <div className="flex items-center gap-2 justify-end">
+                <button
+                  type="button"
+                  onClick={closeGroupForm}
+                  className="px-3 py-1.5 text-sm text-slate-600 hover:bg-slate-100 rounded-lg"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  onClick={handleSaveGroup}
+                  disabled={groupSaving}
+                  className="px-3 py-1.5 bg-indigo-600 text-white text-sm font-medium rounded-lg hover:bg-indigo-700 disabled:bg-slate-300 inline-flex items-center gap-1.5"
+                  data-testid="save-primer-group-button"
+                >
+                  <Save size={14} /> {groupSaving ? 'Saving…' : (editingGroupId == null ? 'Create group' : 'Save changes')}
+                </button>
+              </div>
+            </div>
+          )}
+        </div>
+      </details>
 
       {/* Suggested from Product Qualification — surfaces qualified primer
           products that aren't yet in the library, so the user can keep

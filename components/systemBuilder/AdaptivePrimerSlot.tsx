@@ -8,9 +8,9 @@
 // the library does not yet cover.
 // ─────────────────────────────────────────────────────────────────────────────
 import React, { useEffect, useMemo, useState, useCallback } from 'react';
-import { Library, Star, AlertTriangle, Check, Loader2, Save, Trash2, Bookmark } from 'lucide-react';
-import { PrimerLibraryEntry, PrimerTemplate } from '../../types';
-import { primerLibraryApi, primerTemplatesApi } from '../../client/api';
+import { Library, Star, AlertTriangle, Check, Loader2, Layers } from 'lucide-react';
+import { PrimerLibraryEntry, PrimerGroup } from '../../types';
+import { primerLibraryApi, primerGroupsApi } from '../../client/api';
 
 interface AdaptivePrimerSlotProps {
   // The system's currently selected substrate (from the parameter header).
@@ -47,25 +47,20 @@ const AdaptivePrimerSlot: React.FC<AdaptivePrimerSlotProps> = ({
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  // Saved primer templates — snapshots of (substrates, humidity, duty,
-  // systemType, defaultPrimerLibraryId) created from any adaptive slot
-  // and reusable in any other slot. Loaded once + after any save/delete.
-  const [templates, setTemplates] = useState<PrimerTemplate[]>([]);
-  const [showSaveTemplate, setShowSaveTemplate] = useState(false);
-  const [newTemplateName, setNewTemplateName] = useState('');
-  const [templateBusy, setTemplateBusy] = useState(false);
-  const [templateError, setTemplateError] = useState<string | null>(null);
-
-  const refreshTemplates = useCallback(async () => {
+  // Primer groups — named bundles of library primers. Created and managed
+  // entirely in the Primer Library tab; here we only consume them as a
+  // one-click pin. Reload whenever the parent bumps refreshKey so a group
+  // edited in another tab shows up immediately.
+  const [groups, setGroups] = useState<PrimerGroup[]>([]);
+  const refreshGroups = useCallback(async () => {
     try {
-      const rows = await primerTemplatesApi.list();
-      setTemplates(Array.isArray(rows) ? rows : []);
+      const rows = await primerGroupsApi.list();
+      setGroups(Array.isArray(rows) ? rows : []);
     } catch {
-      // Non-fatal — the UI just hides the template controls if the
-      // endpoint is unreachable.
+      // Non-fatal — the group selector simply hides if unreachable.
     }
   }, []);
-  useEffect(() => { refreshTemplates(); }, [refreshTemplates]);
+  useEffect(() => { refreshGroups(); }, [refreshGroups, refreshKey]);
 
   // Re-resolve whenever any parameter changes. If substrate or humidity is
   // missing we still fetch ALL active primers so the coverage summary below
@@ -135,55 +130,46 @@ const AdaptivePrimerSlot: React.FC<AdaptivePrimerSlotProps> = ({
 
   const paramsSet = !!systemSubstrate && !!systemHumidity;
 
-  // Apply a template to this layer: copies the template's pinned default
-  // primer onto the layer (the template's filter params are kept on the
-  // template only — the slot still resolves from the system's parameters).
-  const handleApplyTemplate = async (templateId: string) => {
-    if (!templateId) return;
-    const t = templates.find(x => x.templateId === templateId);
-    if (!t) return;
-    try {
-      await onSetDefault(t.defaultPrimerLibraryId || null);
-    } catch (e: any) {
-      setTemplateError(e?.message || 'Failed to apply template');
+  // Apply a group to this layer. We constrain the pinned primer to one
+  // that's actually in the currently resolved list for the system's
+  // parameters, so the user never ends up with a default they can't see
+  // in the dropdown below. Order of preference:
+  //   1) the group's chosen default, if it resolves
+  //   2) the first group member that resolves
+  //   3) null with a visible note ("no group member resolves for this system")
+  const [groupApplyNote, setGroupApplyNote] = useState<string | null>(null);
+  const handleApplyGroup = async (groupId: string) => {
+    setGroupApplyNote(null);
+    if (!groupId) return;
+    const g = groups.find(x => x.groupId === groupId);
+    if (!g) return;
+    const resolvedIds = new Set(resolved.map(r => r.primerId));
+    const members = g.primerLibraryIds || [];
+    let pin: string | null = null;
+    if (g.defaultPrimerLibraryId && resolvedIds.has(g.defaultPrimerLibraryId)) {
+      pin = g.defaultPrimerLibraryId;
+    } else {
+      pin = members.find(m => resolvedIds.has(m)) || null;
+    }
+    if (pin) {
+      await onSetDefault(pin);
+      if (g.defaultPrimerLibraryId && pin !== g.defaultPrimerLibraryId) {
+        setGroupApplyNote(`Group default isn't compatible with this system's conditions — pinned the next matching member instead.`);
+      }
+    } else {
+      setGroupApplyNote(`No primers in "${g.name}" match this system's substrate / humidity / duty.`);
     }
   };
 
-  // Save the current adaptive slot configuration as a new template.
-  const handleSaveTemplate = async () => {
-    const name = newTemplateName.trim();
-    if (!name) { setTemplateError('Name is required'); return; }
-    setTemplateBusy(true);
-    setTemplateError(null);
-    try {
-      await primerTemplatesApi.create({
-        name,
-        substrates: systemSubstrate ? [systemSubstrate] : [],
-        humidityTolerance: systemHumidity || null,
-        dutyRating: systemDuty || null,
-        compatibleSystemTypes: systemType ? [systemType] : [],
-        defaultPrimerLibraryId: defaultPrimerLibraryId || null,
-        notes: null,
-      });
-      setNewTemplateName('');
-      setShowSaveTemplate(false);
-      await refreshTemplates();
-    } catch (e: any) {
-      setTemplateError(e?.message || 'Failed to save template');
-    } finally {
-      setTemplateBusy(false);
-    }
-  };
-
-  const handleDeleteTemplate = async (id: number) => {
-    if (!confirm('Delete this template? Layers that already used it will keep their pinned primer.')) return;
-    try {
-      await primerTemplatesApi.deactivate(id);
-      await refreshTemplates();
-    } catch (e: any) {
-      setTemplateError(e?.message || 'Failed to delete template');
-    }
-  };
+  // The currently pinned default's group, if any — purely for showing
+  // "(from group: …)" in the dropdown so the user knows where it came from.
+  const sourceGroup = useMemo(() => {
+    if (!defaultPrimerLibraryId) return null;
+    return groups.find(g =>
+      g.defaultPrimerLibraryId === defaultPrimerLibraryId
+      || (g.primerLibraryIds || []).includes(defaultPrimerLibraryId)
+    ) || null;
+  }, [groups, defaultPrimerLibraryId]);
 
   return (
     <div className="px-3 py-3 bg-indigo-50/30 border-b border-indigo-100" data-testid="adaptive-primer-slot">
@@ -199,124 +185,6 @@ const AdaptivePrimerSlot: React.FC<AdaptivePrimerSlotProps> = ({
         <div className="mb-2 px-2 py-1.5 bg-red-50 border border-red-200 text-red-700 text-xs rounded">
           {error}
         </div>
-      )}
-
-      {/* Templates bar — apply a saved snapshot to this layer or save the
-          current configuration for reuse on another system. Hidden until
-          the user has at least set the system parameters (so a fresh slot
-          doesn't get noisy controls before there's anything to save). */}
-      <div
-        className="mb-3 flex flex-wrap items-center gap-2 px-2 py-2 bg-white/60 border border-indigo-100 rounded-lg"
-        data-testid="primer-templates-bar"
-        title="Templates carry only the pinned default primer. The system's own substrate / humidity / duty parameters drive the live resolve and are not overwritten when a template is applied."
-      >
-        <Bookmark size={12} className="text-indigo-500 flex-shrink-0" />
-        <span className="text-[11px] font-semibold text-slate-600 uppercase">Templates</span>
-        {templates.length > 0 ? (
-          <select
-            defaultValue=""
-            onChange={(e) => { handleApplyTemplate(e.target.value); e.currentTarget.value = ''; }}
-            className="text-xs border border-slate-200 rounded px-2 py-1 bg-white focus:ring-2 focus:ring-indigo-500 outline-none"
-            data-testid="apply-primer-template-select"
-          >
-            <option value="">Apply template…</option>
-            {templates.map(t => {
-              const bits: string[] = [];
-              if ((t.substrates || []).length) bits.push((t.substrates || []).join('+'));
-              if (t.humidityTolerance) bits.push(t.humidityTolerance);
-              if (t.dutyRating) bits.push(t.dutyRating);
-              if ((t.compatibleSystemTypes || []).length) bits.push((t.compatibleSystemTypes || []).join('/'));
-              return (
-                <option key={t.templateId} value={t.templateId}>
-                  {t.name}{bits.length ? ` — ${bits.join(' · ')}` : ''}
-                </option>
-              );
-            })}
-          </select>
-        ) : (
-          <span className="text-[11px] text-slate-400 italic">No saved templates yet.</span>
-        )}
-        {!showSaveTemplate ? (
-          <button
-            type="button"
-            onClick={() => { setShowSaveTemplate(true); setTemplateError(null); }}
-            disabled={!paramsSet}
-            className="ml-auto text-[11px] inline-flex items-center gap-1 px-2 py-1 bg-indigo-600 text-white rounded hover:bg-indigo-700 disabled:bg-slate-300 disabled:cursor-not-allowed"
-            title={paramsSet ? 'Save current parameters + default as a reusable template' : 'Set substrate and humidity first'}
-            data-testid="save-primer-template-button"
-          >
-            <Save size={11} /> Save as template
-          </button>
-        ) : (
-          <div className="ml-auto flex items-center gap-1.5">
-            <input
-              autoFocus
-              type="text"
-              value={newTemplateName}
-              onChange={(e) => setNewTemplateName(e.target.value)}
-              onKeyDown={(e) => { if (e.key === 'Enter') handleSaveTemplate(); }}
-              placeholder="Template name"
-              className="text-xs border border-slate-200 rounded px-2 py-1 bg-white focus:ring-2 focus:ring-indigo-500 outline-none"
-              data-testid="primer-template-name-input"
-            />
-            <button
-              type="button"
-              onClick={handleSaveTemplate}
-              disabled={templateBusy || !newTemplateName.trim()}
-              className="text-[11px] inline-flex items-center gap-1 px-2 py-1 bg-emerald-600 text-white rounded hover:bg-emerald-700 disabled:bg-slate-300"
-              data-testid="confirm-save-primer-template"
-            >
-              {templateBusy ? <Loader2 size={11} className="animate-spin" /> : <Check size={11} />} Save
-            </button>
-            <button
-              type="button"
-              onClick={() => { setShowSaveTemplate(false); setNewTemplateName(''); setTemplateError(null); }}
-              className="text-[11px] text-slate-500 hover:text-slate-700 px-1"
-            >
-              Cancel
-            </button>
-          </div>
-        )}
-      </div>
-
-      {templateError && (
-        <div className="mb-2 px-2 py-1.5 bg-red-50 border border-red-200 text-red-700 text-xs rounded">
-          {templateError}
-        </div>
-      )}
-
-      {templates.length > 0 && (
-        <details className="mb-3 group" data-testid="primer-templates-manage">
-          <summary className="text-[11px] text-slate-500 cursor-pointer hover:text-slate-700 select-none">
-            Manage templates ({templates.length})
-          </summary>
-          <div className="mt-1.5 space-y-1">
-            {templates.map(t => (
-              <div key={t.id} className="flex items-center gap-2 px-2 py-1 bg-white border border-slate-200 rounded text-[11px]">
-                <span className="font-mono text-slate-400">{t.templateId}</span>
-                <span className="font-medium text-slate-700 truncate">{t.name}</span>
-                <span className="text-slate-400 truncate flex-1">
-                  {[
-                    (t.substrates || []).join('+'),
-                    t.humidityTolerance,
-                    t.dutyRating,
-                    (t.compatibleSystemTypes || []).join('/'),
-                    t.defaultPrimerLibraryId ? `→ ${t.defaultPrimerLibraryId}` : null,
-                  ].filter(Boolean).join(' · ')}
-                </span>
-                <button
-                  type="button"
-                  onClick={() => handleDeleteTemplate(t.id)}
-                  className="text-slate-400 hover:text-red-600"
-                  title="Delete template"
-                  data-testid={`delete-primer-template-${t.templateId}`}
-                >
-                  <Trash2 size={11} />
-                </button>
-              </div>
-            ))}
-          </div>
-        </details>
       )}
 
       {/* Resolved preview */}
@@ -361,10 +229,37 @@ const AdaptivePrimerSlot: React.FC<AdaptivePrimerSlotProps> = ({
         )}
       </div>
 
-      {/* Default primer pin */}
+      {/* Default primer pin + optional one-click group selector. Groups are
+          built and maintained in the Primer Library tab; here they're a
+          single dropdown that snaps the default to a group's preferred
+          primer. Hidden when no groups exist so the slot stays minimal. */}
       {resolved.length > 0 && (
         <div className="mb-3">
-          <div className="text-[11px] font-semibold text-slate-600 uppercase mb-1.5">Default primer</div>
+          <div className="flex items-center justify-between mb-1.5 gap-2">
+            <div className="text-[11px] font-semibold text-slate-600 uppercase">Default primer</div>
+            {groups.length > 0 && (
+              <div className="flex items-center gap-1.5" title="One-click pin from a group defined in the Primer Library tab">
+                <Layers size={11} className="text-indigo-500" />
+                {/* Action-only selector: it's never bound to current state,
+                    it just dispatches handleApplyGroup. The "from group…"
+                    provenance line below shows where the current pin came
+                    from, so we don't conflate display with input. */}
+                <select
+                  value=""
+                  onChange={(e) => { handleApplyGroup(e.target.value); e.currentTarget.value = ''; }}
+                  className="text-[11px] border border-slate-200 rounded px-1.5 py-0.5 bg-white focus:ring-2 focus:ring-indigo-500 outline-none max-w-[180px]"
+                  data-testid="adaptive-primer-group-select"
+                >
+                  <option value="">Use group…</option>
+                  {groups.map(g => (
+                    <option key={g.groupId} value={g.groupId}>
+                      {g.name} ({(g.primerLibraryIds || []).length})
+                    </option>
+                  ))}
+                </select>
+              </div>
+            )}
+          </div>
           <select
             value={defaultPrimerLibraryId || ''}
             onChange={(e) => onSetDefault(e.target.value || null)}
@@ -378,6 +273,16 @@ const AdaptivePrimerSlot: React.FC<AdaptivePrimerSlotProps> = ({
               </option>
             ))}
           </select>
+          {sourceGroup && (
+            <div className="text-[10px] text-slate-400 mt-1">
+              from group <span className="font-medium text-indigo-600">{sourceGroup.name}</span>
+            </div>
+          )}
+          {groupApplyNote && (
+            <div className="text-[10px] text-amber-700 mt-1" data-testid="adaptive-primer-group-note">
+              {groupApplyNote}
+            </div>
+          )}
         </div>
       )}
 
