@@ -212,6 +212,11 @@ const AdaptivePrimerSlot: React.FC<AdaptivePrimerSlotProps> = ({
                 )}
                 <div className="flex-1 min-w-0">
                   <div className="text-xs font-medium text-slate-700 truncate">{p.productName || p.productId}</div>
+                  {p.productDescription && (
+                    <div className="text-[10px] text-slate-500 mt-0.5 line-clamp-2" title={p.productDescription}>
+                      {p.productDescription}
+                    </div>
+                  )}
                   <div className="text-[10px] text-slate-400 flex items-center gap-1.5 flex-wrap mt-0.5">
                     <span className="font-mono">{p.primerId}</span>
                     {p.supplier && <span>· {p.supplier}</span>}

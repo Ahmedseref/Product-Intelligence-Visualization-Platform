@@ -233,6 +233,9 @@ export interface PrimerLibraryEntry {
   notes: string | null;
   isActive: boolean;
   createdAt: string;
+  // Live description from products.description, not denormalised — joined
+  // server-side on every list/resolve so edits to the product show here.
+  productDescription?: string | null;
 }
 
 // A named bundle of primer_library entries. Managed in the Primer

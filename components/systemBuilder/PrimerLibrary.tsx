@@ -7,7 +7,7 @@
 // ─────────────────────────────────────────────────────────────────────────────
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import {
-  Library, Plus, Search, X, Edit, Trash2, Save, Check, AlertCircle, Layers, Star,
+  Library, Plus, Search, X, Edit, Trash2, Save, Check, AlertCircle, Layers, Star, Sparkles,
 } from 'lucide-react';
 import { Product, PrimerLibraryEntry, PrimerGroup, QualificationTag } from '../../types';
 import { primerLibraryApi, primerGroupsApi } from '../../client/api';
@@ -105,6 +105,18 @@ const PrimerLibrary: React.FC<PrimerLibraryProps> = ({ products }) => {
   const [groupMemberSearch, setGroupMemberSearch] = useState('');
   const [groupSaving, setGroupSaving] = useState(false);
   const [groupError, setGroupError] = useState<string | null>(null);
+
+  // ── Auto-grouping ──
+  // The user asked for one-click grouping based on similar features. We
+  // bucket every active primer by a signature of (substrates ∪ humidity ∪
+  // duty ∪ systemTypes), then surface buckets of ≥2 primers as
+  // suggestions. The user reviews each suggestion, can uncheck/recheck
+  // any primer, and create the group — overriding the rule freely.
+  const [suggestionsOpen, setSuggestionsOpen] = useState(false);
+  // Per-suggestion local member overrides + custom name. Keyed by signature.
+  const [suggestionOverrides, setSuggestionOverrides] = useState<
+    Record<string, { name: string; selected: Set<string>; dismissed: boolean; saving: boolean; error: string | null }>
+  >({});
 
   const refreshGroups = useCallback(async () => {
     try {
@@ -365,6 +377,164 @@ const PrimerLibrary: React.FC<PrimerLibraryProps> = ({ products }) => {
     }
   };
 
+  // ── Auto-grouping logic ──
+  // Bucket primers by signature, skipping any signature whose member set is
+  // already represented as an existing group (exact match in either
+  // direction — we don't want to keep nagging the user about clusters
+  // they've already accepted). Returns one suggestion per bucket of ≥2.
+  const autoSuggestions = useMemo(() => {
+    if (entries.length < 2) return [] as Array<{
+      signature: string;
+      defaultName: string;
+      members: PrimerLibraryEntry[];
+      substrates: string[];
+      humidity: string | null;
+      duty: string | null;
+      systemTypes: string[];
+    }>;
+    const sigOf = (e: PrimerLibraryEntry) => {
+      const subs = [...(e.compatibleSubstrates || [])].sort().join('|');
+      const hum = e.humidityTolerance || '';
+      const duty = e.dutyRating || '';
+      const types = [...(e.compatibleSystemTypes || [])].sort().join('|');
+      return `${subs}__${hum}__${duty}__${types}`;
+    };
+    const buckets = new Map<string, PrimerLibraryEntry[]>();
+    for (const e of entries) {
+      const sig = sigOf(e);
+      if (!buckets.has(sig)) buckets.set(sig, []);
+      buckets.get(sig)!.push(e);
+    }
+    // Build a set of "already covered" buckets keyed by signature +
+    // sorted member-id set. We only suppress a suggestion when an
+    // existing group's members EXACTLY equal the bucket's members —
+    // a partial / overlapping group must not silence the suggestion,
+    // otherwise a small group hides a larger valid cluster.
+    const coveredKey = (sig: string, memberIds: string[]) =>
+      `${sig}::${[...memberIds].sort().join(',')}`;
+    const coveredBuckets = new Set<string>();
+    for (const g of groups) {
+      const memberEntries = (g.primerLibraryIds || [])
+        .map(pid => entries.find(e => e.primerId === pid))
+        .filter((x): x is PrimerLibraryEntry => !!x);
+      if (memberEntries.length === 0) continue;
+      const sigs = new Set<string>(memberEntries.map(sigOf));
+      if (sigs.size !== 1) continue; // mixed group — never covers a single bucket
+      coveredBuckets.add(coveredKey([...sigs][0], memberEntries.map(m => m.primerId)));
+    }
+    const out: Array<{
+      signature: string;
+      defaultName: string;
+      members: PrimerLibraryEntry[];
+      substrates: string[];
+      humidity: string | null;
+      duty: string | null;
+      systemTypes: string[];
+    }> = [];
+    for (const [sig, members] of buckets) {
+      if (members.length < 2) continue;
+      if (coveredBuckets.has(coveredKey(sig, members.map(m => m.primerId)))) continue;
+      const first = members[0];
+      const subs = [...(first.compatibleSubstrates || [])];
+      const types = [...(first.compatibleSystemTypes || [])];
+      const parts = [
+        subs.join(' / ') || 'Any substrate',
+        first.humidityTolerance || 'Any humidity',
+      ];
+      if (first.dutyRating) parts.push(first.dutyRating);
+      if (types.length) parts.push(types.join('+'));
+      out.push({
+        signature: sig,
+        defaultName: parts.join(' · '),
+        members,
+        substrates: subs,
+        humidity: first.humidityTolerance,
+        duty: first.dutyRating,
+        systemTypes: types,
+      });
+    }
+    // Largest buckets first so the most useful suggestions come up top.
+    out.sort((a, b) => b.members.length - a.members.length);
+    return out;
+  }, [entries, groups]);
+
+  // Visible suggestions = auto suggestions minus the ones the user
+  // dismissed in this session. We don't persist dismissals — they reset
+  // on reload, which is fine because clusters they already accepted are
+  // suppressed naturally by the existing-group check above.
+  const visibleSuggestions = useMemo(
+    () => autoSuggestions.filter(s => !suggestionOverrides[s.signature]?.dismissed),
+    [autoSuggestions, suggestionOverrides],
+  );
+
+  // Helpers to read/write per-suggestion local state with sensible
+  // defaults (all members preselected, default name from the cluster).
+  const getSuggestionState = (sig: string, defaultName: string, defaultMembers: string[]) => {
+    const ov = suggestionOverrides[sig];
+    if (ov) return ov;
+    return {
+      name: defaultName,
+      selected: new Set(defaultMembers),
+      dismissed: false,
+      saving: false,
+      error: null,
+    };
+  };
+  const updateSuggestion = (
+    sig: string,
+    defaultName: string,
+    defaultMembers: string[],
+    patch: Partial<{ name: string; selected: Set<string>; dismissed: boolean; saving: boolean; error: string | null }>,
+  ) => {
+    setSuggestionOverrides(prev => {
+      const cur = prev[sig] || {
+        name: defaultName,
+        selected: new Set(defaultMembers),
+        dismissed: false,
+        saving: false,
+        error: null,
+      };
+      return { ...prev, [sig]: { ...cur, ...patch } };
+    });
+  };
+  const toggleSuggestionMember = (sig: string, defaultName: string, defaultMembers: string[], primerId: string) => {
+    const cur = getSuggestionState(sig, defaultName, defaultMembers);
+    const next = new Set<string>(cur.selected);
+    if (next.has(primerId)) next.delete(primerId); else next.add(primerId);
+    updateSuggestion(sig, defaultName, defaultMembers, { selected: next });
+  };
+  const acceptSuggestion = async (
+    sig: string,
+    defaultName: string,
+    defaultMembers: string[],
+  ) => {
+    const cur = getSuggestionState(sig, defaultName, defaultMembers);
+    const memberIds = [...cur.selected];
+    if (memberIds.length === 0) {
+      updateSuggestion(sig, defaultName, defaultMembers, { error: 'Pick at least one primer' });
+      return;
+    }
+    const name = cur.name.trim() || defaultName;
+    updateSuggestion(sig, defaultName, defaultMembers, { saving: true, error: null });
+    try {
+      await primerGroupsApi.create({
+        name,
+        description: 'Auto-grouped by shared substrate / humidity / duty / system type',
+        primerLibraryIds: memberIds,
+        // Pin the first selected primer as the group's default — user
+        // can change it later from the regular group editor.
+        defaultPrimerLibraryId: memberIds[0],
+      });
+      await refreshGroups();
+      // Mark this suggestion as dismissed (it'll also vanish from
+      // autoSuggestions automatically because the new group covers it,
+      // but the dismiss flag avoids a brief flash).
+      updateSuggestion(sig, defaultName, defaultMembers, { saving: false, dismissed: true });
+    } catch (e: any) {
+      updateSuggestion(sig, defaultName, defaultMembers, { saving: false, error: e?.message || 'Failed to create group' });
+    }
+  };
+
   // Members shown in the group form's picker — entries optionally filtered
   // by the small inline search; we also surface already-selected members
   // even if they don't match the search so the user always sees what they
@@ -487,8 +657,18 @@ const PrimerLibrary: React.FC<PrimerLibraryProps> = ({ products }) => {
           </span>
           <button
             type="button"
+            onClick={(e) => { e.preventDefault(); setSuggestionsOpen(s => !s); }}
+            className={`ml-auto px-2 py-1 text-[11px] font-medium rounded inline-flex items-center gap-1 border ${suggestionsOpen ? 'bg-violet-600 text-white border-violet-600' : 'bg-white text-violet-700 border-violet-300 hover:bg-violet-50'}`}
+            title="Auto-suggest groups by clustering primers with the same substrate, humidity, duty and system type"
+            data-testid="suggest-primer-groups-button"
+          >
+            <Sparkles size={11} />
+            {suggestionsOpen ? 'Hide suggestions' : `Suggest groups${visibleSuggestions.length ? ` (${visibleSuggestions.length})` : ''}`}
+          </button>
+          <button
+            type="button"
             onClick={(e) => { e.preventDefault(); openCreateGroup(); }}
-            className="ml-auto px-2 py-1 bg-indigo-600 text-white text-[11px] font-medium rounded hover:bg-indigo-700 inline-flex items-center gap-1"
+            className="px-2 py-1 bg-indigo-600 text-white text-[11px] font-medium rounded hover:bg-indigo-700 inline-flex items-center gap-1"
             data-testid="add-primer-group-button"
           >
             <Plus size={11} /> New group
@@ -496,6 +676,119 @@ const PrimerLibrary: React.FC<PrimerLibraryProps> = ({ products }) => {
         </summary>
 
         <div className="px-3 pb-3 space-y-2">
+          {/* Auto-grouping suggestions panel — clusters of ≥2 primers that
+              share the exact substrate / humidity / duty / system-type
+              signature, surfaced as one-click groups. The user can
+              uncheck members, rename, or dismiss before accepting. */}
+          {suggestionsOpen && (
+            <div className="bg-violet-50/50 border border-violet-200 rounded-lg p-2.5" data-testid="primer-group-suggestions">
+              <div className="flex items-center gap-2 mb-2">
+                <Sparkles size={12} className="text-violet-600" />
+                <h4 className="text-xs font-semibold text-violet-800">
+                  Auto-suggested groups
+                </h4>
+                <span className="text-[10px] text-violet-700/70">
+                  Clusters of primers sharing substrate · humidity · duty · system type
+                </span>
+              </div>
+              {visibleSuggestions.length === 0 ? (
+                <div className="text-[11px] text-slate-500 italic px-1 py-2">
+                  No new clusters to suggest. Add more primers — or expand existing ones to share features — and clusters of 2+ will show up here.
+                </div>
+              ) : (
+                <div className="space-y-2">
+                  {visibleSuggestions.map(s => {
+                    const memberIds = s.members.map(m => m.primerId);
+                    const state = getSuggestionState(s.signature, s.defaultName, memberIds);
+                    return (
+                      <div key={s.signature} className="bg-white border border-violet-200 rounded p-2" data-testid={`primer-group-suggestion-${s.signature}`}>
+                        <div className="flex items-center gap-2 mb-1.5">
+                          <input
+                            type="text"
+                            value={state.name}
+                            onChange={(e) => updateSuggestion(s.signature, s.defaultName, memberIds, { name: e.target.value })}
+                            className="flex-1 text-xs font-semibold border border-slate-200 rounded px-2 py-1 bg-white focus:ring-2 focus:ring-violet-500 outline-none"
+                            data-testid={`suggestion-name-${s.signature}`}
+                          />
+                          <span className="text-[10px] text-slate-400">
+                            {state.selected.size}/{s.members.length} selected
+                          </span>
+                          <button
+                            type="button"
+                            onClick={() => updateSuggestion(s.signature, s.defaultName, memberIds, { dismissed: true })}
+                            className="p-1 text-slate-400 hover:text-slate-600"
+                            title="Dismiss this suggestion"
+                          >
+                            <X size={12} />
+                          </button>
+                        </div>
+                        <div className="flex flex-wrap gap-1 mb-2">
+                          {s.substrates.map(x => (
+                            <span key={`s-${x}`} className="text-[10px] px-1.5 py-0.5 bg-slate-100 text-slate-700 rounded-full">{x}</span>
+                          ))}
+                          {s.humidity && (
+                            <span className={`text-[10px] px-1.5 py-0.5 rounded-full ${humidityPillClass(s.humidity)}`}>{s.humidity}</span>
+                          )}
+                          {s.duty && (
+                            <span className="text-[10px] px-1.5 py-0.5 bg-slate-100 text-slate-700 rounded-full">{s.duty}</span>
+                          )}
+                          {s.systemTypes.map(x => (
+                            <span key={`t-${x}`} className="text-[10px] px-1.5 py-0.5 bg-indigo-50 text-indigo-700 rounded-full">{x}</span>
+                          ))}
+                        </div>
+                        <div className="space-y-1 mb-2">
+                          {s.members.map(m => {
+                            const checked = state.selected.has(m.primerId);
+                            return (
+                              <label
+                                key={m.primerId}
+                                className={`flex items-start gap-2 px-2 py-1 rounded cursor-pointer text-[11px] border ${checked ? 'bg-violet-50 border-violet-200' : 'bg-white border-slate-200 hover:bg-slate-50'}`}
+                              >
+                                <input
+                                  type="checkbox"
+                                  checked={checked}
+                                  onChange={() => toggleSuggestionMember(s.signature, s.defaultName, memberIds, m.primerId)}
+                                  className="mt-0.5 rounded text-violet-600 focus:ring-violet-500"
+                                  data-testid={`suggestion-member-${s.signature}-${m.primerId}`}
+                                />
+                                <div className="min-w-0 flex-1">
+                                  <div className="flex items-center gap-2">
+                                    <span className="font-mono text-slate-400">{m.primerId}</span>
+                                    <span className="font-medium text-slate-700 truncate">{m.productName || m.productId}</span>
+                                    {m.supplier && <span className="text-slate-400 truncate">· {m.supplier}</span>}
+                                  </div>
+                                  {m.productDescription && (
+                                    <div className="text-[10px] text-slate-500 mt-0.5 line-clamp-2">{m.productDescription}</div>
+                                  )}
+                                </div>
+                              </label>
+                            );
+                          })}
+                        </div>
+                        {state.error && (
+                          <div className="mb-1.5 px-2 py-1 bg-red-50 border border-red-200 text-red-700 text-[11px] rounded flex items-center gap-1">
+                            <AlertCircle size={10} /> {state.error}
+                          </div>
+                        )}
+                        <div className="flex justify-end">
+                          <button
+                            type="button"
+                            onClick={() => acceptSuggestion(s.signature, s.defaultName, memberIds)}
+                            disabled={state.saving || state.selected.size === 0}
+                            className="px-2 py-1 bg-violet-600 text-white text-[11px] font-medium rounded hover:bg-violet-700 disabled:bg-slate-300 inline-flex items-center gap-1"
+                            data-testid={`accept-suggestion-${s.signature}`}
+                          >
+                            <Check size={11} /> {state.saving ? 'Creating…' : 'Create group'}
+                          </button>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+          )}
+
           {/* Existing groups list */}
           {groups.length === 0 && !groupFormOpen && (
             <div className="text-xs text-slate-500 italic px-2 py-3">
@@ -621,18 +914,25 @@ const PrimerLibrary: React.FC<PrimerLibraryProps> = ({ products }) => {
                     return (
                       <label
                         key={m.primerId}
-                        className={`flex items-center gap-2 px-2 py-1 rounded cursor-pointer text-[11px] ${checked ? 'bg-indigo-50' : 'bg-white hover:bg-slate-100'} border border-slate-200`}
+                        className={`flex items-start gap-2 px-2 py-1 rounded cursor-pointer text-[11px] ${checked ? 'bg-indigo-50' : 'bg-white hover:bg-slate-100'} border border-slate-200`}
                       >
                         <input
                           type="checkbox"
                           checked={checked}
                           onChange={() => toggleGroupMember(m.primerId)}
-                          className="rounded text-indigo-600 focus:ring-indigo-500"
+                          className="mt-0.5 rounded text-indigo-600 focus:ring-indigo-500"
                           data-testid={`group-member-${m.primerId}`}
                         />
-                        <span className="font-mono text-slate-400">{m.primerId}</span>
-                        <span className="font-medium text-slate-700 truncate flex-1">{m.productName || m.productId}</span>
-                        {m.supplier && <span className="text-slate-400 truncate">{m.supplier}</span>}
+                        <div className="min-w-0 flex-1">
+                          <div className="flex items-center gap-2">
+                            <span className="font-mono text-slate-400">{m.primerId}</span>
+                            <span className="font-medium text-slate-700 truncate flex-1">{m.productName || m.productId}</span>
+                            {m.supplier && <span className="text-slate-400 truncate">{m.supplier}</span>}
+                          </div>
+                          {m.productDescription && (
+                            <div className="text-[10px] text-slate-500 mt-0.5 line-clamp-2">{m.productDescription}</div>
+                          )}
+                        </div>
                       </label>
                     );
                   })}
@@ -965,8 +1265,11 @@ const PrimerLibrary: React.FC<PrimerLibraryProps> = ({ products }) => {
             )}
             {filtered.map((e) => (
               <tr key={e.id} className="hover:bg-slate-50/60" data-testid={`primer-row-${e.primerId}`}>
-                <td className="px-3 py-2">
-                  <div className="font-medium text-slate-700">{e.productName || e.productId}</div>
+                <td className="px-3 py-2 max-w-[280px]">
+                  <div className="font-medium text-slate-700 truncate" title={e.productName || e.productId}>{e.productName || e.productId}</div>
+                  {e.productDescription && (
+                    <div className="text-[11px] text-slate-500 line-clamp-2" title={e.productDescription}>{e.productDescription}</div>
+                  )}
                   <div className="text-[11px] text-slate-400 font-mono">{e.primerId}</div>
                 </td>
                 <td className="px-3 py-2 text-slate-600">{e.supplier || '—'}</td>

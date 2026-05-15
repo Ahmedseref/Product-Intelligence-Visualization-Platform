@@ -45,13 +45,26 @@ export function registerPrimerLibraryRoutes(app: Express): void {
         search?: string;
       };
 
+      // Left-join products to surface the latest description in addition
+      // to the denormalised name/supplier already on the row. Description
+      // is fetched live (not denormalised) so edits to the product
+      // description show up here without a manual sync.
       const rows = await db
-        .select()
+        .select({
+          row: primerLibrary,
+          productDescription: products.description,
+        })
         .from(primerLibrary)
+        .leftJoin(products, eq(products.productId, primerLibrary.productId))
         .where(eq(primerLibrary.isActive, true))
         .orderBy(desc(primerLibrary.createdAt));
 
-      const filtered = rows.filter((r) => {
+      const flattened = rows.map(({ row, productDescription }) => ({
+        ...row,
+        productDescription: productDescription ?? null,
+      }));
+
+      const filtered = flattened.filter((r) => {
         if (substrate && !(r.compatibleSubstrates || []).includes(substrate)) return false;
         if (humidity && r.humidityTolerance !== humidity) return false;
         if (duty && r.dutyRating !== duty) return false;
@@ -86,10 +99,18 @@ export function registerPrimerLibraryRoutes(app: Express): void {
         systemType?: string;
       };
 
-      const rows = await db
-        .select()
+      const joined = await db
+        .select({
+          row: primerLibrary,
+          productDescription: products.description,
+        })
         .from(primerLibrary)
+        .leftJoin(products, eq(products.productId, primerLibrary.productId))
         .where(eq(primerLibrary.isActive, true));
+      const rows = joined.map(({ row, productDescription }) => ({
+        ...row,
+        productDescription: productDescription ?? null,
+      }));
 
       const matched = rows.filter((r) => {
         if (substrate && !(r.compatibleSubstrates || []).includes(substrate)) return false;
