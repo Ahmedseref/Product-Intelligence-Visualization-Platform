@@ -2335,14 +2335,10 @@ const SystemBuilder: React.FC<SystemBuilderProps> = ({ products, onProductUpdate
                           systemDuty={fullSystem.systemDuty}
                           systemType={inferSystemType(fullSystem)}
                           defaultPrimerLibraryId={layer.defaultPrimerLibraryId ?? null}
-                          defaultPrimerGroupId={layer.defaultPrimerGroupId ?? null}
-                          onSetDefault={(primerId, groupId) =>
+                          onSetDefault={(primerId) =>
                             systemsApi
                               .updateLayer(layer.layerId, {
                                 defaultPrimerLibraryId: primerId,
-                                // Only forward groupId when the caller passed it
-                                // (undefined means "leave existing group pin").
-                                ...(groupId !== undefined ? { defaultPrimerGroupId: groupId } : {}),
                               })
                               .then(() => loadFullSystem(selectedSystemId!))
                           }

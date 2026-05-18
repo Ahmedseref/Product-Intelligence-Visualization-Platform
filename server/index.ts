@@ -15,7 +15,6 @@ import { registerDocumentRoutes } from "./documentRoutes";
 import { registerProformaRoutes } from "./proformaRoutes";
 import { registerCustomerRoutes } from "./customerRoutes";
 import { registerPrimerLibraryRoutes } from "./primerLibraryRoutes";
-import { registerPrimerGroupRoutes } from "./primerGroupRoutes";
 
 const rootDir = process.cwd();
 
@@ -58,7 +57,6 @@ registerDocumentRoutes(app);
 registerProformaRoutes(app);
 registerCustomerRoutes(app);
 registerPrimerLibraryRoutes(app);
-registerPrimerGroupRoutes(app);
 
 function findDistPath(): string {
   const candidates = [

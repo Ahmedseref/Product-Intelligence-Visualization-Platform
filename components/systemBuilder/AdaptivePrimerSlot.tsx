@@ -7,10 +7,10 @@
 // the recommended default, and surfaces gaps for substrate+humidity combos
 // the library does not yet cover.
 // ─────────────────────────────────────────────────────────────────────────────
-import React, { useEffect, useMemo, useState, useCallback } from 'react';
-import { Library, Star, AlertTriangle, Check, Loader2, Layers } from 'lucide-react';
-import { PrimerLibraryEntry, PrimerGroup } from '../../types';
-import { primerLibraryApi, primerGroupsApi } from '../../client/api';
+import React, { useEffect, useMemo, useState } from 'react';
+import { Library, Star, AlertTriangle, Check, Loader2 } from 'lucide-react';
+import { PrimerLibraryEntry } from '../../types';
+import { primerLibraryApi } from '../../client/api';
 
 interface AdaptivePrimerSlotProps {
   // The system's currently selected substrate (from the parameter header).
@@ -27,14 +27,8 @@ interface AdaptivePrimerSlotProps {
   systemType: string | null;
   // Pinned default primer id (primer_library.primerId). Optional.
   defaultPrimerLibraryId: string | null | undefined;
-  // Pinned primer group id (primer_groups.groupId). Source of truth for
-  // which group the user picked in the dropdown — a single primer can
-  // belong to multiple groups, so storing only the resolved primer is
-  // ambiguous. Optional.
-  defaultPrimerGroupId?: string | null | undefined;
-  // Persists changes to the parent layer (default primer pin + the
-  // group the user picked, so the dropdown remembers it accurately).
-  onSetDefault: (primerId: string | null, groupId?: string | null) => void | Promise<void>;
+  // Persists the pinned default primer to the parent layer.
+  onSetDefault: (primerId: string | null) => void | Promise<void>;
   // External counter that the parent bumps when a primer was added/edited
   // in the library tab in another window — drives a refresh.
   refreshKey?: number;
@@ -46,27 +40,12 @@ interface AdaptivePrimerSlotProps {
 
 const AdaptivePrimerSlot: React.FC<AdaptivePrimerSlotProps> = ({
   systemSubstrate, systemHumidity, systemDuty, systemType,
-  defaultPrimerLibraryId, defaultPrimerGroupId, onSetDefault, refreshKey, onResolved,
+  defaultPrimerLibraryId, onSetDefault, refreshKey, onResolved,
 }) => {
   const [resolved, setResolved] = useState<PrimerLibraryEntry[]>([]);
   const [allActive, setAllActive] = useState<PrimerLibraryEntry[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-
-  // Primer groups — named bundles of library primers. Created and managed
-  // entirely in the Primer Library tab; here we only consume them as a
-  // one-click pin. Reload whenever the parent bumps refreshKey so a group
-  // edited in another tab shows up immediately.
-  const [groups, setGroups] = useState<PrimerGroup[]>([]);
-  const refreshGroups = useCallback(async () => {
-    try {
-      const rows = await primerGroupsApi.list();
-      setGroups(Array.isArray(rows) ? rows : []);
-    } catch {
-      // Non-fatal — the group selector simply hides if unreachable.
-    }
-  }, []);
-  useEffect(() => { refreshGroups(); }, [refreshGroups, refreshKey]);
 
   // Re-resolve whenever any parameter changes. If substrate or humidity is
   // missing we still fetch ALL active primers so the coverage summary below
@@ -97,8 +76,6 @@ const AdaptivePrimerSlot: React.FC<AdaptivePrimerSlotProps> = ({
         if (cancelled) return;
         setResolved(res || []);
         setAllActive(all || []);
-        // onResolved is fired by the effectiveResolved effect below,
-        // which respects group filtering when a group is pinned.
       })
       .catch((e) => {
         if (!cancelled) setError(e?.message || 'Failed to load primers');
@@ -141,86 +118,14 @@ const AdaptivePrimerSlot: React.FC<AdaptivePrimerSlotProps> = ({
   // Substrate is the only hard gate.
   const paramsSet = !!systemSubstrate;
 
-  // Apply a group to this layer. We constrain the pinned primer to one
-  // that's actually in the currently resolved list for the system's
-  // parameters, so the user never ends up with a default they can't see
-  // in the dropdown below. Order of preference:
-  //   1) the group's chosen default, if it resolves
-  //   2) the first group member that resolves
-  //   3) null with a visible note ("no group member resolves for this system")
-  const [groupApplyNote, setGroupApplyNote] = useState<string | null>(null);
-  const handleApplyGroup = async (groupId: string) => {
-    setGroupApplyNote(null);
-    if (!groupId) return;
-    const g = groups.find(x => x.groupId === groupId);
-    if (!g) return;
-    const resolvedIds = new Set(resolved.map(r => r.primerId));
-    const members = g.primerLibraryIds || [];
-    // Try to pin to a member that actually resolves for the current
-    // system parameters first. If none of the group's members match,
-    // we still record the user's choice by pinning the group's own
-    // default member (or its first member) — the sourceGroup memo
-    // looks up the group via primerLibraryIds membership, so the
-    // dropdown correctly reflects the selected group either way.
-    // Without this fallback, picking an "off-spec" group from the
-    // dropdown silently no-ops and the UI looks unclickable.
-    const matchingPin =
-      (g.defaultPrimerLibraryId && resolvedIds.has(g.defaultPrimerLibraryId))
-        ? g.defaultPrimerLibraryId
-        : (members.find(m => resolvedIds.has(m)) || null);
-    if (matchingPin) {
-      await onSetDefault(matchingPin, g.groupId);
-      if (g.defaultPrimerLibraryId && matchingPin !== g.defaultPrimerLibraryId) {
-        setGroupApplyNote(`Group default isn't compatible with this system's conditions — pinned the next matching member instead.`);
-      }
-    } else {
-      // Persist the group selection even though nothing resolves so
-      // the dropdown shows the picked group. The resolve preview
-      // will surface the empty-state message explaining why.
-      const fallbackPin = g.defaultPrimerLibraryId || members[0] || null;
-      await onSetDefault(fallbackPin, g.groupId);
-      setGroupApplyNote(`No member of "${g.name}" matches this system's substrate / humidity / duty — group is selected but won't resolve to any primer until you adjust the parameters or the group's members.`);
-    }
-  };
-
-  // Selected group for this layer. Prefer the explicit defaultPrimerGroupId
-  // pin (source of truth — survives across renders, unambiguous when the
-  // pinned primer is in multiple groups). Fall back to deriving from the
-  // pinned primer for legacy layers saved before defaultPrimerGroupId
-  // existed.
-  const sourceGroup = useMemo(() => {
-    if (defaultPrimerGroupId) {
-      return groups.find(g => g.groupId === defaultPrimerGroupId) || null;
-    }
-    if (!defaultPrimerLibraryId) return null;
-    return groups.find(g =>
-      g.defaultPrimerLibraryId === defaultPrimerLibraryId
-      || (g.primerLibraryIds || []).includes(defaultPrimerLibraryId)
-    ) || null;
-  }, [groups, defaultPrimerLibraryId, defaultPrimerGroupId]);
-
-  // When a group is pinned, the user is explicitly restricting the layer
-  // to that group's curated members — so the resolve preview should only
-  // show primers that are BOTH (a) members of that group and (b) valid
-  // for the system's parameters. Without this filter the user sees every
-  // matching library primer and is confused why their group choice
-  // didn't narrow anything down. With no group pinned, behaviour is
-  // unchanged: every matching library primer is shown as an alternative.
-  const effectiveResolved = useMemo(() => {
-    if (!sourceGroup) return resolved;
-    const memberIds = new Set(sourceGroup.primerLibraryIds || []);
-    return resolved.filter(r => memberIds.has(r.primerId));
-  }, [resolved, sourceGroup]);
-
-  // Report the effective resolved list upward so the layer header badge
-  // and the system summary product count reflect what the user actually
-  // sees here (not the unfiltered library match).
+  // Report the resolved list upward so the layer header badge and the
+  // system summary product count reflect what the user actually sees here.
   useEffect(() => {
-    if (onResolved) onResolved(effectiveResolved);
+    if (onResolved) onResolved(resolved);
     // We deliberately exclude onResolved from deps to avoid re-firing
     // when the parent's callback identity changes.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [effectiveResolved]);
+  }, [resolved]);
 
   return (
     <div className="px-3 py-3 bg-indigo-50/30 border-b border-indigo-100" data-testid="adaptive-primer-slot">
@@ -247,27 +152,25 @@ const AdaptivePrimerSlot: React.FC<AdaptivePrimerSlotProps> = ({
           <div className="text-xs text-slate-500 italic px-2 py-2 bg-white/70 rounded border border-dashed border-slate-300">
             Pick a substrate in System Parameters above to preview which primers will resolve.
           </div>
-        ) : effectiveResolved.length === 0 ? (
+        ) : resolved.length === 0 ? (
           <div className="text-xs text-amber-700 px-2 py-2 bg-amber-50 border border-amber-200 rounded flex items-center gap-1.5">
             <AlertTriangle size={12} />
-            {sourceGroup
-              ? `No member of "${sourceGroup.name}" matches this system's conditions. Pick a different group, or add a matching primer to the group in the Primer Library.`
-              : 'No primers in library match these conditions — add primers to the Primer Library tab.'}
+            No primers in library match these conditions — add primers to the Primer Library tab.
           </div>
         ) : (
           <div className="space-y-1.5">
-            {sourceGroup && (
-              <div className="text-[10px] text-indigo-600 italic mb-1">
-                Restricted to members of group <span className="font-semibold">{sourceGroup.name}</span>. Switch to "No default" above to see every matching library primer.
-              </div>
-            )}
-            {effectiveResolved.map(p => (
+            {resolved.map(p => (
               <div
                 key={p.id}
-                className={`flex items-center gap-2 px-2.5 py-1.5 rounded border transition-colors ${defaultPrimerLibraryId === p.primerId ? 'bg-amber-50 border-amber-300' : 'bg-white border-slate-200'}`}
+                className={`flex items-center gap-2 px-2.5 py-1.5 rounded border transition-colors cursor-pointer ${defaultPrimerLibraryId === p.primerId ? 'bg-amber-50 border-amber-300' : 'bg-white border-slate-200 hover:border-indigo-300'}`}
+                onClick={() => onSetDefault(defaultPrimerLibraryId === p.primerId ? null : p.primerId)}
+                title={defaultPrimerLibraryId === p.primerId ? 'Click to unpin as default' : 'Click to pin as default for this layer'}
+                data-testid={`adaptive-primer-row-${p.primerId}`}
               >
-                {defaultPrimerLibraryId === p.primerId && (
+                {defaultPrimerLibraryId === p.primerId ? (
                   <Star size={12} className="text-amber-500 flex-shrink-0" fill="currentColor" />
+                ) : (
+                  <Star size={12} className="text-slate-300 flex-shrink-0" />
                 )}
                 <div className="flex-1 min-w-0">
                   <div className="text-xs font-medium text-slate-700 truncate">{p.productName || p.productId}</div>
@@ -285,24 +188,6 @@ const AdaptivePrimerSlot: React.FC<AdaptivePrimerSlotProps> = ({
                     {p.humidityTolerance && (
                       <span className="px-1 py-0.5 bg-blue-50 text-blue-700 rounded">{p.humidityTolerance}</span>
                     )}
-                    {/* Group memberships — every group this primer belongs
-                        to. Helps the user understand why a given primer
-                        appears here (it was pulled in by a group they
-                        pinned) and which other groups would also surface
-                        it. We use the same Layers icon style as the
-                        group selector for visual consistency. */}
-                    {groups
-                      .filter(g => (g.primerLibraryIds || []).includes(p.primerId))
-                      .map(g => (
-                        <span
-                          key={g.groupId}
-                          className="inline-flex items-center gap-1 px-1.5 py-0.5 bg-indigo-50 text-indigo-700 rounded"
-                          title={`Member of group "${g.name}" (${g.groupId})`}
-                        >
-                          <Layers size={9} />
-                          {g.name}
-                        </span>
-                      ))}
                   </div>
                 </div>
               </div>
@@ -310,59 +195,6 @@ const AdaptivePrimerSlot: React.FC<AdaptivePrimerSlotProps> = ({
           </div>
         )}
       </div>
-
-      {/* Default primer pin + optional one-click group selector. Groups are
-          built and maintained in the Primer Library tab; here they're a
-          single dropdown that snaps the default to a group's preferred
-          primer. Hidden when no groups exist so the slot stays minimal. */}
-      {resolved.length > 0 && (
-        <div className="mb-3">
-          <div className="flex items-center gap-1.5 mb-1.5">
-            <Layers size={11} className="text-indigo-500" />
-            <div className="text-[11px] font-semibold text-slate-600 uppercase">Default group</div>
-          </div>
-          {/* Adaptive mode is intentionally group-first: individual primers
-              are picked by the group's resolution at spec time, so the
-              user only ever chooses a GROUP here. The currently-pinned
-              primer's group (if any) is selected, and switching groups
-              dispatches handleApplyGroup which re-pins to the new
-              group's default within the resolved set. */}
-          <select
-            value={sourceGroup?.groupId || ''}
-            onChange={(e) => {
-              const next = e.target.value;
-              if (!next) onSetDefault(null, null);
-              else handleApplyGroup(next);
-            }}
-            className="w-full text-xs border border-slate-200 rounded-lg px-2 py-1.5 bg-white focus:ring-2 focus:ring-indigo-500 outline-none"
-            data-testid="adaptive-default-group-select"
-          >
-            <option value="">No default — all matching primers are alternatives</option>
-            {groups.length === 0 && (
-              <option value="" disabled>No groups yet — create one in Primer Library</option>
-            )}
-            {groups.map(g => (
-              <option key={g.groupId} value={g.groupId}>
-                {g.name} ({(g.primerLibraryIds || []).length})
-              </option>
-            ))}
-          </select>
-          {sourceGroup && defaultPrimerLibraryId && (
-            <div className="text-[10px] text-slate-400 mt-1">
-              For this system's parameters, this group resolves to{' '}
-              <span className="font-medium text-indigo-600">
-                {resolved.find(p => p.primerId === defaultPrimerLibraryId)?.productName || defaultPrimerLibraryId}
-              </span>
-              {' '}— if that's not what you want, edit the group's members in the Primer Library tab.
-            </div>
-          )}
-          {groupApplyNote && (
-            <div className="text-[10px] text-amber-700 mt-1" data-testid="adaptive-primer-group-note">
-              {groupApplyNote}
-            </div>
-          )}
-        </div>
-      )}
 
       {/* Library coverage summary — informational only. Tells the user
           which substrate/humidity combos their *whole library* covers

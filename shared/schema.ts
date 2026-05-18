@@ -253,13 +253,6 @@ export const systemLayers = pgTable("system_layers", {
   // 'adaptive'. Stored as the primerLibrary.primerId varchar so the
   // reference is portable across export/import.
   defaultPrimerLibraryId: varchar("default_primer_library_id", { length: 100 }),
-  // Optional pinned primer GROUP. Source of truth for "which group did
-  // the user pick in the adaptive slot dropdown". A primer can belong
-  // to several groups, so deriving the chosen group from the pinned
-  // primer alone is ambiguous — this column resolves that ambiguity.
-  // Stored as the primerGroups.groupId varchar (e.g. "PG-0001") for
-  // export/import portability. Null = no group chosen.
-  defaultPrimerGroupId: varchar("default_primer_group_id", { length: 100 }),
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow(),
 });
@@ -304,27 +297,6 @@ export const primerLibrary = pgTable("primer_library", {
 
 export type PrimerLibraryEntry = typeof primerLibrary.$inferSelect;
 export type InsertPrimerLibraryEntry = typeof primerLibrary.$inferInsert;
-
-// Named bundles of primer_library entries — managed entirely from the
-// Primer Library tab. A group has a list of member primer ids and one
-// optional "default" member. In a system's adaptive primer slot, picking
-// a group is a single one-click action that pins the group's default as
-// the layer's default primer. Groups never mutate primer_library rows.
-export const primerGroups = pgTable("primer_groups", {
-  id: serial("id").primaryKey(),
-  groupId: varchar("group_id", { length: 100 }).notNull().unique(),
-  name: varchar("name", { length: 255 }).notNull(),
-  description: text("description"),
-  // Member primers, stored as the primerLibrary.primerId varchars
-  // (e.g. ["PL-0003", "PL-0007"]). Order is preserved as authored.
-  primerLibraryIds: jsonb("primer_library_ids").$type<string[]>().default([]),
-  // Optional pinned default member — must be one of primerLibraryIds.
-  defaultPrimerLibraryId: varchar("default_primer_library_id", { length: 100 }),
-  isActive: boolean("is_active").default(true),
-  createdAt: timestamp("created_at").defaultNow(),
-});
-export type PrimerGroup = typeof primerGroups.$inferSelect;
-export type InsertPrimerGroup = typeof primerGroups.$inferInsert;
 
 export const systemProductOptions = pgTable("system_product_options", {
   id: serial("id").primaryKey(),

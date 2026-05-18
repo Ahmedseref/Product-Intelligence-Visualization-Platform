@@ -997,8 +997,6 @@ export const systemsApi = {
       // one library entry as the recommended default.
       layerMode?: 'fixed' | 'adaptive' | null;
       defaultPrimerLibraryId?: string | null;
-      // Source-of-truth pin for the chosen group in the adaptive slot.
-      defaultPrimerGroupId?: string | null;
       // ---- Installable-spec fields. All nullable; null clears the value. ----
       // kg of material per m² of substrate.
       consumptionRateKgM2?: number | null;
@@ -1228,58 +1226,6 @@ export const primerLibraryApi = {
       headers: getAuthHeaders(),
     });
     if (!response.ok) throw new Error('Failed to deactivate primer library entry');
-    return response.json();
-  },
-};
-
-// Named bundles of primer_library entries. Managed in the Primer Library
-// tab; consumed by the adaptive primer slot as one-click pins.
-export const primerGroupsApi = {
-  list: async () => {
-    const response = await fetch(`${API_BASE}/primer-groups`, { headers: getAuthHeaders() });
-    if (!response.ok) throw new Error('Failed to fetch primer groups');
-    return response.json();
-  },
-  create: async (data: {
-    name: string;
-    description?: string | null;
-    primerLibraryIds?: string[];
-    defaultPrimerLibraryId?: string | null;
-  }) => {
-    const response = await fetch(`${API_BASE}/primer-groups`, {
-      method: 'POST',
-      headers: { ...getAuthHeaders(), 'Content-Type': 'application/json' },
-      body: JSON.stringify(data),
-    });
-    if (!response.ok) {
-      const err = await response.json().catch(() => ({}));
-      throw new Error(err.error || 'Failed to create primer group');
-    }
-    return response.json();
-  },
-  update: async (id: number, data: Partial<{
-    name: string;
-    description: string | null;
-    primerLibraryIds: string[];
-    defaultPrimerLibraryId: string | null;
-  }>) => {
-    const response = await fetch(`${API_BASE}/primer-groups/${id}`, {
-      method: 'PATCH',
-      headers: { ...getAuthHeaders(), 'Content-Type': 'application/json' },
-      body: JSON.stringify(data),
-    });
-    if (!response.ok) {
-      const err = await response.json().catch(() => ({}));
-      throw new Error(err.error || 'Failed to update primer group');
-    }
-    return response.json();
-  },
-  deactivate: async (id: number) => {
-    const response = await fetch(`${API_BASE}/primer-groups/${id}`, {
-      method: 'DELETE',
-      headers: getAuthHeaders(),
-    });
-    if (!response.ok) throw new Error('Failed to deactivate primer group');
     return response.json();
   },
 };

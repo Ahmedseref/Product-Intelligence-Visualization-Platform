@@ -213,11 +213,6 @@ export interface SystemLayer {
   // Pinned default primer (primer_library.primerId) when layerMode is
   // 'adaptive'. Optional — when null, all matching primers are alternatives.
   defaultPrimerLibraryId?: string | null;
-  // Pinned primer group (primer_groups.groupId) when layerMode is
-  // 'adaptive'. Source of truth for which group the user selected in
-  // the adaptive slot dropdown — primers can belong to multiple
-  // groups so deriving from defaultPrimerLibraryId alone is ambiguous.
-  defaultPrimerGroupId?: string | null;
   createdAt: string;
   updatedAt: string;
 }
@@ -244,20 +239,6 @@ export interface PrimerLibraryEntry {
   // Live description from products.description, not denormalised — joined
   // server-side on every list/resolve so edits to the product show here.
   productDescription?: string | null;
-}
-
-// A named bundle of primer_library entries. Managed in the Primer
-// Library tab. Picking a group in a system's adaptive primer slot pins
-// the group's default member as that layer's default primer.
-export interface PrimerGroup {
-  id: number;
-  groupId: string;                        // PG-0001 etc.
-  name: string;
-  description: string | null;
-  primerLibraryIds: string[];             // member primer_library.primerId list
-  defaultPrimerLibraryId: string | null;  // must be one of primerLibraryIds
-  isActive: boolean;
-  createdAt: string;
 }
 
 export interface SystemProductOption {
