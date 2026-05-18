@@ -181,7 +181,12 @@ export const systems = pgTable("systems", {
   // System-level qualification parameters. When any of these are set the
   // layer product search is filtered to matching qualified products.
   // All three are nullable so legacy systems continue to behave as before.
-  systemSubstrate: varchar("system_substrate", { length: 50 }),
+  // Multi-substrate: a system can sit on more than one substrate (e.g. mixed
+  // Concrete + Screed floors). Stored as JSONB array of vocabulary values.
+  // Legacy single-string values were migrated to 1-element arrays via a
+  // one-shot ALTER COLUMN ... USING jsonb_build_array(...) — see commit msg.
+  // Null = "any substrate" (no constraint).
+  systemSubstrate: jsonb("system_substrate").$type<string[]>(),
   systemHumidity: varchar("system_humidity", { length: 50 }),
   systemDuty: varchar("system_duty", { length: 50 }),
   // Per-sector overrides keyed by sector name, e.g.

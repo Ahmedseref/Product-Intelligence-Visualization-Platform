@@ -1,0 +1,161 @@
+The layer product search inside the System Builder is showing irrelevant products and not using the qualification data that has already been collected. I need to fix the filter and sorting logic only — no new features, no new UI, no new tables. Read the full System Builder component, the layer product search logic, server/routes.ts, and the product_qualification_tags table schema before making any changes.
+
+---
+
+## The 5 problems to fix
+
+### Problem 1 — System type is not filtering layer products
+
+When a system has a material type (Epoxy, PU, Polyurea, Acrylic), the product search inside each layer must exclude products from incompatible system type families.
+
+The system type is already stored on the system record. The product's system type family can be determined from two sources (use both):
+- product_qualification_tags.compatible_system_types (if set)
+- The product's taxonomy node path — if a product is in "Polyurea Waterproofing" branch, it belongs to the Polyurea family. If it's in "Epoxy Waterproofing & Coatings" or "Epoxy Paints", it belongs to the Epoxy family. Use the existing taxonomy path logic already in the codebase.
+
+Hard exclude rule: if the system type is Epoxy, do NOT show products that are exclusively Polyurea, Acrylic, or PU (i.e. products that have compatible_system_types set and it does not include Epoxy, AND the taxonomy path does not include any Epoxy branch). Products with no qualification tags at all should NOT be hard-excluded by system type — they fall through to the scoring tier.
+
+Taxonomy system type mapping (use these branch codes and names):
+- Epoxy: node codes containing EPC, EP, EPP, IF (Industrial Flooring Epoxy), EPC branches
+- PU / Polyurethane: node codes PUP, PP, PW&B, PF
+- Polyurea: node code PW (Polyurea Waterproofing)
+- Acrylic: node codes AWM, AS, FP&SC (when acrylic-based)
+- Bitumen/Cement: BBW, CBW, PB — these are standalone and should be excluded from all system types unless the system is Generic/Other
+
+### Problem 2 — Substrate filter must use ANY overlap logic, not exact match
+
+Currently the layer substrate filter requires the product's substrate to exactly match the system substrate. This is wrong.
+
+Fix: if the system has substrate = ["Concrete", "Screed"], a product with substrate_types = ["Concrete", "Steel"] MUST match because Concrete is in both lists.
+
+The matching rule: a product passes the substrate filter if its substrate_types array shares at least one value with the system's substrate array. If substrate_types is null or empty (product has no tags), do not exclude it — it falls through to the scoring tier.
+
+The substrate field on the system is currently a single varchar. Check whether system_substrate stores a single value or an array. If it is a single varchar:
+- Extend the system_substrate field to support comma-separated values OR change it to a JSONB array column
+- If changing to JSONB, run npm run db:push and update all existing rows to wrap single values in an array: UPDATE systems SET system_substrate = jsonb_build_array(system_substrate) WHERE system_substrate IS NOT NULL AND jsonb_typeof(system_substrate::jsonb) = 'string'
+- Update the system parameter header UI to allow multi-select for substrate (use checkboxes or a multi-select component matching the existing style) — this replaces the current single dropdown
+
+### Problem 3 — Layer position filter must be strict, not loose
+
+When the user is adding a product to a layer that has layer_position = 'base_coat', the product search must prioritize products tagged as base_coat and hard-exclude products tagged as 'primer'.
+
+Strict layer position rules:
+- Primer layer slot → hard-exclude products with layer_position = 'topcoat' or 'standalone'. Show base_coat products only if no primer products exist.
+- Base coat layer slot → hard-exclude products with layer_position = 'primer'. Do not show primers in a base coat slot ever.
+- Topcoat layer slot → hard-exclude products with layer_position = 'primer' and layer_position = 'base_coat'.
+- Standalone layer slot → show all, no position exclusions.
+- Products with layer_position = null → never hard-exclude, but score lower.
+
+The layer's position type is already stored on the layer record (check the schema for the field name — it may be layer_position or layer_type). Use it.
+
+### Problem 4 — Score and sort products by match quality
+
+After applying hard exclusions (problems 1, 2, 3), score every remaining product and sort by score descending. This replaces any existing sort order.
+
+Scoring function (compute server-side, return score with each product):
+
+```javascript
+function scoreProduct(product, qualTags, layer, system) {
+  let score = 0;
+
+  // Layer position match
+  if (qualTags?.layer_position === layer.layer_position) score += 4;
+  else if (qualTags?.layer_position === null) score += 0;
+
+  // System type match
+  if (qualTags?.compatible_system_types?.includes(system.system_type)) score += 3;
+
+  // Substrate overlap (count overlapping substrates)
+  const sysSubstrates = Array.isArray(system.system_substrate) 
+    ? system.system_substrate 
+    : [system.system_substrate].filter(Boolean);
+  const prodSubstrates = qualTags?.substrate_types || [];
+  const overlap = prodSubstrates.filter(s => sysSubstrates.includes(s)).length;
+  score += overlap * 2;
+
+  // Humidity match
+  if (qualTags?.humidity_tolerance === system.system_humidity) score += 2;
+
+  // System ready boost
+  if (qualTags?.is_system_ready === true) score += 3;
+
+  // Qualification confidence boost
+  if (qualTags?.confidence_overall === 'HIGH') score += 1;
+
+  // Duty match
+  if (qualTags?.duty_rating === system.system_duty) score += 1;
+
+  return score;
+}
+```
+
+Return the score with each product in the API response. Do not display the raw score number in the UI — instead display a match quality label:
+- score >= 10: "Best match" — show a small green dot
+- score >= 6: "Good match" — show a small blue dot  
+- score >= 3: "Partial match" — show a small amber dot
+- score < 3 AND is_system_ready = true: "Qualified" — show a small gray dot
+- score < 3 AND is_system_ready = false: no dot, product shown in muted style
+
+The dot and label appear at the far right of each product row in the layer product search results, before the + button. Keep the existing row layout — just add this small indicator.
+
+### Problem 5 — Unqualified products appear mixed with qualified ones
+
+Currently unqualified products (is_system_ready = false or no qualification tags) appear in the same list as fully qualified products with no visual distinction.
+
+Fix the ordering: always show qualified products first (is_system_ready = true), then unqualified products below a visible divider line labeled "Unqualified products — not yet tagged". The "Show all" button should already handle revealing/hiding unqualified products — if it does, keep that behavior and just add the divider. If it doesn't, add a toggle at the bottom of the qualified list: "Show X unqualified products ↓".
+
+---
+
+## What to change — specific files
+
+### Server side (server/routes.ts or wherever the layer product search endpoint lives)
+
+Find the endpoint that returns products for a layer's product search. It is likely called when the user searches or opens the product picker inside a layer. Identify it by reading the component's fetch calls.
+
+Modify that endpoint to:
+1. Accept additional query params: systemType, systemSubstrates (array), systemHumidity, systemDuty, layerPosition
+2. Apply hard exclusions (Problems 1, 2, 3) before returning results
+3. Fetch qualification tags for each product (join with product_qualification_tags on product_id)
+4. Compute score for each product using the scoring function above
+5. Sort results: first by score descending, then alphabetically within the same score tier
+6. Return score and match_quality label with each product
+
+If the product search is done client-side (filtering a pre-loaded product list in the component), move the scoring and hard exclusion logic to the client side instead — but it must use the qualification tags data. Check whether qualification tags are already loaded in the component's state. If not, fetch them once on component mount from GET /api/qualification-tags and store in a local map (productId → tags).
+
+### Client side (System Builder component)
+
+1. When opening the product picker for a layer, pass the system context (systemType, systemSubstrates as array, systemHumidity, systemDuty, layerPosition) to the product search — either as API query params or as filter context for client-side filtering.
+
+2. Fix the substrate field in the System Parameter header:
+   - Change from a single-select dropdown to a multi-select
+   - Use the same vocabulary options (Concrete, Steel, Wood, Screed, Asphalt, Ceramic, Existing Coating, Over Primer)
+   - Show selected substrates as pills inside the field
+   - Clicking a pill removes it
+   - The multi-selected values are stored as an array on the system record
+   - Pass the full array when filtering layer products
+
+3. Add the match quality dot indicator to each product row in the layer product search — green/blue/amber/gray dot + label text. Keep the existing row layout, just add it at the right end before the + button.
+
+4. Add the divider between qualified and unqualified products in the layer product list.
+
+---
+
+## What NOT to change
+
+- Do not add new tabs or new pages
+- Do not change the qualification tag schema
+- Do not change the primer library or adaptive primer slot logic
+- Do not change the Quick Setup wizard flow
+- Do not change the Build-up Preview panel
+- Do not change the Analytics tab
+- Do not change the System Preview tab
+- Do not remove the "Show all" button — keep it working to bypass filters when needed
+
+---
+
+## Rules
+- Run npm run db:push only if system_substrate column type changes (Problem 2)
+- If system_substrate changes to JSONB, update the existing data migration carefully — do not drop existing values
+- All scoring is computed fresh on every product search — no caching
+- Hard exclusions must not apply when "Show all" is active — "Show all" bypasses hard exclusions and shows everything
+- The match quality dot must use CSS variables for colors (var(--color-text-success) etc.) — no hardcoded hex
+- After changes test: (1) Create an Epoxy system with substrate [Concrete, Screed], open base coat layer — verify NO polyurea or bitumen products appear in the default list, verify products tagged base_coat + Concrete appear at top with "Best match". (2) Open primer layer — verify no base coat or topcoat products appear. (3) Click "Show all" — verify all products including excluded ones now appear. (4) Change system substrate to [Steel] — verify the product list re-sorts with Steel-compatible products at top.

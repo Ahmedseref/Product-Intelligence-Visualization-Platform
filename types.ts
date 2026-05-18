@@ -170,7 +170,10 @@ export interface SystemData {
   isActive: boolean;
   // Optional system-level qualification parameters used to filter the
   // layer product search. All three are nullable for backward compatibility.
-  systemSubstrate?: string | null;
+  // Array of substrate vocabulary values (e.g. ["Concrete","Screed"]).
+  // Null/empty = "any substrate". Legacy single-string values are migrated
+  // server-side to 1-element arrays.
+  systemSubstrate?: string[] | null;
   systemHumidity?: string | null;
   systemDuty?: string | null;
   // Optional per-sector overrides keyed by sector name.

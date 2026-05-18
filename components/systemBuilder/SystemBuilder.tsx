@@ -61,6 +61,139 @@ const inferSystemType = (system: { name?: string | null; description?: string | 
   return null;
 };
 
+// Map a product's taxonomy haystack (path + name, already lower-cased) to the
+// material family it belongs to. Used by the layer product search to hard-
+// exclude products that are exclusively in an incompatible chemistry family.
+// Returns null when the product is unclassifiable — those products fall
+// through to the scoring tier instead of being hard-excluded.
+//
+// Bitumen / cement waterproofing branches are standalone systems on their
+// own and should be excluded from every typed system (Epoxy / PU / Polyurea /
+// Acrylic) — they only appear when the system itself is generic / other.
+type SystemFamily = 'Epoxy' | 'PU' | 'Polyurea' | 'Acrylic' | 'BitumenCement';
+// Branch-code → family mapping per the user's taxonomy spec. Codes are
+// matched as whole tokens against the lower-cased taxonomy + name + supplier
+// haystack. Order matters: Polyurea (PW) is checked first so it isn't
+// swallowed by the PU regex, and Bitumen/Cement (BBW/CBW/PB) is checked
+// before Epoxy in case any taxonomy node accidentally co-mentions them.
+//
+//   Epoxy           → EPC, EP, EPP, IF              + 'epoxy'/'epox' keyword
+//   PU (polyurethane)→ PUP, PP, PW&B, PF            + 'pu'/'polyurethane'
+//   Polyurea        → PW                            + 'polyurea'
+//   Acrylic         → AWM, AS, FP&SC                + 'acrylic'
+//   Bitumen/Cement  → BBW, CBW, PB                  + 'bitumen'/'bituminous'/'cement'
+//
+// "PW&B" / "FP&SC" use a literal ampersand which we match defensively as
+// either `&` or the URL-encoded `%26` (very unlikely in display strings but
+// cheap). We also accept "pwb" / "fpsc" run-together because some imports
+// strip the ampersand. All matches use \b word boundaries so a code never
+// matches inside a larger word ("EPC" must not match "decoupling").
+const inferProductFamily = (haystack: string): SystemFamily | null => {
+  const h = haystack.toLowerCase();
+  // --- Polyurea first (most specific; PW code + 'polyurea' keyword) ---
+  if (/\bpolyurea\b/.test(h)) return 'Polyurea';
+  if (/\bpw\b/.test(h)) return 'Polyurea';
+  // --- Bitumen / Cement (must beat keyword-overlap with epoxy/PU primers) ---
+  if (/\b(bitumen|bituminous|cement(?:itious)?)\b/.test(h)) return 'BitumenCement';
+  if (/\b(bbw|cbw|pb)\b/.test(h)) return 'BitumenCement';
+  // --- Acrylic (AWM / AS / FP&SC codes + 'acrylic' keyword) ---
+  // NOTE: bare "AS" is intentionally excluded — it's a common English word
+  // that creates too many false positives in product names. AWM / FP&SC are
+  // distinctive enough to carry the mapping.
+  if (/\bacrylic\b/.test(h)) return 'Acrylic';
+  if (/\b(awm|fp&sc|fpsc)\b/.test(h)) return 'Acrylic';
+  // --- Epoxy (EPC / EP / EPP / IF codes + 'epoxy' keyword) ---
+  // NOTE: bare "IF" is intentionally excluded — it's a common English word.
+  // "EP" is kept because it's not a real word and is a strong epoxy marker.
+  if (/\b(epoxy|epox)\b/.test(h)) return 'Epoxy';
+  if (/\b(epc|ep|epp)\b/.test(h)) return 'Epoxy';
+  // --- PU last (PUP / PP / PW&B / PF codes + 'pu' / 'polyurethane') ---
+  if (/\b(pu|polyurethane)\b/.test(h)) return 'PU';
+  if (/\b(pup|pp|pw&b|pwb|pf)\b/.test(h)) return 'PU';
+  return null;
+};
+
+// Score a product against the current system + layer context. Higher scores
+// rank earlier in the layer product search. The function MUST tolerate
+// missing tags — untagged products simply score 0 (no positive boosts) and
+// land at the bottom of the qualified tier (or, more commonly, in the
+// unqualified bucket which is never scored).
+//
+// Mirrors the scoring spec in the user's brief. `compatible_system_types`
+// and `confidence_overall` are NOT columns on product_qualification_tags
+// today, so those branches are intentionally derived from the taxonomy
+// (system family) and skipped (confidence) respectively rather than added
+// to the schema.
+type QualTag = {
+  substrateTypes?: string[] | null;
+  humidityTolerance?: string | null;
+  dutyRating?: string | null;
+  isSystemReady?: boolean | null;
+  layerPosition?: string | null;
+};
+const scoreProduct = (
+  tag: QualTag | undefined,
+  productFamily: SystemFamily | null,
+  layerPosition: string | null,
+  systemType: string | null,
+  systemSubstrates: string[],
+  systemHumidity: string | null,
+  systemDuty: string | null,
+): number => {
+  let score = 0;
+  // Layer position match — +4 only on an exact position hit. 'standalone'
+  // products are versatile so they get a partial +2 in any slot.
+  if (tag?.layerPosition && layerPosition && tag.layerPosition === layerPosition) score += 4;
+  else if (tag?.layerPosition === 'standalone') score += 2;
+  // System type / family match — taxonomy-derived because qualification tags
+  // don't carry compatible_system_types today. Mapping 'PU' ↔ 'PU' etc.
+  if (systemType && productFamily) {
+    const systemFamilyKey: SystemFamily | null =
+      systemType === 'Epoxy' ? 'Epoxy'
+      : systemType === 'PU' ? 'PU'
+      : systemType === 'Polyurea' ? 'Polyurea'
+      : systemType === 'Acrylic' ? 'Acrylic'
+      : null;
+    if (systemFamilyKey && productFamily === systemFamilyKey) score += 3;
+  }
+  // Substrate overlap — +2 per shared substrate. Untagged products get 0.
+  if (systemSubstrates.length > 0 && tag?.substrateTypes && tag.substrateTypes.length > 0) {
+    const overlap = tag.substrateTypes.filter(s => systemSubstrates.includes(s)).length;
+    score += overlap * 2;
+  }
+  if (systemHumidity && tag?.humidityTolerance === systemHumidity) score += 2;
+  if (tag?.isSystemReady === true) score += 3;
+  if (systemDuty && tag?.dutyRating === systemDuty) score += 1;
+  return score;
+};
+
+// Translate a numeric score into the user-visible match-quality label + dot
+// colour. Returns null when no dot should be shown (untagged / unqualified
+// + low score — the row is rendered in muted style instead). Tailwind
+// classes are used for the dot colour (no hex), in line with project
+// convention everywhere else.
+type MatchLabel = { label: string; dotClass: string };
+const computeMatchLabel = (score: number, isSystemReady: boolean): MatchLabel | null => {
+  if (score >= 10) return { label: 'Best match', dotClass: 'bg-emerald-500' };
+  if (score >= 6) return { label: 'Good match', dotClass: 'bg-blue-500' };
+  if (score >= 3) return { label: 'Partial match', dotClass: 'bg-amber-500' };
+  if (isSystemReady) return { label: 'Qualified', dotClass: 'bg-slate-400' };
+  return null;
+};
+
+// Normalize the (possibly-legacy) systemSubstrate value into a guaranteed
+// array of strings. Handles three on-the-wire shapes:
+//   • null / undefined        → []
+//   • a string (legacy row)   → [s]   (one element)
+//   • an array of strings     → as-is (filters out empties)
+// Callers can treat the result as the canonical substrate list everywhere.
+const substratesAsArray = (v: string[] | string | null | undefined): string[] => {
+  if (v == null) return [];
+  if (Array.isArray(v)) return v.filter(s => typeof s === 'string' && s.length > 0);
+  if (typeof v === 'string') return v.length > 0 ? [v] : [];
+  return [];
+};
+
 // ----------------------------------------------------------------------------
 // SpecNumberInput
 // Compact uncontrolled-feeling numeric cell used by the installable-spec rows
@@ -435,24 +568,26 @@ const SystemBuilder: React.FC<SystemBuilderProps> = ({ products, onProductUpdate
     return () => { cancelled = true; };
   }, [selectedSystemId, refreshQualificationTags]);
 
-  // Compute the effective substrate to filter by, given precedence:
+  // Compute the effective substrate list to filter by, given precedence:
   //   layerSubstrateOverride > activeSectorContext override > systemSubstrate
-  // Returns null when no substrate constraint should be applied.
-  const getEffectiveSubstrate = useCallback((layerOverride?: string | null): string | null => {
-    if (layerOverride) return layerOverride;
+  // Returns an array of substrate strings. Empty array = "no substrate
+  // constraint" (any product passes the substrate hard exclusion).
+  //
+  // Layer + sector overrides are single-string values today (the override
+  // pickers don't multi-select); we wrap them in a one-element array so
+  // every downstream consumer can treat the result as a list.
+  const getEffectiveSubstrate = useCallback((layerOverride?: string | null): string[] => {
+    if (layerOverride) return [layerOverride];
     const overrides = (fullSystem?.sectorOverrides || {}) as Record<string, { substrateOverride?: string | null }>;
     if (activeSectorContext && overrides[activeSectorContext]?.substrateOverride) {
-      return overrides[activeSectorContext]!.substrateOverride!;
+      return [overrides[activeSectorContext]!.substrateOverride!];
     }
-    // If exactly one sector has an override defined and no explicit context
-    // was chosen, use it automatically — it's almost certainly what the user
-    // wants when there's only one possibility.
     const overrideSectors = Object.entries(overrides).filter(([_, v]) => v && v.substrateOverride);
     if (!activeSectorContext && overrideSectors.length === 1) {
       const only = overrideSectors[0][1] as { substrateOverride?: string | null };
-      if (only.substrateOverride) return only.substrateOverride;
+      if (only.substrateOverride) return [only.substrateOverride];
     }
-    return fullSystem?.systemSubstrate || null;
+    return substratesAsArray(fullSystem?.systemSubstrate as string[] | string | null | undefined);
   }, [fullSystem, activeSectorContext]);
 
   const loadSystems = useCallback(async () => {
@@ -783,7 +918,9 @@ const SystemBuilder: React.FC<SystemBuilderProps> = ({ products, onProductUpdate
   // duty / total thickness range). All fields are nullable — pass null to
   // clear an individual field.
   const handleSaveSystemParams = async (patch: {
-    systemSubstrate?: string | null;
+    // Array of substrate vocabulary values. Pass null (or empty array) to
+    // clear; pass an array to set / replace the current selection.
+    systemSubstrate?: string[] | null;
     systemHumidity?: string | null;
     systemDuty?: string | null;
     totalThicknessMinMm?: number | null;
@@ -835,7 +972,8 @@ const SystemBuilder: React.FC<SystemBuilderProps> = ({ products, onProductUpdate
     // Inline computation of "any param set" — avoids forward reference to the
     // memoized systemHasAnyParams which is declared later in the component.
     const hasParams = !!(fullSystem && (
-      fullSystem.systemSubstrate || fullSystem.systemHumidity || fullSystem.systemDuty ||
+      substratesAsArray(fullSystem.systemSubstrate as string[] | string | null | undefined).length > 0 ||
+      fullSystem.systemHumidity || fullSystem.systemDuty ||
       Object.values((fullSystem.sectorOverrides || {}) as Record<string, { substrateOverride?: string | null }>).some(o => o?.substrateOverride) ||
       fullSystem.layers.some(l => l.layerSubstrateOverride)
     ));
@@ -844,12 +982,18 @@ const SystemBuilder: React.FC<SystemBuilderProps> = ({ products, onProductUpdate
     if (!tag) return { kind: 'unqualified' };
     if (!tag.isSystemReady) return { kind: 'unqualified' };
     const messages: string[] = [];
-    const expectedSubstrate = getEffectiveSubstrate(layer?.layerSubstrateOverride);
-    if (expectedSubstrate) {
+    const expectedSubstrates = getEffectiveSubstrate(layer?.layerSubstrateOverride);
+    if (expectedSubstrates.length > 0) {
       const subs = tag.substrateTypes || [];
-      if (!subs.includes(expectedSubstrate)) {
-        const have = subs.length ? subs.join(', ') : '—';
-        messages.push(`Substrate mismatch: product is for ${have}, system is configured for ${expectedSubstrate}`);
+      // ANY-overlap rule (Problem 2): a product passes if its substrate list
+      // shares at least one value with the system's substrate list. Products
+      // with no substrate tag are not flagged as a conflict here — they're
+      // flagged as 'unqualified' upstream when no tag exists at all.
+      const overlap = subs.filter(s => expectedSubstrates.includes(s));
+      if (subs.length > 0 && overlap.length === 0) {
+        const have = subs.join(', ');
+        const want = expectedSubstrates.join(' / ');
+        messages.push(`Substrate mismatch: product is for ${have}, system is configured for ${want}`);
       }
     }
     // Humidity / duty: a system-required parameter that the product does not
@@ -1058,7 +1202,7 @@ const SystemBuilder: React.FC<SystemBuilderProps> = ({ products, onProductUpdate
   // search is the legacy unfiltered behavior — full backward compatibility.
   const systemHasAnyParams = !!(
     fullSystem && (
-      fullSystem.systemSubstrate ||
+      substratesAsArray(fullSystem.systemSubstrate as string[] | string | null | undefined).length > 0 ||
       fullSystem.systemHumidity ||
       fullSystem.systemDuty ||
       Object.values((fullSystem.sectorOverrides || {}) as Record<string, { substrateOverride?: string | null }>).some(o => o?.substrateOverride) ||
@@ -1134,13 +1278,28 @@ const SystemBuilder: React.FC<SystemBuilderProps> = ({ products, onProductUpdate
   const filterSummary = smartFilterActive ? [
     activeLayerPosLabel ? `layer: ${activeLayerPosLabel}` : null,
     activeMaterialLabel ? `material: ${activeMaterialLabel}` : null,
-    effectiveSubstrate ? `substrate: ${effectiveSubstrate}` : null,
+    effectiveSubstrate.length > 0 ? `substrate: ${effectiveSubstrate.join(' / ')}` : null,
     fullSystem?.systemHumidity ? `humidity: ${fullSystem.systemHumidity}` : null,
     fullSystem?.systemDuty ? `duty: ${fullSystem.systemDuty}` : null,
   ].filter(Boolean).join(' · ') : '';
 
-  const filteredProducts = (() => {
-    // Step 1: text search filter (existing behavior)
+  // Layer product search — fully rewritten to (a) apply hard exclusions
+  // based on system type / substrate / layer position, (b) split products
+  // into qualified vs unqualified buckets (so we can show a divider in the
+  // UI), and (c) score+sort qualified products by match quality. The
+  // "Show all" toggle bypasses hard exclusions entirely (Problem 4 spec)
+  // but keeps the qualified/unqualified split so the divider behaviour
+  // stays consistent.
+  //
+  // Returns: { qualified, unqualified, scores } where `scores` is a map of
+  // productId → { score, label } for the qualified tier so the row
+  // renderer can show the dot without re-computing.
+  const layerSearchResult = (() => {
+    type ScoreEntry = { score: number; label: MatchLabel | null };
+    const empty: { qualified: typeof products; unqualified: typeof products; scores: Record<string, ScoreEntry> } =
+      { qualified: products, unqualified: [], scores: {} };
+
+    // Step 1: text search filter (applies in both modes).
     let pool = products;
     if (productSearch) {
       const parsed = parseSearchQuery(productSearch);
@@ -1149,41 +1308,125 @@ const SystemBuilder: React.FC<SystemBuilderProps> = ({ products, onProductUpdate
         return matchesAdvancedSearch(searchableText, parsed);
       });
     }
-    // Step 2: smart qualification filter (only when an open layer exists and
-    // the user hasn't opted out via "Show all").
-    if (!smartFilterActive) return pool;
-    return pool.filter((p) => {
+
+    // When no layer is open at all, just return the text-filtered pool
+    // (preserves legacy behaviour for any future caller that reads this
+    // without a layer context).
+    if (!showAddProduct) return { ...empty, qualified: pool };
+
+    // System context for scoring + hard exclusions.
+    const systemType = inferSystemType(fullSystem);
+    const sysSubstrates = effectiveSubstrate;     // already a string[]
+    const sysHumidity = fullSystem?.systemHumidity || null;
+    const sysDuty = fullSystem?.systemDuty || null;
+    const showAll = showAllProductsInSearch;
+
+    // Helper: should we hard-exclude this product? Untagged products are
+    // never hard-excluded — they go to the unqualified bucket instead
+    // (per the spec, untagged products fall through to the scoring tier).
+    const isHardExcluded = (p: typeof products[number]): boolean => {
+      if (showAll) return false;
       const tag = tagsByProduct[p.id];
-      if (!tag || !tag.isSystemReady) return false;
-      // Layer-position filter — refuse to suggest a Primer product in a
-      // Base Coat slot, etc. 'standalone' products are versatile so they
-      // always pass; products without a layer_position tag are also kept
-      // (legacy fallback so users aren't blocked by un-tagged data).
-      if (activeLayerPos && tag.layerPosition && tag.layerPosition !== activeLayerPos && tag.layerPosition !== 'standalone') return false;
-      // Substrate filter — same layer-aware logic as the wizard's Step 4:
-      // products whose substrate is purely 'Over Primer'/'Over Base Coat'
-      // are layered products and shouldn't be filtered against the system's
-      // structural substrate (which only describes what the SYSTEM sits on).
-      if (effectiveSubstrate) {
-        const subs = tag.substrateTypes || [];
-        const layeredOnly = subs.length > 0 && subs.every(s => s === 'Over Primer' || s === 'Over Base Coat');
-        const layeredPos = tag.layerPosition === 'base_coat' || tag.layerPosition === 'intermediate' || tag.layerPosition === 'topcoat';
+      const haystack = productMaterialPath[p.id] || '';
+      const productFamily = inferProductFamily(haystack);
+
+      // --- Problem 1: system type hard exclusion ---
+      // Bitumen / cement products are always excluded from typed systems.
+      if (productFamily === 'BitumenCement' && systemType) return true;
+      // Only hard-exclude when the product has qualification tags AND a
+      // taxonomy family that disagrees with the system type. Untagged
+      // products are exempt from this rule per spec.
+      if (systemType && tag && productFamily && productFamily !== systemType as SystemFamily) {
+        // Productive double-check: the spec says hard-exclude when the
+        // product is exclusively another family. Since we don't have
+        // compatible_system_types on the qualification tag, "exclusively"
+        // is judged by the taxonomy family alone — which is reliable when
+        // a tag exists (the product was qualified deliberately).
+        return true;
+      }
+
+      // --- Problem 2: substrate hard exclusion (ANY-overlap rule) ---
+      if (sysSubstrates.length > 0 && tag?.substrateTypes && tag.substrateTypes.length > 0) {
+        // Layered coats (base / intermediate / topcoat) often live "Over
+        // Primer" / "Over Base Coat" and should NOT be filtered against
+        // the system's structural substrate — they're not the layer
+        // touching the substrate. Preserves the long-standing layered
+        // carve-out so the multi-coat picker still works.
+        const subs = tag.substrateTypes;
+        const layeredOnly = subs.every(s => s === 'Over Primer' || s === 'Over Base Coat');
         const layeredSlot = activeLayerPos === 'base_coat' || activeLayerPos === 'intermediate' || activeLayerPos === 'topcoat';
+        const layeredPos = tag.layerPosition === 'base_coat' || tag.layerPosition === 'intermediate' || tag.layerPosition === 'topcoat';
         const isLayered = layeredOnly && (layeredPos || layeredSlot);
-        if (!isLayered && !subs.includes(effectiveSubstrate)) return false;
+        if (!isLayered) {
+          const overlap = subs.filter(s => sysSubstrates.includes(s)).length;
+          if (overlap === 0) return true;
+        }
       }
-      if (fullSystem?.systemHumidity && tag.humidityTolerance !== fullSystem.systemHumidity) return false;
-      if (fullSystem?.systemDuty && tag.dutyRating !== fullSystem.systemDuty) return false;
-      // Material-chemistry filter — once the system has any chosen products
-      // and they all share a single material, lock alternatives to that
-      // chemistry.
-      if (activeMaterialRegex) {
-        const haystack = productMaterialPath[p.id] || '';
-        if (!activeMaterialRegex.test(haystack)) return false;
+
+      // --- Problem 3: strict layer position hard exclusion ---
+      // Untagged (no layerPosition) products are exempt — they score lower
+      // but still appear so they're not silently hidden.
+      if (activeLayerPos && tag?.layerPosition) {
+        const pp = tag.layerPosition;
+        if (activeLayerPos === 'primer') {
+          if (pp === 'topcoat' || pp === 'standalone') return true;
+        } else if (activeLayerPos === 'base_coat') {
+          if (pp === 'primer') return true;
+        } else if (activeLayerPos === 'topcoat') {
+          if (pp === 'primer' || pp === 'base_coat') return true;
+        }
+        // 'standalone' slot: no position exclusions.
+        // 'intermediate' slot: no strict exclusion (intermediate coats are
+        // flexible — the layered carve-out above already does the heavy
+        // lifting).
       }
-      return true;
+
+      return false;
+    };
+
+    // Step 2: split + hard-exclude.
+    const qualified: typeof products = [];
+    const unqualified: typeof products = [];
+    for (const p of pool) {
+      const tag = tagsByProduct[p.id];
+      const isReady = !!tag?.isSystemReady;
+      if (isReady) {
+        if (!isHardExcluded(p)) qualified.push(p);
+        // Tagged-but-excluded products are dropped entirely when smart
+        // filter is on — the user opts in via "Show all" to see them.
+      } else {
+        unqualified.push(p);
+      }
+    }
+
+    // Step 3: score + sort the qualified tier. Untagged / unqualified
+    // products are intentionally not scored — they live in their own
+    // bucket below the divider.
+    const scores: Record<string, ScoreEntry> = {};
+    for (const p of qualified) {
+      const tag = tagsByProduct[p.id];
+      const haystack = productMaterialPath[p.id] || '';
+      const productFamily = inferProductFamily(haystack);
+      const score = scoreProduct(tag, productFamily, activeLayerPos, systemType, sysSubstrates, sysHumidity, sysDuty);
+      const label = computeMatchLabel(score, !!tag?.isSystemReady);
+      scores[p.id] = { score, label };
+    }
+    qualified.sort((a, b) => {
+      const sa = scores[a.id]?.score ?? 0;
+      const sb = scores[b.id]?.score ?? 0;
+      if (sa !== sb) return sb - sa;
+      return (a.name || '').localeCompare(b.name || '');
     });
+
+    // Sort the unqualified bucket alphabetically — no score available.
+    unqualified.sort((a, b) => (a.name || '').localeCompare(b.name || ''));
+
+    return { qualified, unqualified, scores };
   })();
+  // Back-compat alias used by the "N matches" count + empty-state below.
+  // Counts only the qualified tier so the header reflects what's above the
+  // divider — unqualified products are surfaced separately.
+  const filteredProducts = layerSearchResult.qualified;
 
   const getStatusColor = (status: string) => {
     switch (status) {
@@ -1723,16 +1966,53 @@ const SystemBuilder: React.FC<SystemBuilderProps> = ({ products, onProductUpdate
                 {paramHeaderOpen && (
                   <div className="px-3 pb-3 grid grid-cols-1 sm:grid-cols-3 gap-2">
                     <div>
-                      <label className="block text-[10px] font-semibold text-slate-500 uppercase mb-1">Substrate</label>
-                      <select
-                        value={fullSystem.systemSubstrate || ''}
-                        onChange={(e) => handleSaveSystemParams({ systemSubstrate: e.target.value || null })}
-                        className="w-full text-sm border border-slate-200 rounded-lg px-2 py-1.5 bg-white focus:ring-2 focus:ring-indigo-500 outline-none"
-                        data-testid="system-substrate-select"
-                      >
-                        <option value="">— Any —</option>
-                        {vocab.substrate.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
-                      </select>
+                      <label className="block text-[10px] font-semibold text-slate-500 uppercase mb-1">
+                        Substrate
+                        <span className="ml-1 text-slate-400 normal-case font-normal">(multi-select)</span>
+                      </label>
+                      {/* Multi-select substrate pill picker — toggling a pill
+                          adds / removes the value from the system's substrate
+                          array. ANY-overlap rule downstream means picking
+                          multiple substrates widens the qualified product
+                          pool rather than narrowing it. Empty selection =
+                          "Any substrate" (no constraint). */}
+                      <div className="flex flex-wrap gap-1" data-testid="system-substrate-select">
+                        {vocab.substrate.map(o => {
+                          const current = substratesAsArray(fullSystem.systemSubstrate as string[] | string | null | undefined);
+                          const active = current.includes(o.value);
+                          return (
+                            <button
+                              key={o.value}
+                              type="button"
+                              onClick={() => {
+                                const next = active
+                                  ? current.filter(v => v !== o.value)
+                                  : [...current, o.value];
+                                handleSaveSystemParams({ systemSubstrate: next.length > 0 ? next : null });
+                              }}
+                              aria-pressed={active}
+                              data-testid={`system-substrate-pill-${o.value}`}
+                              className={`px-2 py-1 text-xs rounded-lg border transition-colors ${
+                                active
+                                  ? 'bg-indigo-600 border-indigo-600 text-white hover:bg-indigo-700'
+                                  : 'bg-white border-slate-200 text-slate-600 hover:border-indigo-300 hover:bg-indigo-50'
+                              }`}
+                            >
+                              {o.label}
+                            </button>
+                          );
+                        })}
+                        {substratesAsArray(fullSystem.systemSubstrate as string[] | string | null | undefined).length > 0 && (
+                          <button
+                            type="button"
+                            onClick={() => handleSaveSystemParams({ systemSubstrate: null })}
+                            className="px-2 py-1 text-xs rounded-lg text-slate-400 hover:text-slate-600 hover:bg-slate-100"
+                            title="Clear all substrates"
+                          >
+                            Clear
+                          </button>
+                        )}
+                      </div>
                     </div>
                     <div>
                       <label className="block text-[10px] font-semibold text-slate-500 uppercase mb-1">Humidity tolerance</label>
@@ -2041,7 +2321,16 @@ const SystemBuilder: React.FC<SystemBuilderProps> = ({ products, onProductUpdate
                           and updates live as the system header changes. */}
                       {layer.layerMode === 'adaptive' && (
                         <AdaptivePrimerSlot
-                          systemSubstrate={fullSystem.systemSubstrate}
+                          // AdaptivePrimerSlot still resolves against a single
+                          // substrate value (its API hasn't been widened).
+                          // When the system has exactly one substrate selected
+                          // we forward it; with multiple substrates we pass
+                          // null so the resolver returns the broadest match
+                          // set and the user can refine via the layer override.
+                          systemSubstrate={(() => {
+                            const arr = substratesAsArray(fullSystem.systemSubstrate as string[] | string | null | undefined);
+                            return arr.length === 1 ? arr[0] : null;
+                          })()}
                           systemHumidity={fullSystem.systemHumidity}
                           systemDuty={fullSystem.systemDuty}
                           systemType={inferSystemType(fullSystem)}
@@ -2110,7 +2399,16 @@ const SystemBuilder: React.FC<SystemBuilderProps> = ({ products, onProductUpdate
                           </div>
                           <div className="flex items-center justify-between mb-2">
                             <div className="text-xs text-slate-500">
-                              {selectedProductIds.length > 0 ? `${selectedProductIds.length} selected` : `${filteredProducts.length} match${filteredProducts.length === 1 ? '' : 'es'}`}
+                              {selectedProductIds.length > 0
+                                ? `${selectedProductIds.length} selected`
+                                : (() => {
+                                    // Count qualified + unqualified separately so the
+                                    // header reflects the new divider layout below.
+                                    const q = layerSearchResult.qualified.length;
+                                    const u = layerSearchResult.unqualified.length;
+                                    if (u === 0) return `${q} match${q === 1 ? '' : 'es'}`;
+                                    return `${q} qualified · ${u} unqualified`;
+                                  })()}
                             </div>
                             <button
                               onClick={() => handleAddSelectedProductsToLayer(layer.layerId)}
@@ -2121,99 +2419,152 @@ const SystemBuilder: React.FC<SystemBuilderProps> = ({ products, onProductUpdate
                             </button>
                           </div>
                           <div className="max-h-72 overflow-y-auto space-y-0.5 pr-0.5">
-                            {filteredProducts.slice(0, 50).map((prod) => {
-                              const alreadyAdded = layer.productOptions.some((o) => o.productId === prod.id);
-                              const isSelected = selectedProductIds.includes(prod.id);
+                            {/* Render a single product row. Extracted as an
+                                inline IIFE so we can re-use it for both the
+                                qualified and unqualified sections below
+                                without copy-paste. `unqualified=true` renders
+                                the row in muted style and skips the match
+                                quality dot — those rows live below the
+                                divider as "not yet tagged". */}
+                            {(() => {
+                              const renderRow = (prod: typeof products[number], unqualified: boolean) => {
+                                const alreadyAdded = layer.productOptions.some((o) => o.productId === prod.id);
+                                const isSelected = selectedProductIds.includes(prod.id);
+                                const matchLabel = unqualified ? null : (layerSearchResult.scores[prod.id]?.label || null);
+                                return (
+                                  <div
+                                    key={prod.id}
+                                    className={`flex items-start gap-2.5 px-2.5 py-2 rounded-lg border cursor-pointer transition-all ${
+                                      alreadyAdded
+                                        ? 'bg-slate-50 border-slate-200 opacity-60 cursor-default'
+                                        : isSelected
+                                        ? 'bg-green-50 border-green-300 shadow-sm'
+                                        : unqualified
+                                        ? 'bg-white border-transparent hover:bg-slate-50 hover:border-slate-200'
+                                        : 'bg-white border-transparent hover:bg-green-50/60 hover:border-green-200'
+                                    }`}
+                                    onClick={() => {
+                                      if (alreadyAdded) return;
+                                      setSelectedProductIds(prev =>
+                                        prev.includes(prod.id)
+                                          ? prev.filter(id => id !== prod.id)
+                                          : [...prev, prod.id]
+                                      );
+                                    }}
+                                  >
+                                    {/* Checkbox */}
+                                    <div className="flex-shrink-0 mt-0.5">
+                                      {alreadyAdded ? (
+                                        <div className="w-4 h-4 rounded bg-slate-200 flex items-center justify-center">
+                                          <Check size={10} className="text-slate-400" />
+                                        </div>
+                                      ) : (
+                                        <input
+                                          type="checkbox"
+                                          checked={isSelected}
+                                          readOnly
+                                          className="w-4 h-4 accent-green-600 rounded"
+                                        />
+                                      )}
+                                    </div>
+
+                                    {/* Main content */}
+                                    <div className="flex-1 min-w-0">
+                                      <div className="flex items-center gap-1.5">
+                                        {/* Match-quality dot — only shown for
+                                            qualified rows that earned a label.
+                                            Tooltip surfaces the label text
+                                            without taking horizontal room. */}
+                                        {matchLabel && (
+                                          <span
+                                            className={`flex-shrink-0 w-1.5 h-1.5 rounded-full ${matchLabel.dotClass}`}
+                                            title={matchLabel.label}
+                                            aria-label={matchLabel.label}
+                                            data-testid={`match-dot-${prod.id}`}
+                                          />
+                                        )}
+                                        <span className={`text-sm font-medium truncate ${
+                                          alreadyAdded ? 'text-slate-500'
+                                            : unqualified ? 'text-slate-500'
+                                            : 'text-slate-800'
+                                        }`}>
+                                          {prod.name}
+                                        </span>
+                                        {alreadyAdded && (
+                                          <span className="flex-shrink-0 text-[10px] font-semibold px-1.5 py-0.5 bg-slate-200 text-slate-500 rounded-full">
+                                            In layer
+                                          </span>
+                                        )}
+                                      </div>
+                                      <div className="flex items-center gap-2 mt-0.5 flex-wrap">
+                                        {prod.stockCode && (
+                                          <span className="text-[10px] font-mono text-slate-400 bg-slate-100 px-1.5 py-0.5 rounded">
+                                            {prod.stockCode}
+                                          </span>
+                                        )}
+                                        {prod.supplier && (
+                                          <span className="text-[10px] text-slate-400 truncate">{prod.supplier}</span>
+                                        )}
+                                      </div>
+                                      {prod.description && (
+                                        <p className="text-[11px] text-slate-400 mt-0.5 line-clamp-1 italic">
+                                          {prod.description}
+                                        </p>
+                                      )}
+                                    </div>
+
+                                    {/* Actions */}
+                                    <div className="flex items-center gap-0.5 flex-shrink-0 mt-0.5">
+                                      <button
+                                        onClick={(e) => {
+                                          e.stopPropagation();
+                                          setDetailsProduct(prod);
+                                        }}
+                                        className="p-1.5 text-slate-300 hover:text-blue-500 hover:bg-blue-50 rounded-md transition-colors"
+                                        title="View product details"
+                                      >
+                                        <Info size={14} />
+                                      </button>
+                                      {!alreadyAdded && (
+                                        <div className={`p-1 rounded transition-colors ${isSelected ? 'text-green-600' : 'text-slate-300'}`}>
+                                          <Plus size={13} />
+                                        </div>
+                                      )}
+                                    </div>
+                                  </div>
+                                );
+                              };
+                              // Cap each tier separately so the divider always
+                              // shows when unqualified products exist — even
+                              // when qualified results are pushing the 50-row
+                              // soft cap.
+                              const qualifiedSlice = layerSearchResult.qualified.slice(0, 50);
+                              const unqualifiedSlice = layerSearchResult.unqualified.slice(0, 50);
+                              const showDivider = unqualifiedSlice.length > 0;
                               return (
-                                <div
-                                  key={prod.id}
-                                  className={`flex items-start gap-2.5 px-2.5 py-2 rounded-lg border cursor-pointer transition-all ${
-                                    alreadyAdded
-                                      ? 'bg-slate-50 border-slate-200 opacity-60 cursor-default'
-                                      : isSelected
-                                      ? 'bg-green-50 border-green-300 shadow-sm'
-                                      : 'bg-white border-transparent hover:bg-green-50/60 hover:border-green-200'
-                                  }`}
-                                  onClick={() => {
-                                    if (alreadyAdded) return;
-                                    setSelectedProductIds(prev =>
-                                      prev.includes(prod.id)
-                                        ? prev.filter(id => id !== prod.id)
-                                        : [...prev, prod.id]
-                                    );
-                                  }}
-                                >
-                                  {/* Checkbox */}
-                                  <div className="flex-shrink-0 mt-0.5">
-                                    {alreadyAdded ? (
-                                      <div className="w-4 h-4 rounded bg-slate-200 flex items-center justify-center">
-                                        <Check size={10} className="text-slate-400" />
-                                      </div>
-                                    ) : (
-                                      <input
-                                        type="checkbox"
-                                        checked={isSelected}
-                                        readOnly
-                                        className="w-4 h-4 accent-green-600 rounded"
-                                      />
-                                    )}
-                                  </div>
-
-                                  {/* Main content */}
-                                  <div className="flex-1 min-w-0">
-                                    <div className="flex items-center gap-1.5">
-                                      <span className={`text-sm font-medium truncate ${alreadyAdded ? 'text-slate-500' : 'text-slate-800'}`}>
-                                        {prod.name}
-                                      </span>
-                                      {alreadyAdded && (
-                                        <span className="flex-shrink-0 text-[10px] font-semibold px-1.5 py-0.5 bg-slate-200 text-slate-500 rounded-full">
-                                          In layer
-                                        </span>
-                                      )}
-                                    </div>
-                                    <div className="flex items-center gap-2 mt-0.5 flex-wrap">
-                                      {prod.stockCode && (
-                                        <span className="text-[10px] font-mono text-slate-400 bg-slate-100 px-1.5 py-0.5 rounded">
-                                          {prod.stockCode}
-                                        </span>
-                                      )}
-                                      {prod.supplier && (
-                                        <span className="text-[10px] text-slate-400 truncate">{prod.supplier}</span>
-                                      )}
-                                    </div>
-                                    {prod.description && (
-                                      <p className="text-[11px] text-slate-400 mt-0.5 line-clamp-1 italic">
-                                        {prod.description}
-                                      </p>
-                                    )}
-                                  </div>
-
-                                  {/* Actions */}
-                                  <div className="flex items-center gap-0.5 flex-shrink-0 mt-0.5">
-                                    <button
-                                      onClick={(e) => {
-                                        e.stopPropagation();
-                                        setDetailsProduct(prod);
-                                      }}
-                                      className="p-1.5 text-slate-300 hover:text-blue-500 hover:bg-blue-50 rounded-md transition-colors"
-                                      title="View product details"
+                                <>
+                                  {qualifiedSlice.map(p => renderRow(p, false))}
+                                  {showDivider && (
+                                    <div
+                                      className="flex items-center gap-2 my-2 px-1 select-none"
+                                      data-testid="unqualified-divider"
                                     >
-                                      <Info size={14} />
-                                    </button>
-                                    {!alreadyAdded && (
-                                      <div className={`p-1 rounded transition-colors ${isSelected ? 'text-green-600' : 'text-slate-300'}`}>
-                                        <Plus size={13} />
-                                      </div>
-                                    )}
-                                  </div>
-                                </div>
+                                      <div className="flex-1 h-px bg-slate-200" />
+                                      <span className="text-[10px] uppercase tracking-wide font-semibold text-slate-400">
+                                        Unqualified products — not yet tagged
+                                      </span>
+                                      <div className="flex-1 h-px bg-slate-200" />
+                                    </div>
+                                  )}
+                                  {unqualifiedSlice.map(p => renderRow(p, true))}
+                                  {qualifiedSlice.length === 0 && unqualifiedSlice.length === 0 && (
+                                    <div className="py-6 text-center text-sm text-slate-400">
+                                      No products match your search
+                                    </div>
+                                  )}
+                                </>
                               );
-                            })}
-                            {filteredProducts.length === 0 && (
-                              <div className="py-6 text-center text-sm text-slate-400">
-                                No products match your search
-                              </div>
-                            )}
+                            })()}
                           </div>
                         </div>
                       )}
@@ -3122,13 +3473,13 @@ const SystemBuilder: React.FC<SystemBuilderProps> = ({ products, onProductUpdate
                       try {
                         const created = await systemsApi.createSystem({
                           name: quickSetup.name.trim(),
-                          // The system header carries a single substrate.
-                          // If the user selected exactly one, persist it.
-                          // If they selected multiple, leave it null — the wizard
-                          // already used the multi-selection to filter Step 3
-                          // products, and the user can refine the system header
-                          // afterwards in the regular editor.
-                          systemSubstrate: quickSetup.substrate.length === 1 ? quickSetup.substrate[0] : null,
+                          // The system header now carries an ARRAY of
+                          // substrates, so we persist the wizard's full
+                          // multi-selection verbatim. Empty selection → null
+                          // ("any substrate"). The downstream filter applies
+                          // ANY-overlap, so persisting the multi-selection
+                          // matches the wizard's Step 3 product narrowing.
+                          systemSubstrate: quickSetup.substrate.length > 0 ? quickSetup.substrate : null,
                           systemHumidity: quickSetup.humidity || null,
                           systemDuty: quickSetup.duty || null,
                         } as any);
