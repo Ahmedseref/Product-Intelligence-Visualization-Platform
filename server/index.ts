@@ -15,6 +15,7 @@ import { registerDocumentRoutes } from "./documentRoutes";
 import { registerProformaRoutes } from "./proformaRoutes";
 import { registerCustomerRoutes } from "./customerRoutes";
 import { registerPrimerLibraryRoutes } from "./primerLibraryRoutes";
+import { runStartupMigrations } from "./schemaMigrations";
 
 const rootDir = process.cwd();
 
@@ -103,6 +104,10 @@ app.listen(PORT, "0.0.0.0", () => {
   // Initialize services in the background to avoid blocking startup
   setImmediate(async () => {
     try {
+      // Run schema fixups FIRST so anything below (bootstrap, seeds,
+      // backup probes) sees the corrected column types. Idempotent —
+      // safe to run on every boot.
+      await runStartupMigrations();
       await bootstrapAdminUser();
       await initializeBackupService();
       startScheduledBackups();
