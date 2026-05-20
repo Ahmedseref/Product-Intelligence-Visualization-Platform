@@ -539,6 +539,23 @@ const SystemBuilder: React.FC<SystemBuilderProps> = ({ products, onProductUpdate
     return () => { cancelled = true; };
   }, [selectedSystemId]);
 
+  // Set of product IDs that exist in the Primer Library (active rows only).
+  // Used by the Fixed-mode product picker to restrict the pool to library
+  // primers when the active slot is a primer slot — that way the user's
+  // curated Primer Library acts as the authoritative source for primer
+  // selection in BOTH adaptive and fixed modes. Empty Set means "library
+  // not loaded yet" — picker falls back to the full pool to avoid
+  // accidentally hiding everything during the initial load race.
+  const [primerLibraryProductIds, setPrimerLibraryProductIds] = useState<Set<string>>(new Set());
+  const refreshPrimerLibrary = useCallback(async () => {
+    try {
+      const rows: PrimerLibraryEntry[] = await primerLibraryApi.list();
+      setPrimerLibraryProductIds(new Set((rows || []).filter(r => r.isActive).map(r => r.productId)));
+    } catch (err) {
+      console.error('Failed to load primer library:', err);
+    }
+  }, []);
+
   // Load qualification tags for all system-ready products so the smart filter
   // can run client-side. Re-fetched whenever the selected system changes OR
   // the Quick Setup wizard opens — so a product that was just tagged in the
@@ -563,10 +580,10 @@ const SystemBuilder: React.FC<SystemBuilderProps> = ({ products, onProductUpdate
     let cancelled = false;
     (async () => {
       if (cancelled) return;
-      await refreshQualificationTags();
+      await Promise.all([refreshQualificationTags(), refreshPrimerLibrary()]);
     })();
     return () => { cancelled = true; };
-  }, [selectedSystemId, refreshQualificationTags]);
+  }, [selectedSystemId, refreshQualificationTags, refreshPrimerLibrary]);
 
   // Compute the effective substrate list to filter by, given precedence:
   //   layerSubstrateOverride > activeSectorContext override > systemSubstrate
@@ -1299,8 +1316,32 @@ const SystemBuilder: React.FC<SystemBuilderProps> = ({ products, onProductUpdate
     const empty: { qualified: typeof products; unqualified: typeof products; scores: Record<string, ScoreEntry> } =
       { qualified: products, unqualified: [], scores: {} };
 
-    // Step 1: text search filter (applies in both modes).
+    // Step 0: Primer Library source restriction.
+    // When the active slot is a primer slot AND the layer is in Fixed
+    // mode (the default), the user wants the picker to source from their
+    // curated Primer Library rather than the entire product catalogue.
+    // We treat the library as the authoritative list of "what counts as
+    // a primer". Showing all products here defeats the point of having
+    // the library tab.
+    //
+    // Bypassed when:
+    //   • the library hasn't loaded yet (size === 0) — avoids the picker
+    //     looking empty during the initial race;
+    //   • the user has "Show all" enabled — explicit opt-out;
+    //   • the slot isn't a primer slot;
+    //   • the layer is in adaptive mode (the AdaptivePrimerSlot UI takes
+    //     over and this picker isn't shown at all).
     let pool = products;
+    const sourceFromPrimerLibrary =
+      activeLayerPos === 'primer' &&
+      activeLayer?.layerMode !== 'adaptive' &&
+      primerLibraryProductIds.size > 0 &&
+      !showAllProductsInSearch;
+    if (sourceFromPrimerLibrary) {
+      pool = pool.filter(p => primerLibraryProductIds.has(p.id));
+    }
+
+    // Step 1: text search filter (applies in both modes).
     if (productSearch) {
       const parsed = parseSearchQuery(productSearch);
       pool = pool.filter((p) => {
@@ -1365,20 +1406,57 @@ const SystemBuilder: React.FC<SystemBuilderProps> = ({ products, onProductUpdate
 
       // --- Problem 3: strict layer position hard exclusion ---
       // Untagged (no layerPosition) products are exempt — they score lower
-      // but still appear so they're not silently hidden.
+      // but still appear so they're not silently hidden. Primer slots are
+      // strictest: anything not tagged 'primer' is excluded (including
+      // base_coat / intermediate / topcoat / standalone) — a primer slot
+      // must contain primers, full stop.
       if (activeLayerPos && tag?.layerPosition) {
         const pp = tag.layerPosition;
         if (activeLayerPos === 'primer') {
-          if (pp === 'topcoat' || pp === 'standalone') return true;
+          if (pp !== 'primer') return true;
         } else if (activeLayerPos === 'base_coat') {
-          if (pp === 'primer') return true;
+          if (pp === 'primer' || pp === 'topcoat') return true;
+        } else if (activeLayerPos === 'intermediate') {
+          if (pp === 'primer' || pp === 'topcoat') return true;
         } else if (activeLayerPos === 'topcoat') {
           if (pp === 'primer' || pp === 'base_coat') return true;
         }
-        // 'standalone' slot: no position exclusions.
-        // 'intermediate' slot: no strict exclusion (intermediate coats are
-        // flexible — the layered carve-out above already does the heavy
-        // lifting).
+        // 'standalone' slot: no position exclusions — standalone products
+        // are by nature versatile.
+      }
+
+      // --- Problem 4: humidity hard exclusion (asymmetric, 1-step tolerance) ---
+      // A product whose humidity tolerance demands MORE moisture than the
+      // system has is excluded. e.g. a "Damp (6-8%)" primer in a "Dry
+      // (0-4%)" system is rejected because applying a damp-cure primer to
+      // a dry substrate gives the wrong cure profile.
+      // Asymmetric on purpose — overspec (a dry-only primer in a damp
+      // system) IS still excluded too because it would fail to cure
+      // properly. 1-step tolerance keeps the rule from being too brittle
+      // when humidity readings sit on a vocab boundary.
+      if (tag?.humidityTolerance && sysHumidity) {
+        const order = [
+          'Dry (0-4%)',
+          'Slightly Damp (4-6%)',
+          'Damp (6-8%)',
+          'Wet (>8%)',
+          'Moisture-Tolerant',
+          'Damp-Surface',
+          'Underwater',
+        ];
+        const pi = order.indexOf(tag.humidityTolerance);
+        const si = order.indexOf(sysHumidity);
+        if (pi !== -1 && si !== -1 && Math.abs(pi - si) > 1) return true;
+      }
+
+      // --- Problem 5: duty rating hard exclusion (asymmetric — underspec only) ---
+      // A Light-duty product cannot serve in a Heavy-duty system. Overspec
+      // (Heavy product in a Light system) is fine and not excluded.
+      if (tag?.dutyRating && sysDuty) {
+        const dutyOrder = ['Light', 'Medium', 'Heavy', 'Industrial'];
+        const pi = dutyOrder.indexOf(tag.dutyRating);
+        const si = dutyOrder.indexOf(sysDuty);
+        if (pi !== -1 && si !== -1 && pi < si) return true;
       }
 
       return false;
