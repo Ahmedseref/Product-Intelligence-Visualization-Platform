@@ -1,0 +1,298 @@
+The layer product filter in the System Builder has a fundamental architectural problem: it uses scoring everywhere when it should use hard exclusion rules first, then scoring only for ranking. This causes wrong products to appear regardless of which parameter is mismatched. I need to replace the current filter logic with a single unified compatibility engine that handles ALL parameters consistently.
+
+Read the full layer product search logic, the scoring function, AdaptivePrimerSlot.tsx, the primer library resolve endpoint, and server/routes.ts before writing any code. Identify exactly where the current filter/score logic lives — it may be client-side, server-side, or split between both.
+
+---
+
+## Core architecture: 3-stage pipeline
+
+Replace all existing filter/score logic with this exact 3-stage pipeline. Build it as a single reusable function that is called identically for both:
+- The layer product search (fixed mode)
+- The primer library resolve endpoint (adaptive mode)
+
+```typescript
+// shared/compatibilityEngine.ts (or server/compatibilityEngine.ts if server-only)
+
+interface SystemContext {
+  systemType: string | null;          // "Epoxy" | "PU" | "Polyurea" | "Acrylic" | null
+  systemSubstrates: string[];         // ["Concrete", "Screed"] — JSONB array
+  systemHumidity: string | null;      // "Dry (0-4%)" | "Wet (>8%)" etc
+  systemDuty: string | null;          // "Light" | "Medium" | "Heavy" | "Industrial" | null
+  layerPosition: string | null;       // "primer" | "base_coat" | "topcoat" | "standalone" | null
+}
+
+interface ProductTags {
+  layer_position: string | null;
+  compatible_system_types: string[] | null;   // ["Epoxy", "PU"]
+  substrate_types: string[] | null;           // ["Concrete", "Steel"]
+  humidity_tolerance: string | null;          // "Dry (0-4%)"
+  duty_rating: string | null;                 // "Heavy"
+  is_system_ready: boolean;
+  confidence_overall: string | null;          // "HIGH" | "MEDIUM" | "LOW"
+}
+
+interface CompatibilityResult {
+  excluded: boolean;
+  exclusionReasons: string[];   // human-readable, shown in "Show all" conflict badge
+  score: number;
+  matchQuality: 'best' | 'good' | 'partial' | 'qualified' | 'unqualified';
+  scoreBreakdown: string[];     // for debugging tooltip on hover
+}
+
+function computeCompatibility(
+  tags: ProductTags | null,
+  context: SystemContext,
+  showAll: boolean
+): CompatibilityResult
+```
+
+---
+
+## Stage 1 — Hard exclusion rules
+
+A product is hard-excluded if ANY of these conditions is true.
+The universal null bypass: if EITHER side (product tag OR system parameter) is null/unset, that specific rule does NOT trigger exclusion.
+"Show all" bypasses all hard exclusions but still runs stages 2 and 3.
+
+### Rule 1: Layer position mismatch
+```typescript
+const POSITION_INCOMPATIBLE: Record<string, string[]> = {
+  'primer':     ['topcoat', 'standalone'],
+  'base_coat':  ['primer', 'topcoat'],
+  'intermediate': ['primer', 'topcoat'],
+  'topcoat':    ['primer', 'base_coat'],
+  'standalone': []  // standalone slots show everything
+};
+
+if (
+  tags?.layer_position &&           // product IS tagged
+  context.layerPosition &&           // slot has a position
+  context.layerPosition !== 'standalone' &&
+  POSITION_INCOMPATIBLE[context.layerPosition]?.includes(tags.layer_position)
+) {
+  exclude("Layer position: product is a [X], this slot is [Y]");
+}
+```
+
+### Rule 2: System type total mismatch
+```typescript
+if (
+  tags?.compatible_system_types?.length > 0 &&   // product IS tagged
+  context.systemType &&                             // system HAS a type
+  !tags.compatible_system_types.includes(context.systemType)
+) {
+  exclude("System type: product is for " + tags.compatible_system_types.join("/") + 
+          ", system is " + context.systemType);
+}
+```
+
+### Rule 3: Substrate zero overlap
+```typescript
+if (
+  tags?.substrate_types?.length > 0 &&        // product IS tagged
+  context.systemSubstrates?.length > 0 &&      // system HAS substrates
+  !tags.substrate_types.some(s => context.systemSubstrates.includes(s))
+) {
+  exclude("Substrate: product works on " + tags.substrate_types.join("/") + 
+          ", system needs " + context.systemSubstrates.join("/"));
+}
+```
+
+### Rule 4: Humidity incompatible (ordered scale)
+```typescript
+const HUMIDITY_ORDER = [
+  'Dry (0-4%)',
+  'Slightly Damp (4-6%)',
+  'Damp (6-8%)',
+  'Wet (>8%)',
+  'Moisture-Tolerant',
+  'Damp-Surface',
+  'Underwater'
+];
+
+if (tags?.humidity_tolerance && context.systemHumidity) {
+  const productIdx = HUMIDITY_ORDER.indexOf(tags.humidity_tolerance);
+  const systemIdx = HUMIDITY_ORDER.indexOf(context.systemHumidity);
+  
+  if (productIdx !== -1 && systemIdx !== -1) {
+    // Exclude if product requires MORE moisture than system has (by more than 1 step)
+    // e.g. product=Wet(idx 3), system=Dry(idx 0) → 3-0=3 > 1 → EXCLUDE
+    // e.g. product=Slightly Damp(idx 1), system=Dry(idx 0) → 1-0=1 = 1 → ALLOW (1 step tolerance)
+    if (productIdx - systemIdx > 1) {
+      exclude("Humidity: product needs " + tags.humidity_tolerance + 
+              ", system is " + context.systemHumidity);
+    }
+  }
+}
+```
+
+### Rule 5: Duty underspec (asymmetric — only exclude when product is TOO WEAK)
+```typescript
+const DUTY_ORDER = ['Light', 'Medium', 'Heavy', 'Industrial'];
+
+if (tags?.duty_rating && context.systemDuty) {
+  const productIdx = DUTY_ORDER.indexOf(tags.duty_rating);
+  const systemIdx = DUTY_ORDER.indexOf(context.systemDuty);
+  
+  if (productIdx !== -1 && systemIdx !== -1) {
+    // Exclude ONLY if product duty is LOWER than system requires (underspec = dangerous)
+    // e.g. product=Light(0), system=Heavy(2) → 0 < 2 → EXCLUDE
+    // e.g. product=Industrial(3), system=Medium(1) → 3 > 1 → ALLOW (overspec is fine)
+    if (productIdx < systemIdx) {
+      exclude("Duty: product is rated " + tags.duty_rating + 
+              ", system requires " + context.systemDuty + " minimum");
+    }
+  }
+}
+```
+
+---
+
+## Stage 2 — Scoring (runs on all non-excluded products)
+
+```typescript
+let score = 0;
+const breakdown: string[] = [];
+
+// Layer position
+if (tags?.layer_position === context.layerPosition) {
+  score += 4; breakdown.push('+4 layer position match');
+} else if (tags?.layer_position && context.layerPosition) {
+  score += 1; breakdown.push('+1 compatible position');
+}
+
+// System type
+if (context.systemType && tags?.compatible_system_types?.includes(context.systemType)) {
+  score += 3; breakdown.push('+3 system type match');
+}
+
+// Substrate overlap
+if (context.systemSubstrates?.length && tags?.substrate_types?.length) {
+  const overlap = tags.substrate_types.filter(s => 
+    context.systemSubstrates.includes(s)
+  ).length;
+  score += overlap * 2;
+  if (overlap > 0) breakdown.push(`+${overlap * 2} substrate overlap (${overlap} shared)`);
+}
+
+// Humidity
+if (tags?.humidity_tolerance && context.systemHumidity) {
+  const productIdx = HUMIDITY_ORDER.indexOf(tags.humidity_tolerance);
+  const systemIdx = HUMIDITY_ORDER.indexOf(context.systemHumidity);
+  if (productIdx === systemIdx) {
+    score += 2; breakdown.push('+2 humidity exact match');
+  } else if (Math.abs(productIdx - systemIdx) === 1) {
+    score += 1; breakdown.push('+1 humidity within 1 step');
+  }
+}
+
+// Duty
+if (tags?.duty_rating && context.systemDuty) {
+  const productIdx = DUTY_ORDER.indexOf(tags.duty_rating);
+  const systemIdx = DUTY_ORDER.indexOf(context.systemDuty);
+  if (productIdx === systemIdx) {
+    score += 2; breakdown.push('+2 duty exact match');
+  } else if (productIdx > systemIdx) {
+    score += 1; breakdown.push('+1 duty overspec (acceptable)');
+  }
+}
+
+// System ready and confidence
+if (tags?.is_system_ready) {
+  score += 3; breakdown.push('+3 system-ready');
+}
+if (tags?.confidence_overall === 'HIGH') {
+  score += 1; breakdown.push('+1 high confidence');
+} else if (tags?.confidence_overall === 'MEDIUM') {
+  score += 0;
+}
+
+// Untagged products get a flat score of 0 with no bonuses
+if (!tags) {
+  score = 0; breakdown.push('no qualification tags');
+}
+```
+
+---
+
+## Stage 3 — Match quality label
+
+```typescript
+function getMatchQuality(score: number, tags: ProductTags | null): MatchQuality {
+  if (!tags || !tags.is_system_ready) return 'unqualified';
+  if (score >= 10) return 'best';
+  if (score >= 6)  return 'good';
+  if (score >= 3)  return 'partial';
+  return 'qualified';
+}
+```
+
+Match quality visual in the product row (right side, before the + button):
+- 'best' → green dot + "Best match"
+- 'good' → blue dot + "Good match"
+- 'partial' → amber dot + "Partial match"
+- 'qualified' → gray dot + "Qualified"
+- 'unqualified' → no dot, product shown in muted text below the divider
+- excluded + showAll → red dot + "Conflict" with tooltip showing exclusionReasons
+
+---
+
+## What to change in the codebase
+
+### 1. Create the engine
+Create server/compatibilityEngine.ts (or shared/ if accessible from both client and server).
+Export: computeCompatibility, HUMIDITY_ORDER, DUTY_ORDER, POSITION_INCOMPATIBLE.
+
+### 2. Replace all existing filter/score logic
+Find every place in the codebase that currently filters or scores products for the layer search. This includes:
+- Any scoring function in the layer product search component
+- Any filter logic in the layer search API endpoint
+- The primer library resolve endpoint (GET /api/primer-library/resolve)
+- Any client-side filter in the AdaptivePrimerSlot component
+
+Replace ALL of them with calls to computeCompatibility. There must be only ONE place where compatibility is computed — in the engine. No duplicate logic anywhere.
+
+### 3. Fix adaptive primer slot parameter reading
+The adaptive slot must:
+- Read system parameters from props on every render — not from local state that may be stale
+- Re-call the resolve endpoint whenever systemSubstrates, systemHumidity, systemType, or systemDuty changes
+- Pass substrates as an array (handle both repeated query params and JSON)
+- Show resolved primers immediately if parameters are already set when the component mounts
+- Show the empty state ONLY if systemSubstrates is empty (length === 0) AND systemType is null
+
+The "2 matches" count in the layer header and the body content must use the same resolve result — compute once, use in both places.
+
+### 4. Fix "Show all" behavior
+When showAll is true:
+- Pass showAll = true into computeCompatibility
+- The engine skips all hard exclusions
+- Excluded products are shown with a red "Conflict" dot and a tooltip listing exclusionReasons
+- Scoring and sorting still apply — excluded products appear at the bottom (their score is set to -1 so they sort after all non-excluded products)
+- The product row for a conflicting product shows its name in red/muted text
+
+### 5. Sorting final output
+Sort order for the product list:
+1. Non-excluded products, sorted by score descending, then name ascending
+2. Divider: "Unqualified products — not yet tagged" (for products with no tags and is_system_ready = false)
+3. Excluded products (only when showAll = true), sorted by score descending with Conflict badges
+
+---
+
+## Rules
+- The computeCompatibility function must be pure — no database calls, no side effects
+- The function takes pre-loaded tags as a parameter — the caller is responsible for fetching tags
+- All 5 exclusion rules must be independently bypassable only by "Show all" — not by any other condition
+- The universal null rule is non-negotiable: if either side is null, that rule does not fire
+- Duty exclusion is asymmetric: underspec excludes, overspec does not
+- Humidity exclusion allows 1 step of tolerance (a slightly-damp primer in a dry system is fine)
+- Layer position exclusion for standalone slots is always empty — standalone shows everything
+- Run npm run db:push only if schema changes are needed (they should not be for this fix)
+- After implementation test ALL of the following:
+  1. Primer W 832 (humidity=Wet) → hard-excluded when system humidity=Dry, visible under Show all with "Conflict: Humidity" badge
+  2. Light-duty product → hard-excluded when system duty=Heavy, visible under Show all
+  3. Polyurea-only product → hard-excluded in Epoxy system, visible under Show all
+  4. Product with substrate=[Steel] → hard-excluded when system substrates=[Concrete, Screed], no overlap
+  5. Primer-tagged product → hard-excluded in Base Coat slot, visible under Show all
+  6. Untagged product → NEVER hard-excluded, appears in lower unqualified section
+  7. Adaptive slot → resolves primers correctly using same engine, updates when system parameters change
+  8. Existing systems with no parameters set → all products pass through (null bypass), sorted by score
