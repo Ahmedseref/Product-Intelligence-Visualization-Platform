@@ -1177,9 +1177,14 @@ export const primerLibraryApi = {
     if (!response.ok) throw new Error('Failed to fetch primer library');
     return response.json();
   },
-  resolve: async (filters?: { substrate?: string | null; humidity?: string | null; duty?: string | null; systemType?: string | null }) => {
+  resolve: async (filters?: { substrate?: string | string[] | null; humidity?: string | null; duty?: string | null; systemType?: string | null }) => {
     const params = new URLSearchParams();
-    if (filters?.substrate) params.set('substrate', filters.substrate);
+    // The server accepts a comma-separated list for multi-substrate systems.
+    // Single-string callers still work — they're emitted unchanged.
+    if (filters?.substrate) {
+      const sub = Array.isArray(filters.substrate) ? filters.substrate.filter(Boolean).join(',') : filters.substrate;
+      if (sub) params.set('substrate', sub);
+    }
     if (filters?.humidity) params.set('humidity', filters.humidity);
     if (filters?.duty) params.set('duty', filters.duty);
     if (filters?.systemType) params.set('systemType', filters.systemType);

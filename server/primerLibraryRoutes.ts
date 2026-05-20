@@ -10,6 +10,24 @@ import { primerLibrary, products } from "@shared/schema";
 import { eq, and, desc, sql } from "drizzle-orm";
 import { authMiddleware, requirePasswordChange } from "./authRoutes";
 import { refreshState } from "./refreshState";
+import {
+  isHardExcluded,
+  primerLibraryRowToTags,
+  type LayerPosition,
+} from "@shared/compatibilityEngine";
+
+// Accept substrate as either a single value (?substrate=Concrete) or a
+// comma-separated list (?substrate=Concrete,Steel). Returns an array;
+// empty array means "any substrate".
+function parseSubstrateParam(raw: unknown): string[] {
+  if (raw == null) return [];
+  if (Array.isArray(raw)) return raw.flatMap(v => parseSubstrateParam(v));
+  if (typeof raw !== "string") return [];
+  return raw
+    .split(",")
+    .map(s => s.trim())
+    .filter(Boolean);
+}
 
 // Find the next sequential PL-XXXX id by extracting the numeric suffix from
 // every existing primer_id and taking MAX+1. Falls back to 1 on first row.
@@ -86,18 +104,21 @@ export function registerPrimerLibraryRoutes(app: Express): void {
 
   // GET /api/primer-library/resolve
   // The hot endpoint: returns the primers that match the supplied system
-  // context. Sorted so exact humidity matches come first, then everything
-  // else that matches substrate/systemType. When a filter is omitted it
-  // does not constrain the result (so calling with no params returns all
-  // active primers, useful for previews while parameters are being chosen).
+  // context. Delegates the humidity/duty/substrate/position rules to the
+  // shared compatibility engine so the client-side product pickers and
+  // this server-side resolver stay in lock-step.
+  //
+  // `substrate` accepts a comma-separated list to support multi-substrate
+  // systems (e.g. ?substrate=Concrete,Steel). systemType is still applied
+  // here as a primer-library-specific filter against the row's
+  // compatibleSystemTypes array (the engine's family rule is taxonomy-
+  // derived and only meaningful client-side).
   app.get("/api/primer-library/resolve", async (req, res) => {
     try {
-      const { substrate, humidity, duty, systemType } = req.query as {
-        substrate?: string;
-        humidity?: string;
-        duty?: string;
-        systemType?: string;
-      };
+      const humidity = typeof req.query.humidity === "string" ? req.query.humidity : null;
+      const duty = typeof req.query.duty === "string" ? req.query.duty : null;
+      const systemType = typeof req.query.systemType === "string" ? req.query.systemType : null;
+      const substrates = parseSubstrateParam(req.query.substrate);
 
       const joined = await db
         .select({
@@ -112,16 +133,26 @@ export function registerPrimerLibraryRoutes(app: Express): void {
         productDescription: productDescription ?? null,
       }));
 
+      // Active layer position is always 'primer' for primer-library resolve,
+      // which makes the engine apply the primer-slot strictness automatically.
+      const ctx = {
+        systemType: systemType,
+        systemSubstrates: substrates,
+        systemHumidity: humidity,
+        systemDuty: duty,
+        activeLayerPosition: 'primer' as LayerPosition,
+      };
+
       const matched = rows.filter((r) => {
-        if (substrate && !(r.compatibleSubstrates || []).includes(substrate)) return false;
-        if (systemType && !(r.compatibleSystemTypes || []).includes(systemType)) return false;
-        // Duty is treated like substrate/systemType — a hard filter when
-        // provided. Rows with no dutyRating are kept (treated as universal)
-        // to stay consistent with the "no humidity = universal" pattern.
-        if (duty && r.dutyRating && r.dutyRating !== duty) return false;
-        // Humidity is intentionally NOT a hard filter — we still want to
-        // surface near-matches so the UI can show "alternatives". Exact
-        // matches are simply ranked first below.
+        // Primer-library-specific: hard filter on the row's declared
+        // system-type compatibility. Rows with no compatibleSystemTypes
+        // are treated as universal.
+        if (systemType && r.compatibleSystemTypes && r.compatibleSystemTypes.length > 0) {
+          if (!r.compatibleSystemTypes.includes(systemType)) return false;
+        }
+        // Engine handles substrate / humidity / duty exclusions uniformly.
+        const tags = primerLibraryRowToTags(r);
+        if (isHardExcluded(tags, ctx).excluded) return false;
         return true;
       });
 
@@ -132,14 +163,7 @@ export function registerPrimerLibraryRoutes(app: Express): void {
         return (a.productName || "").localeCompare(b.productName || "");
       });
 
-      // When humidity is provided, only return rows that actually match it
-      // OR have no humidity set (treated as universal). This prevents the
-      // "alternatives" leak from above polluting strict resolves.
-      const final = humidity
-        ? matched.filter((r) => !r.humidityTolerance || r.humidityTolerance === humidity)
-        : matched;
-
-      res.json(final);
+      res.json(matched);
     } catch (err) {
       console.error("Error resolving primer library:", err);
       res.status(500).json({ error: "Failed to resolve primer library" });

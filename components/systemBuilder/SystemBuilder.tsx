@@ -16,8 +16,15 @@ import SystemDashboard from './SystemDashboard';
 import SystemBuilderQualification from '../SystemBuilderQualification';
 import SystemBuilderPreview from '../SystemBuilderPreview';
 import PrimerLibrary from './PrimerLibrary';
-import AdaptivePrimerSlot from './AdaptivePrimerSlot';
 import { PrimerLibraryEntry } from '../../types';
+import {
+  isHardExcluded as engineIsHardExcluded,
+  scoreProduct as engineScoreProduct,
+  computeMatchLabel,
+  type ProductTags,
+  type MatchLabel,
+  type LayerPosition as EngineLayerPosition,
+} from '../../shared/compatibilityEngine';
 
 interface SystemBuilderProps {
   products: Product[];
@@ -113,24 +120,15 @@ const inferProductFamily = (haystack: string): SystemFamily | null => {
   return null;
 };
 
-// Score a product against the current system + layer context. Higher scores
-// rank earlier in the layer product search. The function MUST tolerate
-// missing tags — untagged products simply score 0 (no positive boosts) and
-// land at the bottom of the qualified tier (or, more commonly, in the
-// unqualified bucket which is never scored).
-//
-// Mirrors the scoring spec in the user's brief. `compatible_system_types`
-// and `confidence_overall` are NOT columns on product_qualification_tags
-// today, so those branches are intentionally derived from the taxonomy
-// (system family) and skipped (confidence) respectively rather than added
-// to the schema.
-type QualTag = {
-  substrateTypes?: string[] | null;
-  humidityTolerance?: string | null;
-  dutyRating?: string | null;
-  isSystemReady?: boolean | null;
-  layerPosition?: string | null;
-};
+// QualTag is the shape of a qualification-tag row used throughout this
+// component. Aliased to the shared engine's ProductTags so the engine can
+// consume it without translation. Score + match-label computation also
+// delegate to the engine — see shared/compatibilityEngine.ts.
+type QualTag = ProductTags;
+
+// Backwards-compat wrapper around the engine's positional API so the
+// existing call sites in layerSearchResult continue to type-check without
+// being rewritten. Both arities are equivalent.
 const scoreProduct = (
   tag: QualTag | undefined,
   productFamily: SystemFamily | null,
@@ -139,47 +137,14 @@ const scoreProduct = (
   systemSubstrates: string[],
   systemHumidity: string | null,
   systemDuty: string | null,
-): number => {
-  let score = 0;
-  // Layer position match — +4 only on an exact position hit. 'standalone'
-  // products are versatile so they get a partial +2 in any slot.
-  if (tag?.layerPosition && layerPosition && tag.layerPosition === layerPosition) score += 4;
-  else if (tag?.layerPosition === 'standalone') score += 2;
-  // System type / family match — taxonomy-derived because qualification tags
-  // don't carry compatible_system_types today. Mapping 'PU' ↔ 'PU' etc.
-  if (systemType && productFamily) {
-    const systemFamilyKey: SystemFamily | null =
-      systemType === 'Epoxy' ? 'Epoxy'
-      : systemType === 'PU' ? 'PU'
-      : systemType === 'Polyurea' ? 'Polyurea'
-      : systemType === 'Acrylic' ? 'Acrylic'
-      : null;
-    if (systemFamilyKey && productFamily === systemFamilyKey) score += 3;
-  }
-  // Substrate overlap — +2 per shared substrate. Untagged products get 0.
-  if (systemSubstrates.length > 0 && tag?.substrateTypes && tag.substrateTypes.length > 0) {
-    const overlap = tag.substrateTypes.filter(s => systemSubstrates.includes(s)).length;
-    score += overlap * 2;
-  }
-  if (systemHumidity && tag?.humidityTolerance === systemHumidity) score += 2;
-  if (tag?.isSystemReady === true) score += 3;
-  if (systemDuty && tag?.dutyRating === systemDuty) score += 1;
-  return score;
-};
-
-// Translate a numeric score into the user-visible match-quality label + dot
-// colour. Returns null when no dot should be shown (untagged / unqualified
-// + low score — the row is rendered in muted style instead). Tailwind
-// classes are used for the dot colour (no hex), in line with project
-// convention everywhere else.
-type MatchLabel = { label: string; dotClass: string };
-const computeMatchLabel = (score: number, isSystemReady: boolean): MatchLabel | null => {
-  if (score >= 10) return { label: 'Best match', dotClass: 'bg-emerald-500' };
-  if (score >= 6) return { label: 'Good match', dotClass: 'bg-blue-500' };
-  if (score >= 3) return { label: 'Partial match', dotClass: 'bg-amber-500' };
-  if (isSystemReady) return { label: 'Qualified', dotClass: 'bg-slate-400' };
-  return null;
-};
+): number => engineScoreProduct(tag, {
+  systemType,
+  systemSubstrates,
+  systemHumidity,
+  systemDuty,
+  activeLayerPosition: (layerPosition as EngineLayerPosition | null) ?? null,
+  productFamily,
+});
 
 // Normalize the (possibly-legacy) systemSubstrate value into a guaranteed
 // array of strings. Handles three on-the-wire shapes:
@@ -287,11 +252,6 @@ SpecNumberInput.displayName = 'SpecNumberInput';
 
 const SystemBuilder: React.FC<SystemBuilderProps> = ({ products, onProductUpdate, customFields, treeNodes, suppliers, usageAreas, units, colors, currentUser, onAddFieldDefinition, onAddTreeNode, onProductEdit }) => {
   const [activeTab, setActiveTab] = useState<TabMode>('builder');
-  // Map of layerId → resolved primer entries reported back by each
-  // AdaptivePrimerSlot. Used by Build-Up Preview and System Health to show
-  // the live "→ <resolved primer>" hint and detect coverage gaps without
-  // re-fetching from the right panel.
-  const [resolvedPrimersByLayer, setResolvedPrimersByLayer] = useState<Record<string, PrimerLibraryEntry[]>>({});
   const [systems, setSystems] = useState<SystemData[]>([]);
   const [selectedSystemId, setSelectedSystemId] = useState<string | null>(null);
   const [fullSystem, setFullSystem] = useState<SystemFull | null>(null);
@@ -320,14 +280,6 @@ const SystemBuilder: React.FC<SystemBuilderProps> = ({ products, onProductUpdate
     // be selected when several products match (e.g. a bonding primer + a
     // moisture-tolerant primer used together).
     primerProductIds: string[];
-    // Phase 5 — Primer Library link. When useAdaptivePrimer is true, the
-    // wizard creates the primer layer in **adaptive** mode (layerMode='adaptive')
-    // and the actual products are resolved at render time from the Primer
-    // Library based on the system's substrate/humidity/material type. The
-    // per-product picker (primerProductIds) is hidden in that mode.
-    // adaptivePrimerLibraryId optionally pins one library entry as the default.
-    useAdaptivePrimer: boolean;
-    adaptivePrimerLibraryId: string | null;
     // Step 3 layers: the post-primer layers (base coat, topcoat, etc). Primers
     // are intentionally NOT in this list — they live in primerProductIds. On
     // Create, each selected primer is prepended as its own layer in the order
@@ -394,45 +346,15 @@ const SystemBuilder: React.FC<SystemBuilderProps> = ({ products, onProductUpdate
     humidity: '',
     duty: '',
     primerProductIds: [],
-    useAdaptivePrimer: false,
-    adaptivePrimerLibraryId: null,
     layers: QUICK_SKELETONS.epoxy.map(n => ({ name: n, productId: null })),
   });
-  // (forward-declared so the Step 2 effect below can reference it via closure)
-  // Phase 5 — live preview of which Primer Library entries match the Step 1
-  // parameters. Refreshed whenever the user enters Step 2 (or those parameters
-  // change while on Step 2) so the adaptive panel always reflects the current
-  // intent. Empty array means "no library matches" → adaptive toggle is hidden.
-  const [quickPrimerMatches, setQuickPrimerMatches] = useState<Array<{
-    primerId: string; productId: string; productName: string; supplier: string | null;
-    compatibleSubstrates: string[]; humidityTolerance: string; compatibleSystemTypes: string[];
-  }>>([]);
-  // Map the wizard's lowercase materialType to the Primer Library's canonical
-  // system-type labels. Returns null for 'generic' so the resolve call doesn't
-  // filter by system type at all (any-material primers all qualify).
+  // Map the wizard's lowercase materialType to canonical system-type labels.
+  // Used as the engine's `systemType` context value in Step 3 so a PU-
+  // skeleton wizard surfaces only PU/Polyurethane products in each slot.
+  // 'generic' returns null so the engine doesn't filter by material at all.
   const QUICK_MATERIAL_TO_SYSTEM_TYPE: Record<QuickSetup['materialType'], string | null> = {
     epoxy: 'Epoxy', pu: 'PU', polyurea: 'Polyurea', acrylic: 'Acrylic', generic: null,
   };
-  // Phase 5 — whenever the user enters Step 2 (or the Step 1 parameters
-  // change while still on Step 2), re-resolve which Primer Library entries
-  // would qualify. Substrate is passed only when exactly one was selected —
-  // multi-substrate systems use an "any substrate" resolve so the user still
-  // sees a meaningful preview. Material type is INTENTIONALLY NOT applied
-  // here for the same reason as the legacy per-product picker (Step 2
-  // comment): an Epoxy primer under a PU base + topcoat is a common valid
-  // technique, and the wizard hasn't even asked for material type yet at
-  // this point — it's picked on Step 3. Filtering by it would silently hide
-  // perfectly valid library entries (e.g. a Polyurea-only primer when the
-  // wizard's default materialType is still 'epoxy').
-  useEffect(() => {
-    if (!quickSetupOpen || quickStep !== 2) return;
-    let cancelled = false;
-    const sub = quickSetup.substrate.length === 1 ? quickSetup.substrate[0] : null;
-    primerLibraryApi.resolve({ substrate: sub, humidity: quickSetup.humidity || null, duty: quickSetup.duty || null })
-      .then((rows) => { if (!cancelled) setQuickPrimerMatches(Array.isArray(rows) ? rows : []); })
-      .catch(() => { if (!cancelled) setQuickPrimerMatches([]); });
-    return () => { cancelled = true; };
-  }, [quickSetupOpen, quickStep, quickSetup.substrate, quickSetup.humidity, quickSetup.duty]);
   const [showAddLayer, setShowAddLayer] = useState(false);
   const [showAddProduct, setShowAddProduct] = useState<string | null>(null);
   const [selectedProductIds, setSelectedProductIds] = useState<string[]>([]);
@@ -800,18 +722,12 @@ const SystemBuilder: React.FC<SystemBuilderProps> = ({ products, onProductUpdate
           layer.dftMicrons != null ||
           layer.recoatMinHours != null ||
           layer.recoatMaxHours != null;
-        // Carry over adaptive primer slot config so duplicates serve the
-        // same conditions out of the box. Falls into the same updateLayer
-        // batch as the spec values to keep this to one network call.
-        const hasAdaptive = layer.layerMode === 'adaptive' || layer.defaultPrimerLibraryId;
-        if (hasSpec || hasAdaptive) {
+        if (hasSpec) {
           await systemsApi.updateLayer(newLayer.layerId, {
             consumptionRateKgM2: layer.consumptionRateKgM2 ?? null,
             dftMicrons: layer.dftMicrons ?? null,
             recoatMinHours: layer.recoatMinHours ?? null,
             recoatMaxHours: layer.recoatMaxHours ?? null,
-            layerMode: (layer.layerMode === 'adaptive' ? 'adaptive' : 'fixed'),
-            defaultPrimerLibraryId: layer.defaultPrimerLibraryId ?? null,
           });
         }
 
@@ -1047,28 +963,14 @@ const SystemBuilder: React.FC<SystemBuilderProps> = ({ products, onProductUpdate
         }
       }
     }
-    // A layer counts toward "default coverage" if it has either an
-    // explicit productOption flagged isDefault (fixed mode) or a pinned
-    // adaptive primer (defaultPrimerLibraryId set) that actually resolves.
-    const defaultCoverage = fullSystem.layers.filter(l => {
-      if (l.layerMode === 'adaptive') {
-        if (!l.defaultPrimerLibraryId) return false;
-        const r = resolvedPrimersByLayer[l.layerId] || [];
-        return r.some(x => x.primerId === l.defaultPrimerLibraryId);
-      }
-      return l.productOptions.some(o => o.isDefault);
-    }).length;
-    // Adaptive primer gap check — for every primer-position layer in
-    // adaptive mode, look up the resolved entries reported back by the
-    // child AdaptivePrimerSlot. A layer with zero resolved entries is a
-    // gap (the library has no primer for the system's parameters), which
-    // promotes the overall status to at least amber.
-    const adaptivePrimerLayers = fullSystem.layers.filter(l => l.layerMode === 'adaptive');
-    const adaptivePrimerGaps = adaptivePrimerLayers.filter(l => (resolvedPrimersByLayer[l.layerId]?.length ?? 0) === 0).length;
-    const baseStatus: 'green' | 'amber' | 'red' = conflictCount > 0 ? 'red' : (unqualifiedCount > 0 ? 'amber' : 'green');
-    const status: 'green' | 'amber' | 'red' = adaptivePrimerGaps > 0 && baseStatus === 'green' ? 'amber' : baseStatus;
-    return { conflictCount, unqualifiedCount, totalProducts, defaultCoverage, totalLayers: fullSystem.layers.length, firstConflictLayerId, status, adaptivePrimerLayers: adaptivePrimerLayers.length, adaptivePrimerGaps };
-  }, [fullSystem, getProductConflicts, resolvedPrimersByLayer]);
+    // A layer counts toward "default coverage" when at least one of its
+    // productOptions is flagged isDefault.
+    const defaultCoverage = fullSystem.layers.filter(l =>
+      l.productOptions.some(o => o.isDefault)
+    ).length;
+    const status: 'green' | 'amber' | 'red' = conflictCount > 0 ? 'red' : (unqualifiedCount > 0 ? 'amber' : 'green');
+    return { conflictCount, unqualifiedCount, totalProducts, defaultCoverage, totalLayers: fullSystem.layers.length, firstConflictLayerId, status, adaptivePrimerLayers: 0, adaptivePrimerGaps: 0 };
+  }, [fullSystem, getProductConflicts]);
 
   // For the build-up preview: per-layer aggregates of substrate compatibility,
   // duty agreement, and system-ready ratio. Returns null when no qualification
@@ -1317,24 +1219,15 @@ const SystemBuilder: React.FC<SystemBuilderProps> = ({ products, onProductUpdate
       { qualified: products, unqualified: [], scores: {} };
 
     // Step 0: Primer Library source restriction.
-    // When the active slot is a primer slot AND the layer is in Fixed
-    // mode (the default), the user wants the picker to source from their
-    // curated Primer Library rather than the entire product catalogue.
-    // We treat the library as the authoritative list of "what counts as
-    // a primer". Showing all products here defeats the point of having
-    // the library tab.
-    //
-    // Bypassed when:
-    //   • the library hasn't loaded yet (size === 0) — avoids the picker
-    //     looking empty during the initial race;
-    //   • the user has "Show all" enabled — explicit opt-out;
-    //   • the slot isn't a primer slot;
-    //   • the layer is in adaptive mode (the AdaptivePrimerSlot UI takes
-    //     over and this picker isn't shown at all).
+    // When the active slot is a primer slot, the user wants the picker to
+    // source from their curated Primer Library rather than the entire
+    // product catalogue. We treat the library as the authoritative list
+    // of "what counts as a primer". Bypassed when the library hasn't
+    // loaded yet, the user has "Show all" enabled, or the slot isn't a
+    // primer slot.
     let pool = products;
     const sourceFromPrimerLibrary =
       activeLayerPos === 'primer' &&
-      activeLayer?.layerMode !== 'adaptive' &&
       primerLibraryProductIds.size > 0 &&
       !showAllProductsInSearch;
     if (sourceFromPrimerLibrary) {
@@ -1365,101 +1258,22 @@ const SystemBuilder: React.FC<SystemBuilderProps> = ({ products, onProductUpdate
     // Helper: should we hard-exclude this product? Untagged products are
     // never hard-excluded — they go to the unqualified bucket instead
     // (per the spec, untagged products fall through to the scoring tier).
+    // All actual rules live in the shared compatibility engine so the
+    // server-side primer-library resolver and the two Quick Setup wizard
+    // pickers stay in lock-step with this picker.
     const isHardExcluded = (p: typeof products[number]): boolean => {
       if (showAll) return false;
       const tag = tagsByProduct[p.id];
       const haystack = productMaterialPath[p.id] || '';
       const productFamily = inferProductFamily(haystack);
-
-      // --- Problem 1: system type hard exclusion ---
-      // Bitumen / cement products are always excluded from typed systems.
-      if (productFamily === 'BitumenCement' && systemType) return true;
-      // Only hard-exclude when the product has qualification tags AND a
-      // taxonomy family that disagrees with the system type. Untagged
-      // products are exempt from this rule per spec.
-      if (systemType && tag && productFamily && productFamily !== systemType as SystemFamily) {
-        // Productive double-check: the spec says hard-exclude when the
-        // product is exclusively another family. Since we don't have
-        // compatible_system_types on the qualification tag, "exclusively"
-        // is judged by the taxonomy family alone — which is reliable when
-        // a tag exists (the product was qualified deliberately).
-        return true;
-      }
-
-      // --- Problem 2: substrate hard exclusion (ANY-overlap rule) ---
-      if (sysSubstrates.length > 0 && tag?.substrateTypes && tag.substrateTypes.length > 0) {
-        // Layered coats (base / intermediate / topcoat) often live "Over
-        // Primer" / "Over Base Coat" and should NOT be filtered against
-        // the system's structural substrate — they're not the layer
-        // touching the substrate. Preserves the long-standing layered
-        // carve-out so the multi-coat picker still works.
-        const subs = tag.substrateTypes;
-        const layeredOnly = subs.every(s => s === 'Over Primer' || s === 'Over Base Coat');
-        const layeredSlot = activeLayerPos === 'base_coat' || activeLayerPos === 'intermediate' || activeLayerPos === 'topcoat';
-        const layeredPos = tag.layerPosition === 'base_coat' || tag.layerPosition === 'intermediate' || tag.layerPosition === 'topcoat';
-        const isLayered = layeredOnly && (layeredPos || layeredSlot);
-        if (!isLayered) {
-          const overlap = subs.filter(s => sysSubstrates.includes(s)).length;
-          if (overlap === 0) return true;
-        }
-      }
-
-      // --- Problem 3: strict layer position hard exclusion ---
-      // Untagged (no layerPosition) products are exempt — they score lower
-      // but still appear so they're not silently hidden. Primer slots are
-      // strictest: anything not tagged 'primer' is excluded (including
-      // base_coat / intermediate / topcoat / standalone) — a primer slot
-      // must contain primers, full stop.
-      if (activeLayerPos && tag?.layerPosition) {
-        const pp = tag.layerPosition;
-        if (activeLayerPos === 'primer') {
-          if (pp !== 'primer') return true;
-        } else if (activeLayerPos === 'base_coat') {
-          if (pp === 'primer' || pp === 'topcoat') return true;
-        } else if (activeLayerPos === 'intermediate') {
-          if (pp === 'primer' || pp === 'topcoat') return true;
-        } else if (activeLayerPos === 'topcoat') {
-          if (pp === 'primer' || pp === 'base_coat') return true;
-        }
-        // 'standalone' slot: no position exclusions — standalone products
-        // are by nature versatile.
-      }
-
-      // --- Problem 4: humidity hard exclusion (asymmetric, 1-step tolerance) ---
-      // A product whose humidity tolerance demands MORE moisture than the
-      // system has is excluded. e.g. a "Damp (6-8%)" primer in a "Dry
-      // (0-4%)" system is rejected because applying a damp-cure primer to
-      // a dry substrate gives the wrong cure profile.
-      // Asymmetric on purpose — overspec (a dry-only primer in a damp
-      // system) IS still excluded too because it would fail to cure
-      // properly. 1-step tolerance keeps the rule from being too brittle
-      // when humidity readings sit on a vocab boundary.
-      if (tag?.humidityTolerance && sysHumidity) {
-        const order = [
-          'Dry (0-4%)',
-          'Slightly Damp (4-6%)',
-          'Damp (6-8%)',
-          'Wet (>8%)',
-          'Moisture-Tolerant',
-          'Damp-Surface',
-          'Underwater',
-        ];
-        const pi = order.indexOf(tag.humidityTolerance);
-        const si = order.indexOf(sysHumidity);
-        if (pi !== -1 && si !== -1 && Math.abs(pi - si) > 1) return true;
-      }
-
-      // --- Problem 5: duty rating hard exclusion (asymmetric — underspec only) ---
-      // A Light-duty product cannot serve in a Heavy-duty system. Overspec
-      // (Heavy product in a Light system) is fine and not excluded.
-      if (tag?.dutyRating && sysDuty) {
-        const dutyOrder = ['Light', 'Medium', 'Heavy', 'Industrial'];
-        const pi = dutyOrder.indexOf(tag.dutyRating);
-        const si = dutyOrder.indexOf(sysDuty);
-        if (pi !== -1 && si !== -1 && pi < si) return true;
-      }
-
-      return false;
+      return engineIsHardExcluded(tag, {
+        systemType,
+        systemSubstrates: sysSubstrates,
+        systemHumidity: sysHumidity,
+        systemDuty: sysDuty,
+        activeLayerPosition: (activeLayerPos as EngineLayerPosition | null) ?? null,
+        productFamily,
+      }).excluded;
     };
 
     // Step 2: split + hard-exclude.
@@ -1678,8 +1492,7 @@ const SystemBuilder: React.FC<SystemBuilderProps> = ({ products, onProductUpdate
                 onClick={() => {
                   // Phase 4: open Quick Setup wizard. Reset to a fresh state so
                   // it always starts on Step 1 with the default skeleton.
-                  setQuickSetup({ name: '', materialType: 'epoxy', substrate: [], humidity: '', duty: '', primerProductIds: [], useAdaptivePrimer: false, adaptivePrimerLibraryId: null, layers: QUICK_SKELETONS.epoxy.map(n => ({ name: n, productId: null })) });
-                  setQuickPrimerMatches([]);
+                  setQuickSetup({ name: '', materialType: 'epoxy', substrate: [], humidity: '', duty: '', primerProductIds: [], layers: QUICK_SKELETONS.epoxy.map(n => ({ name: n, productId: null })) });
                   setQuickStep(1);
                   setQuickSetupOpen(true);
                   // Pull the latest qualification tags so any product the user
@@ -2228,43 +2041,9 @@ const SystemBuilder: React.FC<SystemBuilderProps> = ({ products, onProductUpdate
                           <>
                             <span className="flex-1 text-sm font-semibold text-slate-700">{layer.layerName}</span>
                             {layer.notes && <span className="text-xs text-slate-400 truncate max-w-[200px]">{layer.notes}</span>}
-                            {/* In adaptive mode the layer's product list is
-                                resolved live from the Primer Library, so the
-                                badge mirrors how many primers actually
-                                resolve for the current system parameters
-                                (or "from group" when the user pinned one).
-                                In fixed mode it's the static product count. */}
-                            {layer.layerMode === 'adaptive' ? (
-                              (() => {
-                                const resolvedHere = resolvedPrimersByLayer[layer.layerId] || [];
-                                const pinned = layer.defaultPrimerLibraryId
-                                  ? resolvedHere.find(r => r.primerId === layer.defaultPrimerLibraryId)
-                                  : null;
-                                const label = pinned
-                                  ? `1 pinned · ${resolvedHere.length} match`
-                                  : resolvedHere.length === 0
-                                    ? 'no match'
-                                    : `${resolvedHere.length} match${resolvedHere.length === 1 ? '' : 'es'}`;
-                                return (
-                                  <span
-                                    className={`text-xs px-2 py-0.5 rounded-full font-medium ${
-                                      pinned
-                                        ? 'bg-amber-50 text-amber-700'
-                                        : resolvedHere.length === 0
-                                          ? 'bg-amber-50 text-amber-700'
-                                          : 'bg-indigo-50 text-indigo-700'
-                                    }`}
-                                    title="Adaptive layer — count of primers resolved from the Primer Library for this system's parameters"
-                                  >
-                                    {label}
-                                  </span>
-                                );
-                              })()
-                            ) : (
-                              <span className={`text-xs ${lc.countText} ${lc.countBg} px-2 py-0.5 rounded-full font-medium`}>
-                                {layer.productOptions.length} product{layer.productOptions.length !== 1 ? 's' : ''}
-                              </span>
-                            )}
+                            <span className={`text-xs ${lc.countText} ${lc.countBg} px-2 py-0.5 rounded-full font-medium`}>
+                              {layer.productOptions.length} product{layer.productOptions.length !== 1 ? 's' : ''}
+                            </span>
                             <button
                               onClick={() => {
                                 setEditingLayer(layer.layerId);
@@ -2353,78 +2132,7 @@ const SystemBuilder: React.FC<SystemBuilderProps> = ({ products, onProductUpdate
                         </label>
                       </div>
 
-                      {/* ── Adaptive primer toggle ──
-                          Only rendered for primer-position layers (name
-                          contains "primer"). Switching to "Adaptive" hides
-                          the manual product picker + product list below
-                          and renders the AdaptivePrimerSlot panel which
-                          resolves products from the Primer Library based
-                          on the system's parameters. */}
-                      {/* Always show the toggle when a layer is *currently*
-                          adaptive, even if its name no longer matches the
-                          primer regex — otherwise renaming a layer could
-                          strand it in adaptive mode with no UI to switch
-                          back to fixed and no product editing controls. */}
-                      {(isPrimerLayer(layer.layerName) || layer.layerMode === 'adaptive') && (
-                        <div className="px-3 py-1.5 bg-indigo-50/40 border-b border-indigo-100 flex items-center gap-2 text-[11px]">
-                          <Library size={12} className="text-indigo-600" />
-                          <span className="font-semibold text-indigo-700 uppercase tracking-wide text-[10px]">Primer mode</span>
-                          <div className="inline-flex rounded-md overflow-hidden border border-indigo-200" data-testid={`primer-mode-toggle-${layer.layerId}`}>
-                            <button
-                              type="button"
-                              onClick={() => systemsApi.updateLayer(layer.layerId, { layerMode: 'fixed', defaultPrimerLibraryId: null }).then(() => loadFullSystem(selectedSystemId!))}
-                              className={`px-2 py-0.5 text-[11px] font-medium ${(layer.layerMode || 'fixed') === 'fixed' ? 'bg-indigo-600 text-white' : 'bg-white text-slate-600 hover:bg-indigo-50'}`}
-                            >
-                              Fixed
-                            </button>
-                            <button
-                              type="button"
-                              onClick={() => systemsApi.updateLayer(layer.layerId, { layerMode: 'adaptive' }).then(() => loadFullSystem(selectedSystemId!))}
-                              className={`px-2 py-0.5 text-[11px] font-medium ${layer.layerMode === 'adaptive' ? 'bg-indigo-600 text-white' : 'bg-white text-slate-600 hover:bg-indigo-50'}`}
-                            >
-                              Adaptive
-                            </button>
-                          </div>
-                          <span className="text-[10px] text-slate-500 italic">
-                            {layer.layerMode === 'adaptive'
-                              ? 'Product resolved from Primer Library at spec time'
-                              : 'Manual product assignment'}
-                          </span>
-                        </div>
-                      )}
-
-                      {/* Adaptive primer slot panel — replaces the manual
-                          product UI below when this layer is in adaptive
-                          mode. The slot's resolve list is parameter-driven
-                          and updates live as the system header changes. */}
-                      {layer.layerMode === 'adaptive' && (
-                        <AdaptivePrimerSlot
-                          // AdaptivePrimerSlot still resolves against a single
-                          // substrate value (its API hasn't been widened).
-                          // When the system has exactly one substrate selected
-                          // we forward it; with multiple substrates we pass
-                          // null so the resolver returns the broadest match
-                          // set and the user can refine via the layer override.
-                          systemSubstrate={(() => {
-                            const arr = substratesAsArray(fullSystem.systemSubstrate as string[] | string | null | undefined);
-                            return arr.length === 1 ? arr[0] : null;
-                          })()}
-                          systemHumidity={fullSystem.systemHumidity}
-                          systemDuty={fullSystem.systemDuty}
-                          systemType={inferSystemType(fullSystem)}
-                          defaultPrimerLibraryId={layer.defaultPrimerLibraryId ?? null}
-                          onSetDefault={(primerId) =>
-                            systemsApi
-                              .updateLayer(layer.layerId, {
-                                defaultPrimerLibraryId: primerId,
-                              })
-                              .then(() => loadFullSystem(selectedSystemId!))
-                          }
-                          onResolved={(entries) => setResolvedPrimersByLayer(prev => ({ ...prev, [layer.layerId]: entries }))}
-                        />
-                      )}
-
-                      {showAddProduct === layer.layerId && layer.layerMode !== 'adaptive' && (
+                      {showAddProduct === layer.layerId && (
                         <div className="px-3 py-2 bg-white border-b border-slate-100 border-l-4 border-l-green-400">
                           {/* Smart filter banner — visible whenever the search panel is open
                               so the user can always see what's being filtered AND has a way
@@ -2643,7 +2351,6 @@ const SystemBuilder: React.FC<SystemBuilderProps> = ({ products, onProductUpdate
                         </div>
                       )}
 
-                      {layer.layerMode !== 'adaptive' && (
                       <div className="divide-y divide-indigo-50/50 px-2 py-1.5 space-y-0.5">
                         {layer.productOptions.map((opt) => {
                           const fullProd = products.find(p => p.id === opt.productId);
@@ -2778,7 +2485,6 @@ const SystemBuilder: React.FC<SystemBuilderProps> = ({ products, onProductUpdate
                           </div>
                         )}
                       </div>
-                      )}
                     </div>
                     );
                   })}
@@ -2819,35 +2525,13 @@ const SystemBuilder: React.FC<SystemBuilderProps> = ({ products, onProductUpdate
                 </div>
                 <div className="bg-white rounded-lg p-3 border border-slate-200">
                   <div className="text-2xl font-bold text-emerald-600">
-                    {fullSystem.layers.reduce((sum, l) => {
-                      // Adaptive layers don't have explicit productOptions —
-                      // their product list is the live primer-library
-                      // resolve. Count those instead so the summary
-                      // doesn't read 0 when the user has set up an
-                      // adaptive primer layer with a group pinned.
-                      if (l.layerMode === 'adaptive') {
-                        return sum + (resolvedPrimersByLayer[l.layerId]?.length ?? 0);
-                      }
-                      return sum + l.productOptions.length;
-                    }, 0)}
+                    {fullSystem.layers.reduce((sum, l) => sum + l.productOptions.length, 0)}
                   </div>
                   <div className="text-xs text-slate-500">Products</div>
                 </div>
                 <div className="bg-white rounded-lg p-3 border border-slate-200">
                   <div className="text-2xl font-bold text-amber-600">
-                    {fullSystem.layers.reduce((sum, l) => {
-                      // Adaptive layers contribute 1 default when a primer
-                      // is pinned AND that primer is in the live resolve
-                      // set (otherwise the pin is stale for these
-                      // parameters). Fixed layers count their isDefault
-                      // productOptions.
-                      if (l.layerMode === 'adaptive') {
-                        if (!l.defaultPrimerLibraryId) return sum;
-                        const r = resolvedPrimersByLayer[l.layerId] || [];
-                        return sum + (r.some(x => x.primerId === l.defaultPrimerLibraryId) ? 1 : 0);
-                      }
-                      return sum + l.productOptions.filter((o) => o.isDefault).length;
-                    }, 0)}
+                    {fullSystem.layers.reduce((sum, l) => sum + l.productOptions.filter((o) => o.isDefault).length, 0)}
                   </div>
                   <div className="text-xs text-slate-500">Defaults</div>
                 </div>
@@ -2881,44 +2565,7 @@ const SystemBuilder: React.FC<SystemBuilderProps> = ({ products, onProductUpdate
                               </span>
                               <span className="text-xs font-semibold text-slate-700">{layer.layerName}</span>
                             </div>
-                            {/* Adaptive primer layers render their resolved
-                                library entries instead of the manual product
-                                options. The pinned default (if set) is
-                                surfaced first; otherwise we show the count
-                                of resolved alternatives. A red "no primer"
-                                line fires when the library covers no primer
-                                for the current parameters. */}
-                            {layer.layerMode === 'adaptive' ? (
-                              (() => {
-                                const resolved = resolvedPrimersByLayer[layer.layerId] || [];
-                                const pinned = layer.defaultPrimerLibraryId
-                                  ? resolved.find(r => r.primerId === layer.defaultPrimerLibraryId)
-                                  : null;
-                                if (resolved.length === 0) {
-                                  return (
-                                    <div className="ml-7 mt-1 text-[11px] text-amber-700 flex items-center gap-1">
-                                      <AlertTriangle size={9} className="text-amber-600" />
-                                      Adaptive — no primer in library matches the system parameters
-                                    </div>
-                                  );
-                                }
-                                return (
-                                  <div className="ml-7 mt-1 space-y-0.5">
-                                    <div className="text-[11px] text-indigo-700 flex items-center gap-1">
-                                      <Library size={9} className="text-indigo-600" />
-                                      {pinned ? (
-                                        <>
-                                          <Star size={8} className="text-amber-500" fill="currentColor" />
-                                          {pinned.productName || pinned.productId}
-                                        </>
-                                      ) : (
-                                        <>Adaptive · {resolved.length} primer{resolved.length === 1 ? '' : 's'} resolve</>
-                                      )}
-                                    </div>
-                                  </div>
-                                );
-                              })()
-                            ) : defaultProducts.length > 0 ? (
+                            {defaultProducts.length > 0 ? (
                               <div className="ml-7 mt-1 space-y-0.5">
                                 {defaultProducts.map((dp) => (
                                   <div key={dp.optionId} className="text-[11px] text-slate-500 flex items-center gap-1">
@@ -2991,13 +2638,6 @@ const SystemBuilder: React.FC<SystemBuilderProps> = ({ products, onProductUpdate
                     <div className="text-[11px] text-slate-600">
                       {systemHealth.defaultCoverage} of {systemHealth.totalLayers} layer{systemHealth.totalLayers === 1 ? '' : 's'} have a default set
                     </div>
-                    {systemHealth.adaptivePrimerLayers > 0 && (
-                      <div className={`text-[11px] mt-1 ${systemHealth.adaptivePrimerGaps > 0 ? 'text-amber-700' : 'text-slate-600'}`}>
-                        {systemHealth.adaptivePrimerGaps > 0
-                          ? `${systemHealth.adaptivePrimerGaps} adaptive primer layer${systemHealth.adaptivePrimerGaps === 1 ? '' : 's'} unresolved — add primers to the library`
-                          : `${systemHealth.adaptivePrimerLayers} adaptive primer layer${systemHealth.adaptivePrimerLayers === 1 ? '' : 's'} resolved`}
-                      </div>
-                    )}
                   </div>
                 </div>
               )}
@@ -3236,90 +2876,11 @@ const SystemBuilder: React.FC<SystemBuilderProps> = ({ products, onProductUpdate
                     primerProductIds: cur.includes(id) ? cur.filter(x => x !== id) : [...cur, id],
                   });
                 };
-                const adaptiveAvailable = quickPrimerMatches.length > 0;
                 return (
                   <div className="space-y-3">
                     <p className="text-xs text-slate-500">
                       Pick one or more primers for this system. The list below is filtered by the parameters from Step&nbsp;1 — only system-ready products that look like primers (tagged or named) are shown. If you pick several, they all live on the <strong>same primer layer</strong> as alternatives — the first one you tick is the default, the others are swap-in options.
                     </p>
-                    {/* Phase 5 — Primer Library link. Show an "Adaptive (from
-                        Primer Library)" panel above the manual product list
-                        whenever any library entries match the Step 1 parameters.
-                        Toggling it on creates the primer layer in adaptive mode
-                        on Save — the per-product picker is hidden in that mode
-                        because the adaptive layer resolves products live. */}
-                    {adaptiveAvailable && (
-                      <div className={`border rounded-lg p-3 ${quickSetup.useAdaptivePrimer ? 'border-amber-300 bg-amber-50/40' : 'border-slate-200 bg-white'}`}>
-                        <label className="flex items-start gap-2 cursor-pointer">
-                          <input
-                            type="checkbox"
-                            checked={quickSetup.useAdaptivePrimer}
-                            onChange={(e) => setQuickSetup({
-                              ...quickSetup,
-                              useAdaptivePrimer: e.target.checked,
-                              // When switching to adaptive mode, clear the manual
-                              // primer picks so they don't sneak into the saved
-                              // layer alongside the adaptive resolution.
-                              primerProductIds: e.target.checked ? [] : quickSetup.primerProductIds,
-                              adaptivePrimerLibraryId: e.target.checked ? quickSetup.adaptivePrimerLibraryId : null,
-                            })}
-                            className="mt-0.5 w-3.5 h-3.5 accent-amber-600"
-                          />
-                          <div className="flex-1 min-w-0">
-                            <div className="flex items-center gap-2 flex-wrap">
-                              <span className="text-sm font-semibold text-slate-800">Use adaptive primer (from Primer Library)</span>
-                              <span className="px-1.5 py-0.5 text-[10px] rounded bg-amber-100 text-amber-700 border border-amber-200">{quickPrimerMatches.length} match{quickPrimerMatches.length === 1 ? '' : 'es'}</span>
-                              <span className="px-1.5 py-0.5 text-[10px] rounded bg-indigo-50 text-indigo-700 border border-indigo-100">recommended</span>
-                            </div>
-                            <p className="text-[11px] text-slate-500 mt-0.5">
-                              Resolves primers live from the Primer Library based on the system's substrate, humidity and material type. New products added to the library later automatically appear in this slot — no manual edit needed.
-                            </p>
-                          </div>
-                        </label>
-                        {quickSetup.useAdaptivePrimer && (
-                          <div className="mt-3 space-y-2">
-                            <div className="max-h-48 overflow-y-auto divide-y divide-amber-100 border border-amber-100 rounded bg-white">
-                              {quickPrimerMatches.map((m) => {
-                                const isDefault = quickSetup.adaptivePrimerLibraryId === m.primerId;
-                                return (
-                                  <label key={m.primerId} className={`flex items-start gap-2 px-2 py-1.5 text-sm cursor-pointer hover:bg-amber-50/40 ${isDefault ? 'bg-amber-50/60' : ''}`}>
-                                    <input
-                                      type="radio"
-                                      name="quick-adaptive-default"
-                                      checked={isDefault}
-                                      onChange={() => setQuickSetup({ ...quickSetup, adaptivePrimerLibraryId: m.primerId })}
-                                      className="mt-1 accent-amber-600"
-                                    />
-                                    <div className="flex-1 min-w-0">
-                                      <div className="flex items-center gap-2 flex-wrap">
-                                        <span className="text-slate-800 font-medium truncate">{m.productName}</span>
-                                        {m.supplier && <span className="text-[11px] text-slate-400">· {m.supplier}</span>}
-                                        {isDefault && <span className="px-1.5 py-0.5 text-[9px] rounded bg-emerald-50 text-emerald-700 border border-emerald-100">default</span>}
-                                      </div>
-                                      <div className="flex items-center gap-1 flex-wrap mt-0.5">
-                                        {(m.compatibleSubstrates || []).slice(0, 4).map(s => (
-                                          <span key={s} className="px-1.5 py-0.5 text-[9px] rounded bg-slate-100 text-slate-600">{s}</span>
-                                        ))}
-                                        {m.humidityTolerance && <span className="px-1.5 py-0.5 text-[9px] rounded bg-blue-50 text-blue-700">H: {m.humidityTolerance}</span>}
-                                      </div>
-                                    </div>
-                                  </label>
-                                );
-                              })}
-                            </div>
-                            <p className="text-[11px] text-amber-700">
-                              {quickSetup.adaptivePrimerLibraryId
-                                ? <>Default pinned. The other matches stay available as swap-in alternatives.</>
-                                : <>Pick a default (optional). If left unset, the first resolved entry will be used by default.</>}
-                            </p>
-                          </div>
-                        )}
-                      </div>
-                    )}
-                    {/* Manual per-product picker — hidden when adaptive mode
-                        is on, because the two modes are mutually exclusive on
-                        the same layer. */}
-                    {!quickSetup.useAdaptivePrimer && (
                     <div className="border border-slate-200 rounded-lg p-3">
                       <div className="flex items-center justify-between mb-2">
                         <div className="flex items-center gap-2">
@@ -3388,14 +2949,6 @@ const SystemBuilder: React.FC<SystemBuilderProps> = ({ products, onProductUpdate
                         </p>
                       )}
                     </div>
-                    )}
-                    {/* Footnote when adaptive mode is on — explains where the
-                        manual product picker went so the user isn't confused. */}
-                    {quickSetup.useAdaptivePrimer && (
-                      <p className="text-[11px] text-slate-500 italic">
-                        Manual product picker is hidden while adaptive mode is on. To pick specific primer products instead, untick the adaptive option above.
-                      </p>
-                    )}
                   </div>
                 );
               })()}
@@ -3422,9 +2975,6 @@ const SystemBuilder: React.FC<SystemBuilderProps> = ({ products, onProductUpdate
                     // Infer this slot's layer position from its name. Null = no
                     // per-slot filter (slot name is custom or ambiguous).
                     const slotPos = inferLayerPositionFromSlotName(slot.name);
-                    // Material-type filter — applied uniformly across all slots
-                    // so picking PU never lets an Epoxy primer through.
-                    const materialRegex = MATERIAL_KEYWORDS[quickSetup.materialType];
                     // Pretty label for the inferred-position pill.
                     const slotPosLabel = slotPos
                       ? slotPos === 'base_coat' ? 'Base Coat'
@@ -3433,50 +2983,34 @@ const SystemBuilder: React.FC<SystemBuilderProps> = ({ products, onProductUpdate
                         : slotPos === 'intermediate' ? 'Intermediate'
                         : 'Standalone'
                       : null;
-                    // Filter products that are system-ready and match the chosen parameters.
+                    // Material-type filter source: the wizard's lowercase
+                    // materialType → canonical system family. Passed into
+                    // the engine's `systemType` context so wrong-chemistry
+                    // products are excluded uniformly across every picker
+                    // (this wizard, Step 2, and the layer picker in the
+                    // main editor).
+                    const sysTypeForEngine = QUICK_MATERIAL_TO_SYSTEM_TYPE[quickSetup.materialType];
+                    // Filter products that are system-ready AND pass the
+                    // shared compatibility engine. The engine subsumes the
+                    // legacy substrate carve-out, layer-position rule, and
+                    // humidity/duty checks — the only wizard-specific
+                    // pre-filter remaining is "must be system-ready", which
+                    // keeps un-tagged products out of the Step 3 dropdowns
+                    // (they're still reachable via the main editor with
+                    // Show-All).
                     const matches = products.filter(p => {
                       const t = tagsByProduct[p.id];
                       if (!t || !t.isSystemReady) return false;
-                      // Substrate filter — the user's Step 1 substrate (e.g.
-                      // Concrete) describes what the SYSTEM sits on, which
-                      // really only constrains substrate-touching products
-                      // (primers and standalone). Layered products (base
-                      // coats / intermediates / topcoats) are always tagged
-                      // with internal substrates like 'Over Primer' / 'Over
-                      // Base Coat' — they sit on the primer the user picks
-                      // in Step 2, not on Concrete. So a product whose
-                      // substrate list is purely layered should always pass
-                      // the user's substrate filter; only products with at
-                      // least one "real" substrate need to match.
-                      if (quickSetup.substrate.length > 0) {
-                        const subs = t.substrateTypes || [];
-                        const layeredOnly = subs.length > 0 && subs.every(s => s === 'Over Primer' || s === 'Over Base Coat');
-                        // Belt-and-braces: only treat the product as "layered"
-                        // for substrate-bypass purposes when its layer_position
-                        // also confirms it (or the slot itself does). Prevents
-                        // a mis-tagged primer with substrate=['Over Primer']
-                        // from sneaking through the substrate gate.
-                        const layeredPos = t.layerPosition === 'base_coat' || t.layerPosition === 'intermediate' || t.layerPosition === 'topcoat';
-                        const layeredSlot = slotPos === 'base_coat' || slotPos === 'intermediate' || slotPos === 'topcoat';
-                        if (!(layeredOnly && (layeredPos || layeredSlot))
-                            && !subs.some(s => quickSetup.substrate.includes(s))) return false;
-                      }
-                      if (quickSetup.humidity && t.humidityTolerance && t.humidityTolerance !== quickSetup.humidity) return false;
-                      if (quickSetup.duty && t.dutyRating && t.dutyRating !== quickSetup.duty) return false;
-                      // Per-layer filter — only enforced when both the slot name
-                      // mapped to a known position AND the product was actually
-                      // tagged with one. 'standalone' products are versatile
-                      // enough to fit any slot, so they always pass.
-                      if (slotPos && t.layerPosition && t.layerPosition !== slotPos && t.layerPosition !== 'standalone') return false;
-                      // Material-type filter — keeps the suggestions chemistry-
-                      // correct. Picking PU must never surface Epoxy primers,
-                      // and vice versa. Match against the precomputed
-                      // taxonomy-path-plus-name string.
-                      if (materialRegex) {
-                        const haystack = productMaterialPath[p.id] || '';
-                        if (!materialRegex.test(haystack)) return false;
-                      }
-                      return true;
+                      const haystack = productMaterialPath[p.id] || '';
+                      const productFamily = inferProductFamily(haystack);
+                      return !engineIsHardExcluded(t, {
+                        systemType: sysTypeForEngine,
+                        systemSubstrates: quickSetup.substrate,
+                        systemHumidity: quickSetup.humidity || null,
+                        systemDuty: quickSetup.duty || null,
+                        activeLayerPosition: (slotPos as EngineLayerPosition | null) ?? null,
+                        productFamily,
+                      }).excluded;
                     });
                     return (
                       <div key={i} className="border border-slate-200 rounded-lg p-3">
@@ -3565,21 +3099,7 @@ const SystemBuilder: React.FC<SystemBuilderProps> = ({ products, onProductUpdate
                         // The first one ticked becomes the default; the rest
                         // are non-default alternatives the user can swap to.
                         let layerOrder = 1;
-                        // Phase 5 — when adaptive mode is on, create the
-                        // primer layer in 'adaptive' mode and skip product
-                        // options entirely. The layer resolves its products
-                        // live from the Primer Library at render time, with
-                        // adaptivePrimerLibraryId as the optional pinned
-                        // default. Otherwise fall back to the legacy fixed
-                        // mode where each picked product becomes an option.
-                        if (quickSetup.useAdaptivePrimer) {
-                          const primerLayer = await systemsApi.createLayer({ systemId: newId, layerName: 'Primer', orderSequence: layerOrder++ });
-                          const primerLayerId = (primerLayer as any).layerId || (primerLayer as any).id;
-                          await systemsApi.updateLayer(primerLayerId, {
-                            layerMode: 'adaptive',
-                            defaultPrimerLibraryId: quickSetup.adaptivePrimerLibraryId,
-                          });
-                        } else if (quickSetup.primerProductIds.length > 0) {
+                        if (quickSetup.primerProductIds.length > 0) {
                           const primerLayer = await systemsApi.createLayer({ systemId: newId, layerName: 'Primer', orderSequence: layerOrder++ });
                           const primerLayerId = (primerLayer as any).layerId || (primerLayer as any).id;
                           for (let i = 0; i < quickSetup.primerProductIds.length; i++) {
