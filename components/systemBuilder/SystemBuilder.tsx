@@ -469,10 +469,26 @@ const SystemBuilder: React.FC<SystemBuilderProps> = ({ products, onProductUpdate
   // not loaded yet" — picker falls back to the full pool to avoid
   // accidentally hiding everything during the initial load race.
   const [primerLibraryProductIds, setPrimerLibraryProductIds] = useState<Set<string>>(new Set());
+  // Authoritative tags from the Primer Library, keyed by productId. For the
+  // primer slot, we prefer these over product_qualification_tags so the
+  // smart-filter humidity/duty rules use the user-curated values from the
+  // library rather than potentially-stale qualification rows.
+  const [primerLibraryTagsByProduct, setPrimerLibraryTagsByProduct] = useState<Record<string, { humidityTolerance?: string | null; dutyRating?: string | null; substrateTypes?: string[] | null; layerPosition?: string | null }>>({});
   const refreshPrimerLibrary = useCallback(async () => {
     try {
       const rows: PrimerLibraryEntry[] = await primerLibraryApi.list();
-      setPrimerLibraryProductIds(new Set((rows || []).filter(r => r.isActive).map(r => r.productId)));
+      const active = (rows || []).filter(r => r.isActive);
+      setPrimerLibraryProductIds(new Set(active.map(r => r.productId)));
+      const tagMap: Record<string, { humidityTolerance?: string | null; dutyRating?: string | null; substrateTypes?: string[] | null; layerPosition?: string | null }> = {};
+      for (const r of active) {
+        tagMap[r.productId] = {
+          humidityTolerance: (r as any).humidityTolerance ?? null,
+          dutyRating: (r as any).dutyRating ?? null,
+          substrateTypes: (r as any).compatibleSubstrates ?? null,
+          layerPosition: (r as any).layerPosition ?? 'primer',
+        };
+      }
+      setPrimerLibraryTagsByProduct(tagMap);
     } catch (err) {
       console.error('Failed to load primer library:', err);
     }
@@ -1253,7 +1269,14 @@ const SystemBuilder: React.FC<SystemBuilderProps> = ({ products, onProductUpdate
     // pickers stay in lock-step with this picker.
     const isHardExcluded = (p: typeof products[number]): boolean => {
       if (showAll) return false;
-      const tag = tagsByProduct[p.id];
+      // For the primer slot, the Primer Library entry is the source of
+      // truth for humidity/duty/substrates — fall back to the general
+      // qualification tag only when no library row exists for this product.
+      const libTag = activeLayerPos === 'primer' ? primerLibraryTagsByProduct[p.id] : undefined;
+      const baseTag = tagsByProduct[p.id];
+      const tag = libTag
+        ? { ...(baseTag || {}), ...libTag, isSystemReady: true }
+        : baseTag;
       const haystack = productMaterialPath[p.id] || '';
       const productFamily = inferProductFamily(haystack);
       return engineIsHardExcluded(tag, {
@@ -1269,8 +1292,18 @@ const SystemBuilder: React.FC<SystemBuilderProps> = ({ products, onProductUpdate
     // Step 2: split + hard-exclude.
     const qualified: typeof products = [];
     const unqualified: typeof products = [];
+    // Resolve effective tag for a product: Primer-Library row wins for the
+    // primer slot (authoritative curated data), otherwise fall back to the
+    // shared product_qualification_tags row.
+    const effectiveTagFor = (pid: string) => {
+      const libTag = activeLayerPos === 'primer' ? primerLibraryTagsByProduct[pid] : undefined;
+      const baseTag = tagsByProduct[pid];
+      return libTag
+        ? { ...(baseTag || {}), ...libTag, isSystemReady: true }
+        : baseTag;
+    };
     for (const p of pool) {
-      const tag = tagsByProduct[p.id];
+      const tag = effectiveTagFor(p.id);
       const isReady = !!tag?.isSystemReady;
       if (isReady) {
         if (!isHardExcluded(p)) qualified.push(p);
@@ -1286,7 +1319,7 @@ const SystemBuilder: React.FC<SystemBuilderProps> = ({ products, onProductUpdate
     // bucket below the divider.
     const scores: Record<string, ScoreEntry> = {};
     for (const p of qualified) {
-      const tag = tagsByProduct[p.id];
+      const tag = effectiveTagFor(p.id);
       const haystack = productMaterialPath[p.id] || '';
       const productFamily = inferProductFamily(haystack);
       const score = scoreProduct(tag, productFamily, activeLayerPos, systemType, sysSubstrates, sysHumidity, sysDuty);
@@ -2840,16 +2873,35 @@ const SystemBuilder: React.FC<SystemBuilderProps> = ({ products, onProductUpdate
                   an Epoxy primer under a PU base + topcoat is a common,
                   perfectly valid technique, so we keep this step open. */}
               {quickStep === 2 && (() => {
+                // Quick Setup Step 2 — primer candidates. Mirrors the main
+                // layer picker: Primer-Library row is the authoritative tag
+                // source for humidity/duty/substrate (falling back to
+                // qualification tags), and exclusion uses the shared
+                // compatibility engine so wildcard ("Moisture-Tolerant"),
+                // dash normalization, and strict-bucket rules stay in
+                // lock-step with the main builder and the server resolver.
                 const primerCandidates = products.filter(p => {
-                  const t = tagsByProduct[p.id];
+                  const baseTag = tagsByProduct[p.id];
+                  const libTag = primerLibraryTagsByProduct[p.id];
+                  const t = libTag
+                    ? { ...(baseTag || {}), ...libTag, isSystemReady: true }
+                    : baseTag;
                   if (!t || !t.isSystemReady) return false;
-                  if (quickSetup.substrate.length > 0 && !(t.substrateTypes || []).some(s => quickSetup.substrate.includes(s))) return false;
-                  if (quickSetup.humidity && t.humidityTolerance && t.humidityTolerance !== quickSetup.humidity) return false;
-                  if (quickSetup.duty && t.dutyRating && t.dutyRating !== quickSetup.duty) return false;
-                  // "Looks like a primer" check.
+                  const haystack = productMaterialPath[p.id] || '';
+                  const excluded = engineIsHardExcluded(t, {
+                    systemType: QUICK_MATERIAL_TO_SYSTEM_TYPE[quickSetup.materialType] ?? null,
+                    systemSubstrates: quickSetup.substrate,
+                    systemHumidity: quickSetup.humidity || null,
+                    systemDuty: quickSetup.duty || null,
+                    activeLayerPosition: 'primer',
+                    productFamily: inferProductFamily(haystack),
+                  }).excluded;
+                  if (excluded) return false;
+                  // "Looks like a primer" check (still needed because the
+                  // engine doesn't filter by primer-ness on its own — it
+                  // assumes the caller already restricted the pool).
                   if (t.layerPosition === 'primer') return true;
                   if (!t.layerPosition) {
-                    const haystack = productMaterialPath[p.id] || '';
                     if (/\bprimer\b|\bbond(?:ing)?\b/.test(haystack)) return true;
                   }
                   return false;

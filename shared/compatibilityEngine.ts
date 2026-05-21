@@ -155,13 +155,17 @@ export function isHardExcluded(
     }
   }
 
-  // 5. Humidity — asymmetric ±1-step tolerance. Avoids brittle boundary
-  //    mismatches between e.g. "Damp (6-8%)" and "Wet (>8%)" while still
-  //    rejecting clearly-incompatible pairs like "Dry only" in "Underwater".
+  // 5. Humidity — strict bucket match. A primer tagged for one moisture
+  //    range is not interchangeable with another (a water-based primer
+  //    designed for "Slightly Damp (4-6%)" substrates is not appropriate
+  //    on a "Dry (0-4%)" floor and vice-versa). "Moisture-Tolerant" is
+  //    treated as a wildcard that fits any humidity bucket.
   if (tag?.humidityTolerance && systemHumidity) {
+    const tn = normalizeHumidity(tag.humidityTolerance);
+    const isWildcard = tn === 'Moisture-Tolerant';
     const pi = humidityIndex(tag.humidityTolerance);
     const si = humidityIndex(systemHumidity);
-    if (pi !== -1 && si !== -1 && Math.abs(pi - si) > 1) {
+    if (!isWildcard && pi !== -1 && si !== -1 && pi !== si) {
       return { excluded: true, reason: 'humidity' };
     }
   }
