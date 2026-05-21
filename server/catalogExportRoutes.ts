@@ -84,17 +84,20 @@ async function renderCrossSectionPng(
   const n = Math.max(layers.length, 1);
   const H = padY * 2 + titleH + n * bandH + (n - 1) * gap + 40; // +substrate band
 
-  // Render top→bottom: highest order first (reverse).
-  const ordered = [...layers].reverse();
+  // Render in layer-order: lowest order first → primer at the top of the
+  // diagram, topcoat at the bottom (matches "BUILD-UP (BOTTOM → TOP)" label).
+  const ordered = [...layers];
 
   const bands = ordered
     .map((l, i) => {
       const c = LAYER_COLORS[l.position] || LAYER_COLORS.unknown;
       const y = padY + titleH + i * (bandH + gap);
       const label = `${LAYER_COLORS[l.position]?.label || "Layer"} — ${escapeXml(l.layerName)}`;
+      // No stroke on the band — the colored accent bar on the left is
+      // enough structure; an outer stroke reads as a selection box in Word.
       return `
         <rect x="${padX}" y="${y}" width="${W - padX * 2}" height="${bandH}" rx="6" ry="6"
-              fill="#${c.fill}" stroke="#${c.accent}" stroke-width="1.5"/>
+              fill="#${c.fill}"/>
         <rect x="${padX}" y="${y}" width="6" height="${bandH}" rx="3" ry="3" fill="#${c.accent}"/>
         <text x="${padX + 16}" y="${y + bandH / 2 + 5}" font-family="Helvetica, Arial, sans-serif"
               font-size="13" font-weight="600" fill="#${c.text}">${label}</text>`;
@@ -106,7 +109,7 @@ async function renderCrossSectionPng(
 <svg xmlns="http://www.w3.org/2000/svg" width="${W}" height="${H}" viewBox="0 0 ${W} ${H}">
   <rect x="0" y="0" width="${W}" height="${H}" fill="#FFFFFF"/>
   <text x="${padX}" y="${padY + 14}" font-family="Helvetica, Arial, sans-serif"
-        font-size="12" font-weight="700" fill="#475569" letter-spacing="1">BUILD-UP (TOP → BOTTOM)</text>
+        font-size="12" font-weight="700" fill="#475569" letter-spacing="1">BUILD-UP (BOTTOM → TOP)</text>
   ${bands}
   <line x1="${padX}" y1="${substrateY}" x2="${W - padX}" y2="${substrateY}"
         stroke="#94A3B8" stroke-width="1" stroke-dasharray="4 3"/>
@@ -136,6 +139,24 @@ function heading(text: string, level: HeadingLevel, size = 28) {
     heading: level,
     children: [new TextRun({ text, bold: true, size })],
     spacing: { before: 200, after: 120 },
+  });
+}
+
+// Section sub-heading — neutral dark gray, slightly smaller, NO docx heading
+// style applied so Word doesn't auto-color it with the theme accent (which
+// reads as visual competition with the system title).
+function subheading(text: string) {
+  return new Paragraph({
+    spacing: { before: 200, after: 100 },
+    children: [
+      new TextRun({
+        text: text.toUpperCase(),
+        bold: true,
+        size: 18,
+        color: "475569",
+        characterSpacing: 30,
+      }),
+    ],
   });
 }
 
@@ -396,11 +417,19 @@ export function registerCatalogExportRoutes(app: Express): void {
           const leftChildren: any[] = [];
           const rightChildren: any[] = [];
 
+          // Only layers that actually have a product assigned should appear
+          // in the catalog — empty rows like "No products assigned" look
+          // like placeholder content to a customer reading the PDF.
+          const nonEmptyLayers = layers.filter((l: any) => {
+            const opts4 = optionsByLayer.get(l.layerId) || [];
+            return opts4.some((o: any) => o.productId);
+          });
+
           // LEFT — cross-section + parameters
           if (opts.includeCrossSection) {
-            leftChildren.push(heading("Build-up cross-section", HeadingLevel.HEADING_3, 22));
+            leftChildren.push(subheading("Build-up cross-section"));
             try {
-              const layerForSvg = layers.map((l: any) => ({ layerName: l.layerName, position: inferLayerPosition(l.layerName) }));
+              const layerForSvg = nonEmptyLayers.map((l: any) => ({ layerName: l.layerName, position: inferLayerPosition(l.layerName) }));
               if (layerForSvg.length === 0) {
                 leftChildren.push(plain("No layers defined", { italic: true, color: "94A3B8" }));
               } else {
@@ -423,7 +452,7 @@ export function registerCatalogExportRoutes(app: Express): void {
             }
           }
           if (opts.includeParameters) {
-            leftChildren.push(heading("System parameters", HeadingLevel.HEADING_3, 22));
+            leftChildren.push(subheading("System parameters"));
             const substrateVal = Array.isArray(s.systemSubstrate)
               ? (s.systemSubstrate.length ? s.systemSubstrate.join(", ") : "Not configured")
               : (s.systemSubstrate || "Not configured");
@@ -444,11 +473,11 @@ export function registerCatalogExportRoutes(app: Express): void {
 
           // RIGHT — layer products
           if (opts.includeProducts) {
-            rightChildren.push(heading("Layer products", HeadingLevel.HEADING_3, 22));
-            if (layers.length === 0) {
-              rightChildren.push(plain("No layers assigned", { italic: true, color: "94A3B8" }));
+            rightChildren.push(subheading("Layer products"));
+            if (nonEmptyLayers.length === 0) {
+              rightChildren.push(plain("Contact us for product recommendations.", { italic: true, color: "64748B", size: 20 }));
             }
-            for (const l of layers) {
+            for (const l of nonEmptyLayers) {
               const pos = inferLayerPosition(l.layerName);
               const c = LAYER_COLORS[pos];
               const opts4layer = optionsByLayer.get(l.layerId) || [];
