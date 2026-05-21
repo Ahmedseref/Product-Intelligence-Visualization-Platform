@@ -20,6 +20,10 @@ export type AiFillResult = {
   description: string;
   recommendation: string;
   warnings: string[];
+  // One sentence per array entry — rendered as a bulleted list in both the
+  // review panel and the modal body. Persisted to systems.typical_uses as
+  // newline-joined text.
+  usageAreas: string[];
   confidence: 'HIGH' | 'MEDIUM' | 'LOW';
   reasoning: string;
 };
@@ -28,6 +32,7 @@ export type AiFillCurrent = {
   description: string;
   recommendation: string;
   warnings: string[];
+  usageAreas: string[];
 };
 
 const CONFIDENCE_COLORS: Record<AiFillResult['confidence'], string> = {
@@ -52,11 +57,13 @@ export function SystemAIFillPanel(props: {
     description: proposed.description || '',
     recommendation: proposed.recommendation || '',
     warnings: [...(proposed.warnings || [])],
+    usageAreas: [...(proposed.usageAreas || [])],
   });
-  const [editing, setEditing] = useState<{ description: boolean; recommendation: boolean; warnings: boolean }>({
+  const [editing, setEditing] = useState<{ description: boolean; recommendation: boolean; warnings: boolean; usageAreas: boolean }>({
     description: false,
     recommendation: false,
     warnings: false,
+    usageAreas: false,
   });
 
   // Per-section "Use this" — copies the draft for that field up into the
@@ -136,6 +143,28 @@ export function SystemAIFillPanel(props: {
           onProposedChange={(v) => setDraft((d) => ({ ...d, recommendation: v }))}
           onUseThis={() => useField('recommendation')}
         />
+        {/* USAGE AREAS (full width) — one sentence per line */}
+        {(draft.usageAreas.length > 0 || current.usageAreas.length > 0) && (
+          <div className="md:col-span-2">
+            <ReviewBlock
+              label="Usage areas"
+              currentValue={current.usageAreas.length > 0 ? current.usageAreas.map((u) => `• ${u}`).join('\n') : '(none)'}
+              proposed={draft.usageAreas.map((u) => `• ${u}`).join('\n')}
+              editing={editing.usageAreas}
+              onEditToggle={() => setEditing((e) => ({ ...e, usageAreas: !e.usageAreas }))}
+              onProposedChange={(v) =>
+                setDraft((d) => ({
+                  ...d,
+                  usageAreas: v
+                    .split('\n')
+                    .map((line) => line.replace(/^[•\-\*]\s*/, '').trim())
+                    .filter(Boolean),
+                }))
+              }
+              onUseThis={() => useField('usageAreas')}
+            />
+          </div>
+        )}
         {/* WARNINGS (full width when present) */}
         {(draft.warnings.length > 0 || current.warnings.length > 0) && (
           <div className="md:col-span-2">

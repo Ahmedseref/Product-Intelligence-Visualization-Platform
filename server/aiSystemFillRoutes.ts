@@ -1,8 +1,8 @@
 // AI Fill route for systems.
 //
 // POST /api/systems/:systemId/ai-fill
-//   Body: { sections?: ('description' | 'recommendation' | 'warnings')[] }
-//   Returns: { description, recommendation, warnings, confidence, reasoning }
+//   Body: { sections?: ('description' | 'recommendation' | 'warnings' | 'usageAreas')[] }
+//   Returns: { description, recommendation, warnings, usageAreas, confidence, reasoning }
 //
 // Uses the Replit-managed OpenAI AI integration (billed to Replit credits,
 // no user API key needed) — the SDK is instantiated against
@@ -25,6 +25,11 @@ type AiFillResponse = {
   description: string;
   recommendation: string;
   warnings: string[];
+  // Usage areas: each entry is ONE standalone sentence describing where the
+  // system is typically used (e.g. "Suitable for pharmaceutical cleanrooms.").
+  // Rendered as a bullet list in the UI and persisted to `systems.typical_uses`
+  // as newline-joined text.
+  usageAreas: string[];
   confidence: "HIGH" | "MEDIUM" | "LOW";
   reasoning: string;
 };
@@ -140,7 +145,7 @@ the description. Key facts to reflect accurately:
 
 ## Your task
 
-Generate three things (only the requested sections matter — but always
+Generate the following (only the requested sections matter — but always
 return all keys, leaving non-requested ones as "" or []):
 
 Requested sections: ${sections.join(", ")}
@@ -163,27 +168,42 @@ Requested sections: ${sections.join(", ")}
    - Format: direct instruction, e.g. "Ensure concrete is cured for minimum
      28 days and surface RH is below 75% before priming."
 
-3. WARNINGS (array of short strings, optional — only include if genuinely
+3. USAGE AREAS (array of 2-5 short standalone sentences):
+   - Each entry is ONE complete sentence describing a typical use case,
+     environment, or sector where this system is suitable.
+   - Examples: "Suitable for pharmaceutical cleanrooms with hygienic
+     coving.", "Ideal for high-traffic warehouse floors exposed to forklift
+     wear.", "Specified for food and beverage production areas requiring
+     chemical resistance."
+   - Each sentence must stand on its own (no "It is also..." or
+     conjunctions referring to earlier entries).
+   - Base each one on the actual products, substrates and parameters
+     above — do not invent application areas.
+   - Return an empty array only if you genuinely cannot infer any use
+     case from the configuration.
+
+4. WARNINGS (array of short strings, optional — only include if genuinely
    relevant):
    - Technical cautions specific to this system.
    - Leave empty array if no specific warnings are needed.
    - Do NOT invent warnings — only flag genuine technical considerations
      based on the products and substrate configuration shown.
 
-4. CONFIDENCE:
+5. CONFIDENCE:
    - HIGH if the system has complete parameters and at least 2 layers with
      products assigned.
    - MEDIUM if parameters are partially configured or only 1 layer has
      products.
    - LOW if most parameters are "Not configured".
 
-5. REASONING (one sentence): Why you described it this way — which data
+6. REASONING (one sentence): Why you described it this way — which data
    points drove the content.
 
 Respond with ONLY valid JSON, no markdown:
 {
   "description": "string",
   "recommendation": "string",
+  "usageAreas": ["string", "string", ...],
   "warnings": ["string"],
   "confidence": "HIGH|MEDIUM|LOW",
   "reasoning": "string"
@@ -201,7 +221,7 @@ export function registerAiSystemFillRoutes(app: Express): void {
       const { systemId } = req.params;
       const requestedSections: string[] = Array.isArray(req.body?.sections) && req.body.sections.length > 0
         ? req.body.sections
-        : ["description", "recommendation", "warnings"];
+        : ["description", "recommendation", "warnings", "usageAreas"];
 
       // Fetch system + layers + default products + qualification tags in
       // a small handful of queries (one per concern, joined client-side).
@@ -343,6 +363,14 @@ export function registerAiSystemFillRoutes(app: Express): void {
         description: typeof parsed.description === "string" ? parsed.description : "",
         recommendation: typeof parsed.recommendation === "string" ? parsed.recommendation : "",
         warnings: Array.isArray(parsed.warnings) ? parsed.warnings.filter((w) => typeof w === "string") : [],
+        // Trim each sentence + drop empties so the UI never renders blank
+        // bullets even if the model returns "" entries in the array.
+        usageAreas: Array.isArray(parsed.usageAreas)
+          ? parsed.usageAreas
+              .filter((u) => typeof u === "string")
+              .map((u) => u.trim())
+              .filter(Boolean)
+          : [],
         confidence: ["HIGH", "MEDIUM", "LOW"].includes(String(parsed.confidence)) ? (parsed.confidence as AiFillResponse["confidence"]) : "LOW",
         reasoning: typeof parsed.reasoning === "string" ? parsed.reasoning : "",
       };

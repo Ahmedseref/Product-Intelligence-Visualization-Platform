@@ -925,18 +925,21 @@ export const systemsApi = {
   },
   aiFillSystem: async (
     systemId: string,
-    sections?: ('description' | 'recommendation' | 'warnings')[],
+    sections?: ('description' | 'recommendation' | 'warnings' | 'usageAreas')[],
   ): Promise<{
     description: string;
     recommendation: string;
     warnings: string[];
+    // 2–5 standalone sentences describing where the system is typically used.
+    // Persisted by the caller as newline-joined text in systems.typical_uses.
+    usageAreas: string[];
     confidence: 'HIGH' | 'MEDIUM' | 'LOW';
     reasoning: string;
   }> => {
     const response = await fetch(`${API_BASE}/systems/${systemId}/ai-fill`, {
       method: 'POST',
       headers: { ...getAuthHeaders(), 'Content-Type': 'application/json' },
-      body: JSON.stringify({ sections: sections || ['description', 'recommendation', 'warnings'] }),
+      body: JSON.stringify({ sections: sections || ['description', 'recommendation', 'warnings', 'usageAreas'] }),
     });
     if (!response.ok) {
       const err = await response.json().catch(() => ({}));

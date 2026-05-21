@@ -73,6 +73,10 @@ type SystemRow = {
   systemHumidity?: string | null;
   systemDuty?: string | null;
   previewNote?: string | null;
+  // Free-form "where this system is typically used" — stored newline-joined
+  // in systems.typical_uses. Read+split into sentences for display, edited
+  // via AI Fill (the UI doesn't expose a freeform text editor for it yet).
+  typicalUses?: string | null;
   // Installable-spec total dry-film thickness range (millimetres). Both
   // sides nullable so legacy systems and partially-spec'd systems remain
   // valid; the cross-section formatter uses fmtSpecRange to render only
@@ -623,7 +627,7 @@ export default function SystemBuilderPreview({ onEditInBuilder }: Props) {
   //   - recommendation + warnings are folded into the previewNote (warnings
   //     get a trailing "⚠ Warnings:" block) and pushed through the standard
   //     debounced save path so the saved-state UI stays consistent.
-  const applyAiFill = useCallback(async (next: { description: string; recommendation: string; warnings: string[] }) => {
+  const applyAiFill = useCallback(async (next: { description: string; recommendation: string; warnings: string[]; usageAreas: string[] }) => {
     if (!openSystem) return;
     // Pin the systemId at call time so any modal switch mid-await won't
     // cause us to commit this AI proposal into an unrelated system's
@@ -639,14 +643,21 @@ export default function SystemBuilderPreview({ onEditInBuilder }: Props) {
       next.warnings.length > 0 ? `⚠ Warnings:\n${next.warnings.map(w => `• ${w}`).join('\n')}` : '',
     ].filter(Boolean).join('\n\n');
 
+    // Usage areas: newline-join into the existing systems.typical_uses
+    // column so we don't need a schema migration. Splitting back happens
+    // on render (see openSystem.typicalUses → bullets in modal body).
+    const composedUses = (next.usageAreas || []).map(u => u.trim()).filter(Boolean).join('\n');
+
     const descChanged = next.description !== (openSystem.description || '');
     const noteChanged = composed !== noteText;
+    const usesChanged = composedUses !== (openSystem.typicalUses || '');
 
-    // Build a single PUT payload so description + previewNote land in one
-    // round-trip — both fields share the same /api/systems/:id endpoint.
+    // Build a single PUT payload so description + previewNote + typicalUses
+    // land in one round-trip — all share the /api/systems/:id endpoint.
     const payload: Record<string, string> = {};
     if (descChanged) payload.description = next.description;
     if (noteChanged) payload.previewNote = composed;
+    if (usesChanged) payload.typicalUses = composedUses;
 
     if (Object.keys(payload).length > 0) {
       // Cancel any debounced previewNote save in flight so it doesn't
@@ -664,12 +675,18 @@ export default function SystemBuilderPreview({ onEditInBuilder }: Props) {
         // and the row still belongs to this system regardless of which
         // modal is currently open).
         setSystems(prev => prev.map(s => s.systemId === targetId
-          ? { ...s, ...(descChanged ? { description: next.description } : {}), ...(noteChanged ? { previewNote: composed } : {}) }
+          ? { ...s,
+              ...(descChanged ? { description: next.description } : {}),
+              ...(noteChanged ? { previewNote: composed } : {}),
+              ...(usesChanged ? { typicalUses: composedUses } : {}) }
           : s));
         // Only mutate openSystem / noteText if the same system is still
         // open — guards against modal-switch races.
         setOpenSystem(prev => (prev && prev.systemId === targetId)
-          ? { ...prev, ...(descChanged ? { description: next.description } : {}), ...(noteChanged ? { previewNote: composed } : {}) }
+          ? { ...prev,
+              ...(descChanged ? { description: next.description } : {}),
+              ...(noteChanged ? { previewNote: composed } : {}),
+              ...(usesChanged ? { typicalUses: composedUses } : {}) }
           : prev);
         setOpenSystemId(currentId => {
           if (currentId === targetId && noteChanged) setNoteText(composed);
@@ -2043,6 +2060,40 @@ export default function SystemBuilderPreview({ onEditInBuilder }: Props) {
                         })}
                       </div>
 
+                      {/* Usage areas — one sentence per bullet. Sourced from
+                          systems.typical_uses (newline-joined). Read-only here;
+                          AI Fill writes to it. */}
+                      {(() => {
+                        const uses = (openSystem.typicalUses || '')
+                          .split('\n').map(s => s.trim()).filter(Boolean);
+                        if (uses.length === 0) return null;
+                        return (
+                          <div className="mt-5 p-3 bg-sky-50 border border-sky-200 rounded-xl">
+                            <div className="flex items-center justify-between mb-1.5">
+                              <span className="text-xs font-semibold text-sky-700 uppercase tracking-wide">
+                                Usage areas
+                              </span>
+                              <AiFillButton
+                                onClick={() => runAiFill(openSystem.systemId)}
+                                loading={aiLoading}
+                                size="sm"
+                                variant="ghost"
+                                label="AI"
+                                title="Generate AI usage areas"
+                              />
+                            </div>
+                            <ul className="text-sm text-slate-700 space-y-1">
+                              {uses.map((u, i) => (
+                                <li key={i} className="flex gap-2">
+                                  <span className="text-sky-500 mt-0.5">•</span>
+                                  <span>{u}</span>
+                                </li>
+                              ))}
+                            </ul>
+                          </div>
+                        );
+                      })()}
+
                       {/* Recommendation / preview_note */}
                       <div className="mt-5 p-3 bg-emerald-50 border border-emerald-200 rounded-xl">
                         <div className="flex items-center justify-between mb-1">
@@ -2080,6 +2131,10 @@ export default function SystemBuilderPreview({ onEditInBuilder }: Props) {
                         description: openSystem.description || '',
                         recommendation: noteText,
                         warnings: [],
+                        usageAreas: (openSystem.typicalUses || '')
+                          .split('\n')
+                          .map(s => s.trim())
+                          .filter(Boolean),
                       }}
                       proposed={aiProposal}
                       onApply={applyAiFill}
