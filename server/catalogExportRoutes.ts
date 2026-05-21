@@ -417,19 +417,14 @@ export function registerCatalogExportRoutes(app: Express): void {
           const leftChildren: any[] = [];
           const rightChildren: any[] = [];
 
-          // Only layers that actually have a product assigned should appear
-          // in the catalog — empty rows like "No products assigned" look
-          // like placeholder content to a customer reading the PDF.
-          const nonEmptyLayers = layers.filter((l: any) => {
-            const opts4 = optionsByLayer.get(l.layerId) || [];
-            return opts4.some((o: any) => o.productId);
-          });
-
           // LEFT — cross-section + parameters
           if (opts.includeCrossSection) {
             leftChildren.push(subheading("Build-up cross-section"));
             try {
-              const layerForSvg = nonEmptyLayers.map((l: any) => ({ layerName: l.layerName, position: inferLayerPosition(l.layerName) }));
+              // Always render every defined layer — the diagram represents
+              // the system's build-up structure, independent of which
+              // layers happen to have products assigned yet.
+              const layerForSvg = layers.map((l: any) => ({ layerName: l.layerName, position: inferLayerPosition(l.layerName) }));
               if (layerForSvg.length === 0) {
                 leftChildren.push(plain("No layers defined", { italic: true, color: "94A3B8" }));
               } else {
@@ -471,13 +466,15 @@ export function registerCatalogExportRoutes(app: Express): void {
             );
           }
 
-          // RIGHT — layer products
+          // RIGHT — layer products. Walk every layer so the catalog
+          // structurally mirrors the cross-section on the left; layers
+          // without an assigned product get a friendly placeholder.
           if (opts.includeProducts) {
             rightChildren.push(subheading("Layer products"));
-            if (nonEmptyLayers.length === 0) {
-              rightChildren.push(plain("Contact us for product recommendations.", { italic: true, color: "64748B", size: 20 }));
+            if (layers.length === 0) {
+              rightChildren.push(plain("No layers defined.", { italic: true, color: "94A3B8", size: 20 }));
             }
-            for (const l of nonEmptyLayers) {
+            for (const l of layers) {
               const pos = inferLayerPosition(l.layerName);
               const c = LAYER_COLORS[pos];
               const opts4layer = optionsByLayer.get(l.layerId) || [];
@@ -512,7 +509,7 @@ export function registerCatalogExportRoutes(app: Express): void {
               rightChildren.push(headerTable);
 
               if (!def) {
-                rightChildren.push(plain("  No products assigned", { italic: true, color: "94A3B8", size: 18 }));
+                rightChildren.push(plain("Contact us for product recommendation.", { italic: true, color: "64748B", size: 18 }));
               } else {
                 const prod = productById.get(def.productId) || {};
                 const supplier = prod.supplier || prod.brand || "";
