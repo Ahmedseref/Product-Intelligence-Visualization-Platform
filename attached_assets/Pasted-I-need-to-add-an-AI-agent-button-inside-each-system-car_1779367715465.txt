@@ -1,0 +1,56 @@
+I need to add an AI agent button inside each system card in the System Preview tab. 
+The agent reads all available data from that system and generates missing content: 
+description, recommendation, and a suggested preview note. It uses the system's 
+own data plus knowledge of PPG and Sika system architectures.
+
+Read SystemBuilderPreview.tsx, the systems API, and the existing AI suggestion 
+endpoint (POST /api/systems/ai-suggest) before writing any code. The agent uses 
+the same Anthropic API pattern already established in the codebase.
+
+---
+
+## Where the button lives
+
+In the system detail modal (the expanded card view — the one showing 
+Build-up, Layer Products, System Parameters, and Recommendation), 
+add a small "AI Fill" button with a Lucide Sparkles icon.
+
+Place it in two locations:
+1. Next to the system name in the modal header — a small secondary button 
+   labelled "✦ AI Fill" 
+2. Inside the Recommendation textarea — a small "Generate" button in the 
+   bottom-right corner of the textarea (only visible when recommendation is empty)
+
+---
+
+## New server endpoint
+
+POST /api/systems/:id/ai-fill
+
+This endpoint:
+1. Fetches the full system record including all layers, products, 
+   qualification tags, and system parameters
+2. Fetches ALL other systems in the database as reference context 
+   (names and descriptions only — to help with tone consistency)
+3. Calls the Anthropic API with the prompt below
+4. Returns the generated content — does NOT auto-save anything
+5. The user reviews and clicks Save explicitly
+
+Request body:
+{
+  sections: ['description', 'recommendation', 'warnings']
+  // user can request specific sections or all
+}
+
+Response:
+{
+  description: string,        // 2-4 sentences, customer-facing
+  recommendation: string,     // 1-3 sentences, technical tip
+  warnings: string[],         // optional cautions
+  confidence: 'HIGH' | 'MEDIUM' | 'LOW',
+  reasoning: string           // why the agent wrote what it wrote
+}
+
+---
+
+## The AI prompt (build as a function buildSystemFillPrompt)
