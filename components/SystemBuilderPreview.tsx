@@ -325,6 +325,12 @@ export default function SystemBuilderPreview({ onEditInBuilder }: Props) {
   const [noteSaving, setNoteSaving] = useState(false);
   const noteSaveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
+  // Inline usage-areas editor — newline-separated sentences, debounced
+  // autosave to systems.typical_uses (mirrors the preview-note pattern).
+  const [usesText, setUsesText] = useState<string>('');
+  const [usesSaving, setUsesSaving] = useState(false);
+  const usesSaveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
   // ---------- AI Fill state ----------
   // Per-system proposal currently under review in the modal. `null` means
   // no proposal has been generated (or it was discarded). When set, the
@@ -516,6 +522,12 @@ export default function SystemBuilderPreview({ onEditInBuilder }: Props) {
       }
       setActiveOptionByLayer(initActive);
       setNoteText(full.previewNote || '');
+      // Initialise the usage-areas editor from the loaded system. The
+      // last-saved ref tracks what's on the server so the dirty flag
+      // flips only on real user input.
+      setUsesText(full.typicalUses || '');
+      usesDirtyRef.current = false;
+      usesLastSavedRef.current = full.typicalUses || '';
       // If a batch run has already produced a proposal for this system,
       // surface it immediately when the user opens the modal.
       setAiError(null);
@@ -689,7 +701,18 @@ export default function SystemBuilderPreview({ onEditInBuilder }: Props) {
               ...(usesChanged ? { typicalUses: composedUses } : {}) }
           : prev);
         setOpenSystemId(currentId => {
-          if (currentId === targetId && noteChanged) setNoteText(composed);
+          if (currentId === targetId) {
+            if (noteChanged) setNoteText(composed);
+            // Mirror the saved usage areas into the inline editor so the
+            // textarea reflects what was just persisted (and clears the
+            // dirty flag, otherwise the next debounce flush would re-PUT
+            // the same value).
+            if (usesChanged) {
+              setUsesText(composedUses);
+              usesDirtyRef.current = false;
+              usesLastSavedRef.current = composedUses;
+            }
+          }
           return currentId;
         });
       } catch (e) {
@@ -750,6 +773,7 @@ export default function SystemBuilderPreview({ onEditInBuilder }: Props) {
     // complete in the background and the user will see the saved value next
     // time they open this system.
     void flushNoteSave();
+    void flushUsesSave();
     // Clear any in-flight AI panel state so re-opening another system starts
     // fresh. The batch queue is intentionally kept around so the user can
     // continue reviewing other proposals.
@@ -784,6 +808,52 @@ export default function SystemBuilderPreview({ onEditInBuilder }: Props) {
       }
     }, 600);
   }, [openSystem, noteText]);
+
+  // ---------- typical_uses (Usage Areas) debounced autosave ----------
+  // Mirrors the preview_note pattern: a dirty ref + last-saved ref so the
+  // close path can flush a pending save, and a debounce timer so the
+  // server isn't hammered while the user is typing.
+  const usesDirtyRef = useRef(false);
+  const usesLastSavedRef = useRef<string>('');
+
+  const flushUsesSave = useCallback(async () => {
+    if (usesSaveTimer.current) { clearTimeout(usesSaveTimer.current); usesSaveTimer.current = null; }
+    if (!usesDirtyRef.current || !openSystem) return;
+    const v = usesText;
+    setUsesSaving(true);
+    try {
+      await systemsApi.updateSystem(openSystem.systemId, { typicalUses: v });
+      usesDirtyRef.current = false;
+      usesLastSavedRef.current = v;
+      setSystems(prev => prev.map(s => s.systemId === openSystem.systemId ? { ...s, typicalUses: v } : s));
+      setOpenSystem(prev => prev ? { ...prev, typicalUses: v } : prev);
+    } catch (e) {
+      console.error('typical_uses save failed:', e);
+    } finally {
+      setUsesSaving(false);
+    }
+  }, [openSystem, usesText]);
+
+  const onUsesChange = useCallback((v: string) => {
+    setUsesText(v);
+    usesDirtyRef.current = (v !== usesLastSavedRef.current);
+    if (!openSystem) return;
+    if (usesSaveTimer.current) clearTimeout(usesSaveTimer.current);
+    usesSaveTimer.current = setTimeout(async () => {
+      setUsesSaving(true);
+      try {
+        await systemsApi.updateSystem(openSystem.systemId, { typicalUses: v });
+        usesDirtyRef.current = (v !== usesText);
+        usesLastSavedRef.current = v;
+        setSystems(prev => prev.map(s => s.systemId === openSystem.systemId ? { ...s, typicalUses: v } : s));
+        setOpenSystem(prev => prev ? { ...prev, typicalUses: v } : prev);
+      } catch (e) {
+        console.error('typical_uses save failed:', e);
+      } finally {
+        setUsesSaving(false);
+      }
+    }, 600);
+  }, [openSystem, usesText]);
 
   // ---------- "Make default" inline action ----------
   // Promotes the currently-active alternative to the layer's default product
@@ -932,6 +1002,7 @@ export default function SystemBuilderPreview({ onEditInBuilder }: Props) {
   // an unmounted component (works in React 18, but it's still leak-y).
   useEffect(() => () => {
     if (noteSaveTimer.current) clearTimeout(noteSaveTimer.current);
+    if (usesSaveTimer.current) clearTimeout(usesSaveTimer.current);
     if (compareHintTimer.current) clearTimeout(compareHintTimer.current);
     if (exportToastTimer.current) clearTimeout(exportToastTimer.current);
   }, []);
@@ -2071,45 +2142,35 @@ export default function SystemBuilderPreview({ onEditInBuilder }: Props) {
                         })}
                       </div>
 
-                      {/* Usage areas — one sentence per bullet. Sourced from
-                          systems.typical_uses (newline-joined). Always
-                          rendered so the slot is discoverable; shows a
-                          placeholder + AI button when empty. */}
-                      {(() => {
-                        const uses = (openSystem.typicalUses || '')
-                          .split('\n').map(s => s.trim()).filter(Boolean);
-                        return (
-                          <div className="mt-5 p-3 bg-sky-50 border border-sky-200 rounded-xl">
-                            <div className="flex items-center justify-between mb-1.5">
-                              <span className="text-xs font-semibold text-sky-700 uppercase tracking-wide">
-                                Usage areas
-                              </span>
-                              <AiFillButton
-                                onClick={() => runAiFill(openSystem.systemId)}
-                                loading={aiLoading}
-                                size="sm"
-                                variant="ghost"
-                                label="AI"
-                                title="Generate AI usage areas"
-                              />
-                            </div>
-                            {uses.length > 0 ? (
-                              <ul className="text-sm text-slate-700 space-y-1">
-                                {uses.map((u, i) => (
-                                  <li key={i} className="flex gap-2">
-                                    <span className="text-sky-500 mt-0.5">•</span>
-                                    <span>{u}</span>
-                                  </li>
-                                ))}
-                              </ul>
-                            ) : (
-                              <p className="text-sm italic text-slate-400">
-                                No usage areas yet — click AI to generate.
-                              </p>
-                            )}
+                      {/* Usage areas — editable textarea, one sentence per
+                          line. Debounced autosave to systems.typical_uses
+                          (mirrors Recommendation). The AI button overwrites
+                          via the AI Fill review panel. */}
+                      <div className="mt-5 p-3 bg-sky-50 border border-sky-200 rounded-xl">
+                        <div className="flex items-center justify-between mb-1">
+                          <span className="text-xs font-semibold text-sky-700 uppercase tracking-wide">Usage areas</span>
+                          <div className="flex items-center gap-2">
+                            <span className="text-[10px] text-sky-600">
+                              {usesSaving ? 'Saving…' : (usesDirtyRef.current ? 'Unsaved' : 'Saved')}
+                            </span>
+                            <AiFillButton
+                              onClick={() => runAiFill(openSystem.systemId)}
+                              loading={aiLoading}
+                              size="sm"
+                              variant="ghost"
+                              label="AI"
+                              title="Generate AI usage areas"
+                            />
                           </div>
-                        );
-                      })()}
+                        </div>
+                        <textarea
+                          value={usesText}
+                          onChange={(e) => onUsesChange(e.target.value)}
+                          placeholder={'List typical use cases — one sentence per line.\nFor example:\nSuitable for warehouse floors with forklift traffic.\nIdeal for food production areas requiring chemical resistance.'}
+                          rows={4}
+                          className="w-full bg-white border border-sky-200 rounded-md p-2 text-sm text-slate-700 placeholder-slate-400 focus:outline-none focus:ring-1 focus:ring-sky-300 resize-y"
+                        />
+                      </div>
 
                       {/* Recommendation / preview_note */}
                       <div className="mt-5 p-3 bg-emerald-50 border border-emerald-200 rounded-xl">
@@ -2148,7 +2209,10 @@ export default function SystemBuilderPreview({ onEditInBuilder }: Props) {
                         description: openSystem.description || '',
                         recommendation: noteText,
                         warnings: [],
-                        usageAreas: (openSystem.typicalUses || '')
+                        // Read from the inline editor state so the review
+                        // panel's "Current" column reflects unsaved edits
+                        // (matches how recommendation uses noteText).
+                        usageAreas: usesText
                           .split('\n')
                           .map(s => s.trim())
                           .filter(Boolean),
