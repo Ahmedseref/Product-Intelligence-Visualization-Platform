@@ -143,8 +143,11 @@ export function SystemAIFillPanel(props: {
           onProposedChange={(v) => setDraft((d) => ({ ...d, recommendation: v }))}
           onUseThis={() => useField('recommendation')}
         />
-        {/* USAGE AREAS (full width) — one sentence per line */}
-        {(draft.usageAreas.length > 0 || current.usageAreas.length > 0) && (
+        {/* USAGE AREAS (full width) — one sentence per line. Rendered
+            unconditionally so the slot is always visible, even when the
+            AI returned nothing (e.g. older proposals before the field
+            was added). Empty proposed shows "(none)" on both sides. */}
+        {true && (
           <div className="md:col-span-2">
             <ReviewBlock
               label="Usage areas"
