@@ -411,6 +411,7 @@ export function registerCatalogExportRoutes(app: Express): void {
                       new ImageRun({
                         data: png,
                         transformation: { width: 280, height: Math.min(380, 60 + layerForSvg.length * 50) },
+                        type: "png",
                       } as any),
                     ],
                   }),
