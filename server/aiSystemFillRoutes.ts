@@ -4,21 +4,21 @@
 //   Body: { sections?: ('description' | 'recommendation' | 'warnings')[] }
 //   Returns: { description, recommendation, warnings, confidence, reasoning }
 //
-// Uses the Replit-managed Anthropic AI integration (no user API key needed) —
-// the SDK is instantiated against AI_INTEGRATIONS_ANTHROPIC_BASE_URL and a
-// dummy AI_INTEGRATIONS_ANTHROPIC_API_KEY that the proxy authorises.
+// Uses the Replit-managed OpenAI AI integration (billed to Replit credits,
+// no user API key needed) — the SDK is instantiated against
+// AI_INTEGRATIONS_OPENAI_BASE_URL with a proxy-issued API key.
 //
 // The endpoint never auto-saves. The client surfaces the response in a side-
 // by-side review panel and the user explicitly applies + saves.
 
 import type { Express, Request, Response } from "express";
-import Anthropic from "@anthropic-ai/sdk";
+import OpenAI from "openai";
 import { db } from "./db";
 import { systems, systemLayers, systemProductOptions, products, productQualificationTags } from "@shared/schema";
 import { eq, asc, ne } from "drizzle-orm";
 import { authMiddleware, requirePasswordChange } from "./authRoutes";
 
-const MODEL = "claude-sonnet-4-6";
+const MODEL = "gpt-5.4";
 const MAX_TOKENS = 8192;
 
 type AiFillResponse = {
@@ -308,28 +308,29 @@ export function registerAiSystemFillRoutes(app: Express): void {
 
       const prompt = buildSystemFillPrompt(systemForPrompt, otherSystems, requestedSections);
 
-      // Call Anthropic via the Replit AI integration proxy.
-      const baseURL = process.env.AI_INTEGRATIONS_ANTHROPIC_BASE_URL;
-      const apiKey = process.env.AI_INTEGRATIONS_ANTHROPIC_API_KEY;
+      // Call OpenAI via the Replit AI integration proxy.
+      const baseURL = process.env.AI_INTEGRATIONS_OPENAI_BASE_URL;
+      const apiKey = process.env.AI_INTEGRATIONS_OPENAI_API_KEY;
       if (!baseURL || !apiKey) {
-        return res.status(500).json({ error: "AI integration not configured. Please re-install the Anthropic blueprint." });
+        return res.status(500).json({ error: "AI integration not configured. Please re-install the OpenAI blueprint." });
       }
-      const client = new Anthropic({ apiKey, baseURL });
+      const client = new OpenAI({ apiKey, baseURL });
 
-      const message = await client.messages.create({
+      const completion = await client.chat.completions.create({
         model: MODEL,
-        max_tokens: MAX_TOKENS,
+        max_completion_tokens: MAX_TOKENS,
+        response_format: { type: "json_object" },
         messages: [{ role: "user", content: prompt }],
       });
 
-      // Pull the first text block out of the response.
-      const textBlock = message.content.find((b: any) => b.type === "text") as { type: "text"; text: string } | undefined;
-      if (!textBlock?.text) {
+      const rawText = completion.choices?.[0]?.message?.content ?? "";
+      if (!rawText.trim()) {
         return res.status(502).json({ error: "AI returned an empty response" });
       }
 
-      // The prompt asks for raw JSON, but defensively strip markdown fences.
-      const cleaned = textBlock.text.replace(/^```(?:json)?\s*/i, "").replace(/\s*```\s*$/i, "").trim();
+      // response_format: json_object should give us pure JSON, but defensively
+      // strip markdown fences in case the model wraps them anyway.
+      const cleaned = rawText.replace(/^```(?:json)?\s*/i, "").replace(/\s*```\s*$/i, "").trim();
       let parsed: AiFillResponse;
       try {
         parsed = JSON.parse(cleaned);
