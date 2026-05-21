@@ -923,6 +923,27 @@ export const systemsApi = {
     if (!response.ok) throw new Error('Failed to fetch full system');
     return response.json();
   },
+  aiFillSystem: async (
+    systemId: string,
+    sections?: ('description' | 'recommendation' | 'warnings')[],
+  ): Promise<{
+    description: string;
+    recommendation: string;
+    warnings: string[];
+    confidence: 'HIGH' | 'MEDIUM' | 'LOW';
+    reasoning: string;
+  }> => {
+    const response = await fetch(`${API_BASE}/systems/${systemId}/ai-fill`, {
+      method: 'POST',
+      headers: { ...getAuthHeaders(), 'Content-Type': 'application/json' },
+      body: JSON.stringify({ sections: sections || ['description', 'recommendation', 'warnings'] }),
+    });
+    if (!response.ok) {
+      const err = await response.json().catch(() => ({}));
+      throw new Error(err?.error || 'Failed to generate AI suggestions');
+    }
+    return response.json();
+  },
   createSystem: async (data: { name: string; description?: string; typicalUses?: string; sectorMapping?: string[]; systemSubstrate?: string[] | null; systemHumidity?: string | null; systemDuty?: string | null }) => {
     const response = await fetch(`${API_BASE}/systems`, {
       method: 'POST', headers: { ...getAuthHeaders(), 'Content-Type': 'application/json' },

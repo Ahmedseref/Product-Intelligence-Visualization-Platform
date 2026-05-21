@@ -43,7 +43,8 @@
 // =============================================================================
 
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Eye, X, Search, Edit3, Download, AlertCircle, Star, Layers, Check, GitCompare, Filter, FileDown, Loader2 } from 'lucide-react';
+import { Eye, X, Search, Edit3, Download, AlertCircle, Star, Layers, Check, GitCompare, Filter, FileDown, Loader2, Sparkles } from 'lucide-react';
+import { SystemAIFillPanel, AiFillButton, type AiFillResult } from './SystemAIFill';
 import jsPDF from 'jspdf';
 import html2canvas from 'html2canvas';
 import { systemsApi, primerLibraryApi } from '../client/api';
@@ -320,6 +321,25 @@ export default function SystemBuilderPreview({ onEditInBuilder }: Props) {
   const [noteSaving, setNoteSaving] = useState(false);
   const noteSaveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
+  // ---------- AI Fill state ----------
+  // Per-system proposal currently under review in the modal. `null` means
+  // no proposal has been generated (or it was discarded). When set, the
+  // SystemAIFillPanel slides in below the modal body.
+  const [aiProposal, setAiProposal] = useState<AiFillResult | null>(null);
+  const [aiLoading, setAiLoading] = useState(false);
+  const [aiError, setAiError] = useState<string | null>(null);
+
+  // ---------- AI Fill all systems batch state ----------
+  // The batch generates proposals sequentially (one HTTP request at a time,
+  // with a 3s gap between requests to respect upstream rate limits). Results
+  // are queued and reviewed one-by-one — clicking on a queued system opens
+  // its modal pre-populated with the proposal.
+  const [batchRunning, setBatchRunning] = useState(false);
+  const [batchProgress, setBatchProgress] = useState<{ done: number; total: number; current: string | null }>({ done: 0, total: 0, current: null });
+  const [batchQueue, setBatchQueue] = useState<Record<string, AiFillResult>>({});
+  const [batchErrors, setBatchErrors] = useState<Record<string, string>>({});
+  const batchCancelRef = useRef(false);
+
   // ---------- "Make default" inline action state ----------
   // Per-layer in-flight set — multiple layers can be saving in parallel
   // without trampling each other's loading indicator. A request-token map
@@ -492,6 +512,10 @@ export default function SystemBuilderPreview({ onEditInBuilder }: Props) {
       }
       setActiveOptionByLayer(initActive);
       setNoteText(full.previewNote || '');
+      // If a batch run has already produced a proposal for this system,
+      // surface it immediately when the user opens the modal.
+      setAiError(null);
+      setAiProposal(batchQueue[systemId] || null);
 
       // Resolve adaptive-primer layers against the library so the modal
       // and the spec-sheet export both have the parameter-driven product
@@ -526,7 +550,7 @@ export default function SystemBuilderPreview({ onEditInBuilder }: Props) {
     } finally {
       if (token === openTokenRef.current) setOpenLoading(false);
     }
-  }, []);
+  }, [batchQueue]);
 
   // We track the note's "dirty" state so the UI can show "Unsaved" while the
   // user is typing within the debounce window, and the close handlers can
@@ -560,12 +584,160 @@ export default function SystemBuilderPreview({ onEditInBuilder }: Props) {
     }
   }, [openSystem, noteText]);
 
+  // ---------- AI Fill handlers ----------
+  // Fetches a proposal for the currently-open system. Never auto-saves —
+  // the SystemAIFillPanel surfaces the response for review and the parent
+  // owns the apply/save step (so saves stay tied to the debounced
+  // previewNote flow).
+  const runAiFill = useCallback(async (systemId: string) => {
+    setAiLoading(true);
+    setAiError(null);
+    try {
+      const result = await systemsApi.aiFillSystem(systemId);
+      // Always cache into the batch queue keyed by systemId — even if the
+      // user has since opened a different system, the cached proposal still
+      // belongs to its system and we want it available when re-opened.
+      setBatchQueue(prev => ({ ...prev, [systemId]: result }));
+      // ONLY surface the proposal in the open modal if it still belongs to
+      // the currently-open system. Without this guard, a slow A request
+      // followed by opening B would pop A's proposal inside B's modal.
+      setOpenSystemId(currentOpenId => {
+        if (currentOpenId === systemId) setAiProposal(result);
+        return currentOpenId;
+      });
+    } catch (e: any) {
+      console.error('AI fill failed:', e);
+      // Same guard for errors — only show the error banner in the matching
+      // open modal, otherwise the error would persist into an unrelated one.
+      setOpenSystemId(currentOpenId => {
+        if (currentOpenId === systemId) setAiError(e?.message || 'Failed to generate AI suggestions');
+        return currentOpenId;
+      });
+    } finally {
+      setAiLoading(false);
+    }
+  }, []);
+
+  // Apply an AI proposal (or partial proposal) to the currently-open system:
+  //   - description is persisted directly via PUT /api/systems/:id
+  //   - recommendation + warnings are folded into the previewNote (warnings
+  //     get a trailing "⚠ Warnings:" block) and pushed through the standard
+  //     debounced save path so the saved-state UI stays consistent.
+  const applyAiFill = useCallback(async (next: { description: string; recommendation: string; warnings: string[] }) => {
+    if (!openSystem) return;
+    // Pin the systemId at call time so any modal switch mid-await won't
+    // cause us to commit this AI proposal into an unrelated system's
+    // state. Each post-await `set...` is gated on this id matching the
+    // currently-open system.
+    const targetId = openSystem.systemId;
+
+    // Compose recommendation + warnings into the previewNote up-front so
+    // we can persist it directly (instead of relying on the debounced
+    // flushNoteSave closure, which would race against this state update).
+    const composed = [
+      next.recommendation.trim(),
+      next.warnings.length > 0 ? `⚠ Warnings:\n${next.warnings.map(w => `• ${w}`).join('\n')}` : '',
+    ].filter(Boolean).join('\n\n');
+
+    const descChanged = next.description !== (openSystem.description || '');
+    const noteChanged = composed !== noteText;
+
+    // Build a single PUT payload so description + previewNote land in one
+    // round-trip — both fields share the same /api/systems/:id endpoint.
+    const payload: Record<string, string> = {};
+    if (descChanged) payload.description = next.description;
+    if (noteChanged) payload.previewNote = composed;
+
+    if (Object.keys(payload).length > 0) {
+      // Cancel any debounced previewNote save in flight so it doesn't
+      // race with this explicit save and overwrite us with stale text.
+      if (noteSaveTimer.current) { clearTimeout(noteSaveTimer.current); noteSaveTimer.current = null; }
+      setNoteSaving(true);
+      try {
+        await systemsApi.updateSystem(targetId, payload);
+        // Mark the local note clean — we just persisted the composed value.
+        if (noteChanged) {
+          noteDirtyRef.current = false;
+          noteLastSavedRef.current = composed;
+        }
+        // Update the cached systems list unconditionally (it's keyed by id
+        // and the row still belongs to this system regardless of which
+        // modal is currently open).
+        setSystems(prev => prev.map(s => s.systemId === targetId
+          ? { ...s, ...(descChanged ? { description: next.description } : {}), ...(noteChanged ? { previewNote: composed } : {}) }
+          : s));
+        // Only mutate openSystem / noteText if the same system is still
+        // open — guards against modal-switch races.
+        setOpenSystem(prev => (prev && prev.systemId === targetId)
+          ? { ...prev, ...(descChanged ? { description: next.description } : {}), ...(noteChanged ? { previewNote: composed } : {}) }
+          : prev);
+        setOpenSystemId(currentId => {
+          if (currentId === targetId && noteChanged) setNoteText(composed);
+          return currentId;
+        });
+      } catch (e) {
+        console.error('Failed to apply AI fill:', e);
+      } finally {
+        setNoteSaving(false);
+      }
+    }
+
+    // Always clear the proposal + queue entry for this system, regardless
+    // of whether the modal is still on it (the proposal has been actioned).
+    setBatchQueue(prev => {
+      const { [targetId]: _drop, ...rest } = prev;
+      return rest;
+    });
+    setOpenSystemId(currentId => {
+      if (currentId === targetId) setAiProposal(null);
+      return currentId;
+    });
+  }, [openSystem, noteText]);
+
+  // ---------- AI Fill all systems (batch) ----------
+  // Sequentially generate proposals for all filtered systems. A 3s gap
+  // between requests keeps us well clear of the upstream rate limit.
+  const runBatchAiFill = useCallback(async () => {
+    if (batchRunning) {
+      batchCancelRef.current = true;
+      return;
+    }
+    const targets = filtered.map(c => c.system);
+    if (targets.length === 0) return;
+    batchCancelRef.current = false;
+    setBatchRunning(true);
+    setBatchErrors({});
+    setBatchProgress({ done: 0, total: targets.length, current: null });
+    for (let i = 0; i < targets.length; i++) {
+      if (batchCancelRef.current) break;
+      const sys = targets[i];
+      setBatchProgress({ done: i, total: targets.length, current: sys.name });
+      try {
+        const result = await systemsApi.aiFillSystem(sys.systemId);
+        setBatchQueue(prev => ({ ...prev, [sys.systemId]: result }));
+      } catch (e: any) {
+        setBatchErrors(prev => ({ ...prev, [sys.systemId]: e?.message || 'failed' }));
+      }
+      setBatchProgress({ done: i + 1, total: targets.length, current: sys.name });
+      if (i < targets.length - 1 && !batchCancelRef.current) {
+        await new Promise(r => setTimeout(r, 3000));
+      }
+    }
+    setBatchRunning(false);
+    setBatchProgress(prev => ({ ...prev, current: null }));
+  }, [batchRunning, filtered]);
+
   const closeModal = useCallback(() => {
     // Fire-and-forget the flush. We don't `await` it inside the close handler
     // because that would block the modal from closing — but the request will
     // complete in the background and the user will see the saved value next
     // time they open this system.
     void flushNoteSave();
+    // Clear any in-flight AI panel state so re-opening another system starts
+    // fresh. The batch queue is intentionally kept around so the user can
+    // continue reviewing other proposals.
+    setAiProposal(null);
+    setAiError(null);
     setOpenSystemId(null);
     setOpenSystem(null);
     setHighlightLayerId(null);
@@ -1056,6 +1228,38 @@ export default function SystemBuilderPreview({ onEditInBuilder }: Props) {
             <div className="text-xs text-slate-500">
               {loading ? 'Loading…' : `${filtered.length} of ${systems.length} system${systems.length === 1 ? '' : 's'}`}
             </div>
+            {/* AI Fill all systems — sequential batch. While running the
+                button doubles as a Cancel control. Queued (already-fetched
+                but not-yet-applied) proposals are surfaced as a small badge
+                so the user knows there's review work pending. */}
+            <button
+              type="button"
+              onClick={runBatchAiFill}
+              disabled={!batchRunning && filtered.length === 0}
+              className={`inline-flex items-center gap-1.5 px-3 py-1.5 text-sm rounded-lg border transition-colors disabled:opacity-50 disabled:cursor-not-allowed ${
+                batchRunning
+                  ? 'bg-rose-600 border-rose-600 text-white hover:bg-rose-700'
+                  : 'bg-violet-600 border-violet-600 text-white hover:bg-violet-700'
+              }`}
+              title={batchRunning ? 'Cancel batch AI fill' : `Generate AI proposals for all ${filtered.length} filtered systems`}
+            >
+              {batchRunning ? (
+                <>
+                  <Loader2 size={14} className="animate-spin" />
+                  Cancel ({batchProgress.done}/{batchProgress.total})
+                </>
+              ) : (
+                <>
+                  <Sparkles size={14} />
+                  AI Fill all
+                  {Object.keys(batchQueue).length > 0 && (
+                    <span className="ml-1 inline-flex items-center justify-center min-w-[18px] h-[18px] px-1 rounded-full bg-white text-violet-700 text-[10px] font-bold">
+                      {Object.keys(batchQueue).length}
+                    </span>
+                  )}
+                </>
+              )}
+            </button>
             <button
               type="button"
               onClick={() => setExportPanelOpen(v => !v)}
@@ -1468,19 +1672,38 @@ export default function SystemBuilderPreview({ onEditInBuilder }: Props) {
                   {/* ---- modal header ---- */}
                   <div className="flex items-start justify-between gap-3 px-6 py-4 border-b border-slate-200">
                     <div>
-                      <h2 className="text-lg font-bold text-slate-800">{openSystem.name}</h2>
+                      <h2 className="text-lg font-bold text-slate-800 flex items-center gap-2">
+                        {openSystem.name}
+                        {aiProposal && (
+                          <span className="text-[10px] font-semibold uppercase tracking-wide px-2 py-0.5 rounded-full bg-violet-100 text-violet-700 border border-violet-200">
+                            Unsaved AI changes
+                          </span>
+                        )}
+                      </h2>
                       {openSystem.description && (
                         <p className="text-sm text-slate-500 mt-0.5 max-w-2xl">{openSystem.description}</p>
                       )}
                     </div>
-                    <button
-                      onClick={closeModal}
-                      className="p-2 text-slate-400 hover:text-slate-700 hover:bg-slate-100 rounded-lg"
-                      aria-label="Close preview"
-                    >
-                      <X size={18} />
-                    </button>
+                    <div className="flex items-center gap-2">
+                      <AiFillButton
+                        onClick={() => runAiFill(openSystem.systemId)}
+                        loading={aiLoading}
+                        title="Generate AI description, recommendation, and warnings"
+                      />
+                      <button
+                        onClick={closeModal}
+                        className="p-2 text-slate-400 hover:text-slate-700 hover:bg-slate-100 rounded-lg"
+                        aria-label="Close preview"
+                      >
+                        <X size={18} />
+                      </button>
+                    </div>
                   </div>
+                  {aiError && (
+                    <div className="px-6 py-2 text-xs text-rose-700 bg-rose-50 border-b border-rose-200">
+                      AI fill failed: {aiError}
+                    </div>
+                  )}
 
                   {/* ---- modal body: 2 columns ---- */}
                   <div className="grid grid-cols-1 lg:grid-cols-2 gap-0">
@@ -1824,9 +2047,19 @@ export default function SystemBuilderPreview({ onEditInBuilder }: Props) {
                       <div className="mt-5 p-3 bg-emerald-50 border border-emerald-200 rounded-xl">
                         <div className="flex items-center justify-between mb-1">
                           <span className="text-xs font-semibold text-emerald-700 uppercase tracking-wide">Recommendation</span>
-                          <span className="text-[10px] text-emerald-600">
-                            {noteSaving ? 'Saving…' : (noteDirtyRef.current ? 'Unsaved' : 'Saved')}
-                          </span>
+                          <div className="flex items-center gap-2">
+                            <span className="text-[10px] text-emerald-600">
+                              {noteSaving ? 'Saving…' : (noteDirtyRef.current ? 'Unsaved' : 'Saved')}
+                            </span>
+                            <AiFillButton
+                              onClick={() => runAiFill(openSystem.systemId)}
+                              loading={aiLoading}
+                              size="sm"
+                              variant="ghost"
+                              label="AI"
+                              title="Generate AI recommendation"
+                            />
+                          </div>
                         </div>
                         <textarea
                           value={noteText}
@@ -1838,6 +2071,27 @@ export default function SystemBuilderPreview({ onEditInBuilder }: Props) {
                       </div>
                     </div>
                   </div>
+
+                  {/* ---- AI Fill review panel (slides in below body) ---- */}
+                  {aiProposal && (
+                    <SystemAIFillPanel
+                      systemName={openSystem.name}
+                      current={{
+                        description: openSystem.description || '',
+                        recommendation: noteText,
+                        warnings: [],
+                      }}
+                      proposed={aiProposal}
+                      onApply={applyAiFill}
+                      onDiscard={() => {
+                        setAiProposal(null);
+                        setBatchQueue(prev => {
+                          const { [openSystem.systemId]: _drop, ...rest } = prev;
+                          return rest;
+                        });
+                      }}
+                    />
+                  )}
 
                   {/* ---- modal action bar ---- */}
                   <div className="flex items-center justify-end gap-2 px-6 py-3 border-t border-slate-200 bg-slate-50 rounded-b-2xl">
