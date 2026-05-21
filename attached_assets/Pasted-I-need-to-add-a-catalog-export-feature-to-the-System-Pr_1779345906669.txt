@@ -1,0 +1,85 @@
+I need to add a catalog export feature to the System Preview tab. The user selects which systems to export, configures options, and downloads a professional Word (.docx) file. Read the existing System Preview tab component (SystemBuilderPreview.tsx), the systems API, and the layer/product data structure before making any changes.
+
+---
+
+## New dependency
+
+Install the docx library:
+npm install docx
+
+This is the only new dependency needed. Do not use html2canvas for Word export — it produces images not text. The docx library generates real Word XML with paragraphs, tables, and embedded images.
+
+---
+
+## Export options modal
+
+In the System Preview tab, add an "Export catalog" button in the top bar (next to any existing controls). Use a Lucide Download icon.
+
+Clicking it opens an inline panel (not a modal — use the min-height wrapper pattern) with these options:
+
+### Systems to include (radio group):
+- Active only (default)
+- Draft only
+- All systems
+- Selected systems (shows checkboxes on cards — user must select at least 1)
+
+### Sections to include (checkboxes, all checked by default):
+- Cover page with table of contents
+- Cross-section diagram (SVG rendered as image)
+- System parameters table
+- Layer product cards (default product per layer)
+- Alternative products (listed below default)
+- Recommendations / notes
+
+### Visibility options (checkboxes, unchecked by default — for customer-facing exports):
+- Hide stock codes (product codes like P.GR.CO.CC.WP.PR.0324)
+- Hide supplier names
+- Hide draft/active status badges
+
+### Format (radio):
+- Word (.docx) — editable (default)
+- PDF (uses existing html2canvas export — just trigger it with the filtered system list)
+
+### Export button: "Generate catalog"
+
+---
+
+## Word document structure
+
+Build the .docx file in a new server endpoint or as a client-side generation function. Given the complexity, generate it server-side.
+
+### New endpoint: POST /api/systems/export-catalog
+
+Request body:
+{
+  systemIds: string[],          // which systems to include
+  options: {
+    includeCover: boolean,
+    includeCrossSection: boolean,
+    includeParameters: boolean,
+    includeProducts: boolean,
+    includeAlternatives: boolean,
+    includeRecommendations: boolean,
+    hideStockCodes: boolean,
+    hideSuppliers: boolean,
+    hideStatus: boolean,
+    format: 'docx' | 'pdf'
+  }
+}
+
+Response: the generated .docx file as a binary stream with Content-Type: application/vnd.openxmlformats-officedocument.wordprocessingml.document and Content-Disposition: attachment; filename="systems-catalog-[date].docx"
+
+### Server logic
+
+Fetch all needed data for requested systemIds:
+- System records (name, type, substrate, humidity, duty, finish, description, preview_note, status)
+- Layers for each system (ordered by position)
+- Default product per layer (the product with is_default = true, or first product)
+- Alternative products per layer (all non-default products)
+- Qualification tags per product (substrate_types, humidity_tolerance, duty_rating, finish_type)
+
+Build the docx document using the docx library:
+
+```javascript
+import { Document, Packer, Paragraph, Table, TableRow, TableCell, TextRun, ImageRun, HeadingLevel, BorderStyle, WidthType, AlignmentType, ShadingType } from 'docx';
+```
