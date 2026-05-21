@@ -39,11 +39,34 @@ export const HUMIDITY_ORDER: string[] = [
   'Dry (0-4%)',
   'Slightly Damp (4-6%)',
   'Damp (6-8%)',
+  'Damp / High Moisture (6-8%)',
   'Wet (>8%)',
   'Moisture-Tolerant',
   'Damp-Surface',
   'Underwater',
 ];
+
+// Normalize humidity strings before comparing/indexing. The seed vocab and
+// older rows mix EN DASH (U+2013) and EM DASH (U+2014) into the % ranges
+// while the canonical HUMIDITY_ORDER above uses HYPHEN-MINUS (U+002D),
+// which makes `indexOf` silently return -1 and disables the humidity
+// exclusion rule. Also collapses double spaces.
+function normalizeHumidity(s: string | null | undefined): string {
+  if (!s) return '';
+  return s.replace(/[\u2013\u2014]/g, '-').replace(/\s+/g, ' ').trim();
+}
+
+// Map a humidity label (any spelling) to its canonical index in HUMIDITY_ORDER,
+// or -1 if it really doesn't match any known bucket.
+function humidityIndex(s: string | null | undefined): number {
+  const n = normalizeHumidity(s);
+  if (!n) return -1;
+  const i = HUMIDITY_ORDER.indexOf(n);
+  if (i !== -1) return i;
+  // Treat "Damp / High Moisture" variants as plain "Damp (6-8%)" for ordering.
+  if (/^damp\b/i.test(n) && /6-8/.test(n)) return HUMIDITY_ORDER.indexOf('Damp (6-8%)');
+  return -1;
+}
 
 // Duty rating, ascending. A product whose dutyRating index is BELOW the
 // system's index is hard-excluded (a Light product can't serve a Heavy
@@ -136,8 +159,8 @@ export function isHardExcluded(
   //    mismatches between e.g. "Damp (6-8%)" and "Wet (>8%)" while still
   //    rejecting clearly-incompatible pairs like "Dry only" in "Underwater".
   if (tag?.humidityTolerance && systemHumidity) {
-    const pi = HUMIDITY_ORDER.indexOf(tag.humidityTolerance);
-    const si = HUMIDITY_ORDER.indexOf(systemHumidity);
+    const pi = humidityIndex(tag.humidityTolerance);
+    const si = humidityIndex(systemHumidity);
     if (pi !== -1 && si !== -1 && Math.abs(pi - si) > 1) {
       return { excluded: true, reason: 'humidity' };
     }
@@ -188,7 +211,8 @@ export function scoreProduct(
     const overlap = tag.substrateTypes.filter(s => systemSubstrates.includes(s)).length;
     score += overlap * 2;
   }
-  if (systemHumidity && tag?.humidityTolerance === systemHumidity) score += 2;
+  if (systemHumidity && tag?.humidityTolerance &&
+      normalizeHumidity(tag.humidityTolerance) === normalizeHumidity(systemHumidity)) score += 2;
   if (tag?.isSystemReady === true) score += 3;
   if (systemDuty && tag?.dutyRating === systemDuty) score += 1;
   return score;
