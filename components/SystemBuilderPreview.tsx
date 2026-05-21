@@ -2061,12 +2061,12 @@ export default function SystemBuilderPreview({ onEditInBuilder }: Props) {
                       </div>
 
                       {/* Usage areas — one sentence per bullet. Sourced from
-                          systems.typical_uses (newline-joined). Read-only here;
-                          AI Fill writes to it. */}
+                          systems.typical_uses (newline-joined). Always
+                          rendered so the slot is discoverable; shows a
+                          placeholder + AI button when empty. */}
                       {(() => {
                         const uses = (openSystem.typicalUses || '')
                           .split('\n').map(s => s.trim()).filter(Boolean);
-                        if (uses.length === 0) return null;
                         return (
                           <div className="mt-5 p-3 bg-sky-50 border border-sky-200 rounded-xl">
                             <div className="flex items-center justify-between mb-1.5">
@@ -2082,14 +2082,20 @@ export default function SystemBuilderPreview({ onEditInBuilder }: Props) {
                                 title="Generate AI usage areas"
                               />
                             </div>
-                            <ul className="text-sm text-slate-700 space-y-1">
-                              {uses.map((u, i) => (
-                                <li key={i} className="flex gap-2">
-                                  <span className="text-sky-500 mt-0.5">•</span>
-                                  <span>{u}</span>
-                                </li>
-                              ))}
-                            </ul>
+                            {uses.length > 0 ? (
+                              <ul className="text-sm text-slate-700 space-y-1">
+                                {uses.map((u, i) => (
+                                  <li key={i} className="flex gap-2">
+                                    <span className="text-sky-500 mt-0.5">•</span>
+                                    <span>{u}</span>
+                                  </li>
+                                ))}
+                              </ul>
+                            ) : (
+                              <p className="text-sm italic text-slate-400">
+                                No usage areas yet — click AI to generate.
+                              </p>
+                            )}
                           </div>
                         );
                       })()}

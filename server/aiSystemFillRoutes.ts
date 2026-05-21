@@ -168,7 +168,9 @@ Requested sections: ${sections.join(", ")}
    - Format: direct instruction, e.g. "Ensure concrete is cured for minimum
      28 days and surface RH is below 75% before priming."
 
-3. USAGE AREAS (array of 2-5 short standalone sentences):
+3. USAGE AREAS (array of 2-5 short standalone sentences — REQUIRED when
+   requested, NEVER return an empty array if "usageAreas" is in the
+   requested sections list):
    - Each entry is ONE complete sentence describing a typical use case,
      environment, or sector where this system is suitable.
    - Examples: "Suitable for pharmaceutical cleanrooms with hygienic
@@ -178,9 +180,11 @@ Requested sections: ${sections.join(", ")}
    - Each sentence must stand on its own (no "It is also..." or
      conjunctions referring to earlier entries).
    - Base each one on the actual products, substrates and parameters
-     above — do not invent application areas.
-   - Return an empty array only if you genuinely cannot infer any use
-     case from the configuration.
+     above when available. If the system is underconfigured, fall back
+     to the typical use cases for this SYSTEM TYPE (epoxy SL, PU
+     waterproofing, polyurea, acrylic etc) using the reference knowledge
+     above — but still return 2-5 entries.
+   - Only return [] if "usageAreas" was NOT in the requested sections.
 
 4. WARNINGS (array of short strings, optional — only include if genuinely
    relevant):
