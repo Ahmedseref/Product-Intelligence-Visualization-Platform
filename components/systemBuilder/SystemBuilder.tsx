@@ -547,16 +547,6 @@ const SystemBuilder: React.FC<SystemBuilderProps> = ({ products, onProductUpdate
     }
   }, []);
 
-  // Reset the resolved primer cache whenever the active system or its
-  // parameters change. Without this the System Health gap stat and the
-  // Build-Up Preview can briefly show resolved primers from the previous
-  // system/params (false-green) until each AdaptivePrimerSlot's async
-  // resolve returns and overwrites its slot. Keyed by id+substrate+humidity
-  // so any header change forces a parameter-driven re-resolve from scratch.
-  useEffect(() => {
-    setResolvedPrimersByLayer({});
-  }, [fullSystem?.id, fullSystem?.systemSubstrate, fullSystem?.systemHumidity]);
-
   const loadFullSystem = useCallback(async (systemId: string) => {
     setLoading(true);
     try {
