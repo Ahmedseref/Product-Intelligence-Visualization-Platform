@@ -1023,6 +1023,17 @@ export default function SystemBuilderPreview({ onEditInBuilder }: Props) {
         }
       }
     }
+    // Usage areas — newline-joined in systems.typical_uses; emit as a
+    // bulleted block so the .txt mirrors the modal display.
+    {
+      const uses = (openSystem.typicalUses || '')
+        .split('\n').map(s => s.trim()).filter(Boolean);
+      if (uses.length > 0) {
+        lines.push('');
+        lines.push('Usage areas');
+        for (const u of uses) lines.push(`  • ${u}`);
+      }
+    }
     if (openSystem.previewNote) {
       lines.push('');
       lines.push('Recommendation');
