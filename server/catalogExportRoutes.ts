@@ -92,7 +92,13 @@ async function renderCrossSectionPng(
     .map((l, i) => {
       const c = LAYER_COLORS[l.position] || LAYER_COLORS.unknown;
       const y = padY + titleH + i * (bandH + gap);
-      const label = `${LAYER_COLORS[l.position]?.label || "Layer"} — ${escapeXml(l.layerName)}`;
+      // Avoid "Primer — Primer" when the layer name already matches the
+      // position label (case-insensitive). Show just one of them.
+      const posLabel = LAYER_COLORS[l.position]?.label || "Layer";
+      const sameAsName = (l.layerName || "").trim().toLowerCase() === posLabel.toLowerCase();
+      const label = sameAsName
+        ? escapeXml(l.layerName)
+        : `${posLabel} — ${escapeXml(l.layerName)}`;
       // No stroke on the band — the colored accent bar on the left is
       // enough structure; an outer stroke reads as a selection box in Word.
       return `
@@ -496,8 +502,15 @@ export function registerCatalogExportRoutes(app: Express): void {
                         children: [
                           new Paragraph({
                             children: [
-                              new TextRun({ text: `${c.label.toUpperCase()}  ·  `, bold: true, size: 16, color: c.text }),
-                              new TextRun({ text: l.layerName, bold: true, size: 20, color: c.text }),
+                              // When the layer name duplicates the position label
+                              // (e.g. layerName "Primer" for position "primer"),
+                              // collapse to a single label to avoid "PRIMER · Primer".
+                              ...((l.layerName || "").trim().toLowerCase() === c.label.toLowerCase()
+                                ? [new TextRun({ text: c.label.toUpperCase(), bold: true, size: 20, color: c.text })]
+                                : [
+                                    new TextRun({ text: `${c.label.toUpperCase()}  ·  `, bold: true, size: 16, color: c.text }),
+                                    new TextRun({ text: l.layerName, bold: true, size: 20, color: c.text }),
+                                  ]),
                             ],
                           }),
                         ],
