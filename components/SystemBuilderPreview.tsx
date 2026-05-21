@@ -43,7 +43,9 @@
 // =============================================================================
 
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Eye, X, Search, Edit3, Download, AlertCircle, Star, Layers, Check, GitCompare, Filter } from 'lucide-react';
+import { Eye, X, Search, Edit3, Download, AlertCircle, Star, Layers, Check, GitCompare, Filter, FileDown, Loader2 } from 'lucide-react';
+import jsPDF from 'jspdf';
+import html2canvas from 'html2canvas';
 import { systemsApi, primerLibraryApi } from '../client/api';
 import type { PrimerLibraryEntry } from '../types';
 import { useEscapeKey } from '../hooks/useEscapeKey';
@@ -263,6 +265,11 @@ const TagPill: React.FC<{ children: React.ReactNode; tone?: 'slate' | 'green' | 
   );
 };
 
+// Small XML/HTML escape used by the PDF export's hidden DOM builder.
+function escapeHtml(s: any): string {
+  return String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]!));
+}
+
 // ---------------------------------------------------------------------------
 // Bulk fetch helper.
 // ---------------------------------------------------------------------------
@@ -339,6 +346,33 @@ export default function SystemBuilderPreview({ onEditInBuilder }: Props) {
   // is allowed to commit its result, so closing/re-opening with a different
   // selection can't be overwritten by a stale earlier response.
   const compareRequestRef = useRef<number>(0);
+
+  // ---------- Catalog Export panel state ----------
+  // The panel sits between the filter bar and the card grid. When `scope`
+  // is 'selected', card clicks toggle export selection instead of opening
+  // the preview modal — see openModal() guard below.
+  const [exportPanelOpen, setExportPanelOpen] = useState(false);
+  const [exportScope, setExportScope] = useState<'active' | 'draft' | 'all' | 'selected'>('active');
+  const [exportSelectedIds, setExportSelectedIds] = useState<Set<string>>(() => new Set());
+  const [exportBusy, setExportBusy] = useState(false);
+  const [exportError, setExportError] = useState<string | null>(null);
+  const [exportToast, setExportToast] = useState<string | null>(null);
+  const exportToastTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const [exportOpts, setExportOpts] = useState({
+    includeCover: true,
+    includeCrossSection: true,
+    includeParameters: true,
+    includeProducts: true,
+    includeAlternatives: true,
+    includeRecommendations: true,
+    hideStockCodes: false,
+    hideSuppliers: false,
+    hideStatus: false,
+    format: 'docx' as 'docx' | 'pdf',
+  });
+  // Hidden offscreen container we render printable system summaries into
+  // while building the PDF (html2canvas needs real DOM, not detached nodes).
+  const pdfStageRef = useRef<HTMLDivElement | null>(null);
 
   // ---------- initial load ----------
   // We pre-fetch the full system payloads for every system so the cards can
@@ -710,6 +744,7 @@ export default function SystemBuilderPreview({ onEditInBuilder }: Props) {
   useEffect(() => () => {
     if (noteSaveTimer.current) clearTimeout(noteSaveTimer.current);
     if (compareHintTimer.current) clearTimeout(compareHintTimer.current);
+    if (exportToastTimer.current) clearTimeout(exportToastTimer.current);
   }, []);
 
   // True when any non-default filter is active — drives the empty state's
@@ -815,6 +850,163 @@ export default function SystemBuilderPreview({ onEditInBuilder }: Props) {
     URL.revokeObjectURL(url);
   }, [openSystem, resolvedPrimersByLayer]);
 
+  // ---------- Catalog Export handlers ----------
+  // Resolve the final list of systemIds to export from the current scope.
+  // For 'active' / 'draft' we filter the unfiltered systems list (catalog
+  // scope is independent of the filter bar so the user can search and still
+  // export "all active" without being constrained by the search query).
+  const computeExportSystemIds = useCallback((): string[] => {
+    if (exportScope === 'selected') return Array.from(exportSelectedIds);
+    if (exportScope === 'all') return systems.map(s => s.systemId);
+    return systems
+      .filter(s => (s.status || 'draft').toLowerCase() === exportScope)
+      .map(s => s.systemId);
+  }, [exportScope, exportSelectedIds, systems]);
+
+  const showExportToast = useCallback((msg: string) => {
+    setExportToast(msg);
+    if (exportToastTimer.current) clearTimeout(exportToastTimer.current);
+    exportToastTimer.current = setTimeout(() => setExportToast(null), 4000);
+  }, []);
+
+  // PDF format: render a hidden printable summary for each system into a
+  // staging div, html2canvas each system block, then assemble with jsPDF.
+  // We rely on already-hydrated systemLayersBySys so no extra requests fire.
+  const generatePdfClientSide = useCallback(async (systemIds: string[]) => {
+    const stage = pdfStageRef.current;
+    if (!stage) throw new Error('PDF staging container not mounted');
+    const today = new Date().toISOString().split('T')[0];
+    const blocks: HTMLDivElement[] = [];
+    stage.innerHTML = '';
+    try {
+    for (const sid of systemIds) {
+      const sys = systems.find(s => s.systemId === sid);
+      if (!sys) continue;
+      const layers = systemLayersBySys[sid] || [];
+      const block = document.createElement('div');
+      block.style.cssText = 'width:800px;background:#fff;padding:32px;font-family:Helvetica,Arial,sans-serif;color:#0f172a;box-sizing:border-box;';
+      const isActiveStatus = (sys.status || 'draft').toLowerCase() === 'active';
+      const statusBadge = exportOpts.hideStatus ? '' :
+        `<span style="display:inline-block;padding:2px 10px;border-radius:999px;font-size:11px;font-weight:600;margin-left:8px;background:${isActiveStatus ? '#d1fae5' : '#fef3c7'};color:${isActiveStatus ? '#065f46' : '#92400e'}">${isActiveStatus ? 'ACTIVE' : 'DRAFT'}</span>`;
+      const layerRows = [...layers].reverse().map(l => {
+        const pos = inferLayerPositionFromSlotName(l.layerName) || 'unknown';
+        const c = LAYER_COLORS[pos];
+        const def = l.productOptions.find(o => o.isDefault) || l.productOptions[0];
+        const meta: string[] = [];
+        if (def) {
+          if (!exportOpts.hideSuppliers && def.productSupplier) meta.push(def.productSupplier);
+          if (!exportOpts.hideStockCodes && def.productStockCode) meta.push(def.productStockCode);
+        }
+        const alts = (def && exportOpts.includeAlternatives)
+          ? l.productOptions.filter(o => o !== def).map(o => o.productName).filter(Boolean).join(', ')
+          : '';
+        return `<div style="background:${c.fill};border-left:6px solid ${c.accent};padding:10px 14px;margin-bottom:6px;border-radius:6px">
+          <div style="font-size:11px;font-weight:700;color:${c.text};letter-spacing:0.5px;text-transform:uppercase">${c.label} · ${escapeHtml(l.layerName)}</div>
+          ${def ? `<div style="font-size:14px;font-weight:600;margin-top:4px">${escapeHtml(def.productName || def.productId)}</div>` : '<div style="font-size:13px;font-style:italic;color:#64748b;margin-top:4px">No products assigned</div>'}
+          ${meta.length ? `<div style="font-size:12px;color:#64748b;margin-top:2px">${meta.map(escapeHtml).join(' · ')}</div>` : ''}
+          ${alts ? `<div style="font-size:11px;color:#475569;margin-top:4px"><b>Alternatives:</b> ${escapeHtml(alts)}</div>` : ''}
+        </div>`;
+      }).join('');
+      const params = exportOpts.includeParameters ? `
+        <table style="width:100%;border-collapse:collapse;font-size:12px;margin-top:8px">
+          <tr><td style="padding:4px 8px;color:#64748b;width:40%">Substrate</td><td style="padding:4px 8px;font-weight:500">${escapeHtml(sys.systemSubstrate || 'Not configured')}</td></tr>
+          <tr><td style="padding:4px 8px;color:#64748b">Humidity</td><td style="padding:4px 8px;font-weight:500">${escapeHtml(sys.systemHumidity || 'Not configured')}</td></tr>
+          <tr><td style="padding:4px 8px;color:#64748b">Duty</td><td style="padding:4px 8px;font-weight:500">${escapeHtml(sys.systemDuty || 'Not configured')}</td></tr>
+        </table>` : '';
+      const recBox = (exportOpts.includeRecommendations && sys.previewNote)
+        ? `<div style="margin-top:16px;background:#eaf3de;border:1px solid #bbf7d0;border-radius:6px;padding:12px"><div style="font-size:11px;font-weight:700;color:#27500a;letter-spacing:0.5px">RECOMMENDATION</div><div style="font-size:13px;color:#27500a;margin-top:4px">${escapeHtml(sys.previewNote)}</div></div>`
+        : '';
+      block.innerHTML = `
+        <div style="font-size:22px;font-weight:700;margin-bottom:4px">${escapeHtml(sys.name)}${statusBadge}</div>
+        ${sys.description ? `<div style="font-size:13px;color:#475569;font-style:italic;margin-bottom:12px">${escapeHtml(sys.description)}</div>` : '<div style="height:8px"></div>'}
+        ${exportOpts.includeParameters ? `<div style="font-size:12px;font-weight:700;color:#475569;text-transform:uppercase;letter-spacing:0.5px">System parameters</div>${params}` : ''}
+        ${exportOpts.includeProducts ? `<div style="font-size:12px;font-weight:700;color:#475569;text-transform:uppercase;letter-spacing:0.5px;margin-top:16px;margin-bottom:8px">Build-up (top → bottom)</div>${layerRows}` : ''}
+        ${recBox}
+      `;
+      stage.appendChild(block);
+      blocks.push(block);
+    }
+    // Wait a tick so the DOM lays out.
+    await new Promise(r => setTimeout(r, 30));
+    const pdf = new jsPDF({ unit: 'pt', format: 'a4' });
+    const pageW = pdf.internal.pageSize.getWidth();
+    const pageH = pdf.internal.pageSize.getHeight();
+    for (let i = 0; i < blocks.length; i++) {
+      const canvas = await html2canvas(blocks[i], { scale: 2, backgroundColor: '#ffffff', logging: false });
+      const imgData = canvas.toDataURL('image/png');
+      const imgW = pageW - 40;
+      const imgH = (canvas.height * imgW) / canvas.width;
+      let y = 20;
+      let remaining = imgH;
+      // Slice the image across pages if it exceeds one page.
+      if (imgH <= pageH - 40) {
+        if (i > 0) pdf.addPage();
+        pdf.addImage(imgData, 'PNG', 20, y, imgW, imgH);
+      } else {
+        let sliceY = 0;
+        let first = true;
+        while (remaining > 0) {
+          if (!first || i > 0) pdf.addPage();
+          first = false;
+          const slice = Math.min(pageH - 40, remaining);
+          // Use addImage with negative y to shift the image upward for slicing.
+          pdf.addImage(imgData, 'PNG', 20, 20 - sliceY, imgW, imgH);
+          remaining -= slice;
+          sliceY += slice;
+        }
+      }
+    }
+    pdf.save(`systems-catalog-${today}.pdf`);
+    } finally {
+      // Always clear the offscreen staging container so failed/successful
+      // runs leave no orphan DOM behind across retries.
+      stage.innerHTML = '';
+    }
+  }, [systems, systemLayersBySys, exportOpts]);
+
+  const runExportCatalog = useCallback(async () => {
+    setExportError(null);
+    const ids = computeExportSystemIds();
+    if (!ids.length) {
+      setExportError(exportScope === 'selected'
+        ? 'Select at least one system from the cards below.'
+        : 'No systems match this scope.');
+      return;
+    }
+    setExportBusy(true);
+    try {
+      if (exportOpts.format === 'pdf') {
+        await generatePdfClientSide(ids);
+        showExportToast(`Catalog exported — ${ids.length} system${ids.length === 1 ? '' : 's'} (PDF)`);
+      } else {
+        const res = await fetch(`${API_BASE}/systems/export-catalog`, {
+          method: 'POST',
+          headers: { ...authHeaders(), 'Content-Type': 'application/json' },
+          body: JSON.stringify({ systemIds: ids, options: exportOpts }),
+        });
+        if (!res.ok) {
+          const text = await res.text().catch(() => '');
+          throw new Error(text || `Server returned ${res.status}`);
+        }
+        const blob = await res.blob();
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `systems-catalog-${new Date().toISOString().split('T')[0]}.docx`;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
+        showExportToast(`Catalog exported — ${ids.length} system${ids.length === 1 ? '' : 's'} (Word)`);
+      }
+    } catch (e: any) {
+      console.error('Catalog export failed:', e);
+      setExportError(e?.message || 'Export failed');
+    } finally {
+      setExportBusy(false);
+    }
+  }, [computeExportSystemIds, exportOpts, exportScope, generatePdfClientSide, showExportToast]);
+
   // =========================================================================
   // RENDER
   // =========================================================================
@@ -860,11 +1052,197 @@ export default function SystemBuilderPreview({ onEditInBuilder }: Props) {
             <option value="all">All substrates</option>
             {substrateOptions.map(s => <option key={s} value={s}>{s}</option>)}
           </select>
-          <div className="ml-auto text-xs text-slate-500">
-            {loading ? 'Loading…' : `${filtered.length} of ${systems.length} system${systems.length === 1 ? '' : 's'}`}
+          <div className="ml-auto flex items-center gap-3">
+            <div className="text-xs text-slate-500">
+              {loading ? 'Loading…' : `${filtered.length} of ${systems.length} system${systems.length === 1 ? '' : 's'}`}
+            </div>
+            <button
+              type="button"
+              onClick={() => setExportPanelOpen(v => !v)}
+              className={`inline-flex items-center gap-1.5 px-3 py-1.5 text-sm rounded-lg border transition-colors ${
+                exportPanelOpen
+                  ? 'bg-indigo-600 border-indigo-600 text-white hover:bg-indigo-700'
+                  : 'bg-white border-slate-200 text-slate-700 hover:border-indigo-300 hover:text-indigo-700'
+              }`}
+              aria-expanded={exportPanelOpen}
+              aria-controls="export-catalog-panel"
+              title="Export systems as Word or PDF catalog"
+            >
+              <Download size={14} />
+              Export catalog
+            </button>
           </div>
         </div>
       </div>
+
+      {/* ---------- Export catalog inline panel ---------- */}
+      {exportPanelOpen && (
+        <div
+          id="export-catalog-panel"
+          className="px-6 py-4 bg-indigo-50/40 border-b border-indigo-100"
+          style={{ minHeight: 0 }}
+        >
+          <div className="bg-white rounded-xl border border-slate-200 shadow-sm p-5">
+            <div className="flex items-start justify-between gap-3 mb-4">
+              <div>
+                <h3 className="text-sm font-bold text-slate-800 flex items-center gap-2">
+                  <FileDown size={16} className="text-indigo-600" /> Generate catalog
+                </h3>
+                <p className="text-xs text-slate-500 mt-0.5">
+                  Build a professional, editable document of selected systems with cross-sections, parameters, and products.
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setExportPanelOpen(false)}
+                className="p-1 text-slate-400 hover:text-slate-700 rounded"
+                aria-label="Close export panel"
+              >
+                <X size={16} />
+              </button>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-5 text-sm">
+              {/* Scope */}
+              <div>
+                <div className="text-xs font-semibold text-slate-600 uppercase tracking-wide mb-2">Systems to include</div>
+                {([
+                  ['active', 'Active only'],
+                  ['draft', 'Draft only'],
+                  ['all', 'All systems'],
+                  ['selected', 'Selected systems'],
+                ] as const).map(([val, label]) => (
+                  <label key={val} className="flex items-center gap-2 py-1 cursor-pointer">
+                    <input
+                      type="radio"
+                      name="export-scope"
+                      checked={exportScope === val}
+                      onChange={() => setExportScope(val)}
+                      className="text-indigo-600 focus:ring-indigo-400"
+                    />
+                    <span className="text-slate-700">{label}</span>
+                  </label>
+                ))}
+                {exportScope === 'selected' && (
+                  <div className="mt-2 text-xs text-slate-500">
+                    {exportSelectedIds.size === 0
+                      ? 'Click cards below to select.'
+                      : `${exportSelectedIds.size} selected · `}
+                    {exportSelectedIds.size > 0 && (
+                      <button
+                        type="button"
+                        onClick={() => setExportSelectedIds(new Set())}
+                        className="text-indigo-600 hover:underline"
+                      >
+                        Clear
+                      </button>
+                    )}
+                    {' · '}
+                    <button
+                      type="button"
+                      onClick={() => setExportSelectedIds(new Set(filtered.map(f => f.system.systemId)))}
+                      className="text-indigo-600 hover:underline"
+                    >
+                      Select all visible ({filtered.length})
+                    </button>
+                  </div>
+                )}
+              </div>
+
+              {/* Sections */}
+              <div>
+                <div className="text-xs font-semibold text-slate-600 uppercase tracking-wide mb-2">Sections to include</div>
+                {([
+                  ['includeCover', 'Cover page + table of contents'],
+                  ['includeCrossSection', 'Cross-section diagram'],
+                  ['includeParameters', 'System parameters table'],
+                  ['includeProducts', 'Layer product cards'],
+                  ['includeAlternatives', 'Alternative products'],
+                  ['includeRecommendations', 'Recommendations / notes'],
+                ] as const).map(([key, label]) => (
+                  <label key={key} className="flex items-center gap-2 py-0.5 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={(exportOpts as any)[key]}
+                      onChange={e => setExportOpts(o => ({ ...o, [key]: e.target.checked }))}
+                      className="text-indigo-600 rounded focus:ring-indigo-400"
+                    />
+                    <span className="text-slate-700">{label}</span>
+                  </label>
+                ))}
+              </div>
+
+              {/* Visibility + Format */}
+              <div>
+                <div className="text-xs font-semibold text-slate-600 uppercase tracking-wide mb-2">Customer-facing options</div>
+                {([
+                  ['hideStockCodes', 'Hide stock codes'],
+                  ['hideSuppliers', 'Hide supplier names'],
+                  ['hideStatus', 'Hide status badges'],
+                ] as const).map(([key, label]) => (
+                  <label key={key} className="flex items-center gap-2 py-0.5 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={(exportOpts as any)[key]}
+                      onChange={e => setExportOpts(o => ({ ...o, [key]: e.target.checked }))}
+                      className="text-indigo-600 rounded focus:ring-indigo-400"
+                    />
+                    <span className="text-slate-700">{label}</span>
+                  </label>
+                ))}
+                <div className="text-xs font-semibold text-slate-600 uppercase tracking-wide mt-3 mb-2">Format</div>
+                <label className="flex items-center gap-2 py-0.5 cursor-pointer">
+                  <input type="radio" name="export-fmt" checked={exportOpts.format === 'docx'}
+                    onChange={() => setExportOpts(o => ({ ...o, format: 'docx' }))} />
+                  <span className="text-slate-700">Word (.docx) — editable</span>
+                </label>
+                <label className="flex items-center gap-2 py-0.5 cursor-pointer">
+                  <input type="radio" name="export-fmt" checked={exportOpts.format === 'pdf'}
+                    onChange={() => setExportOpts(o => ({ ...o, format: 'pdf' }))} />
+                  <span className="text-slate-700">PDF</span>
+                </label>
+              </div>
+            </div>
+
+            {exportError && (
+              <div className="mt-4 flex items-start gap-2 px-3 py-2 bg-rose-50 border border-rose-200 rounded-lg text-sm text-rose-700">
+                <AlertCircle size={14} className="mt-0.5 shrink-0" /> {exportError}
+              </div>
+            )}
+
+            <div className="mt-5 flex items-center justify-end gap-3">
+              {exportBusy && (
+                <span className="text-xs text-slate-500 italic">Generating catalog… this may take a few seconds</span>
+              )}
+              <button
+                type="button"
+                onClick={runExportCatalog}
+                disabled={exportBusy}
+                className="inline-flex items-center gap-2 px-4 py-2 bg-indigo-600 hover:bg-indigo-700 disabled:bg-slate-300 disabled:cursor-not-allowed text-white rounded-lg text-sm font-medium"
+              >
+                {exportBusy ? <Loader2 size={14} className="animate-spin" /> : <FileDown size={14} />}
+                Generate catalog
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Export-success toast */}
+      {exportToast && (
+        <div className="fixed top-4 right-4 z-[60] bg-emerald-600 text-white px-4 py-2 rounded-lg shadow-lg text-sm flex items-center gap-2">
+          <Check size={14} /> {exportToast}
+        </div>
+      )}
+
+      {/* Hidden staging container for PDF rendering (offscreen, not display:none
+          because html2canvas needs real layout). */}
+      <div
+        ref={pdfStageRef}
+        aria-hidden="true"
+        style={{ position: 'fixed', left: '-10000px', top: 0, width: 0, height: 0, overflow: 'hidden' }}
+      />
+
 
       {/* ---------- card grid ---------- */}
       {/* The padding-bottom buys space for the floating compare bar so the
@@ -905,6 +1283,24 @@ export default function SystemBuilderPreview({ onEditInBuilder }: Props) {
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
             {filtered.map(({ system, material, suppliers, layerColors }) => {
               const isInCompare = compareIds.includes(system.systemId);
+              const isExportSelectMode = exportPanelOpen && exportScope === 'selected';
+              const isExportSelected = exportSelectedIds.has(system.systemId);
+              // In export selection mode, the card's primary click toggles
+              // export selection instead of opening the preview modal so the
+              // user can rapidly pick multiple systems without round-tripping
+              // through a separate checkbox row.
+              const onCardActivate = () => {
+                if (isExportSelectMode) {
+                  setExportSelectedIds(prev => {
+                    const next = new Set(prev);
+                    if (next.has(system.systemId)) next.delete(system.systemId);
+                    else next.add(system.systemId);
+                    return next;
+                  });
+                } else {
+                  openModal(system.systemId);
+                }
+              };
               return (
                 // Card is a <div> (not <button>) so the nested compare
                 // checkbox can be its own real <button> without nesting
@@ -913,12 +1309,26 @@ export default function SystemBuilderPreview({ onEditInBuilder }: Props) {
                   key={system.systemId}
                   role="button"
                   tabIndex={0}
-                  onClick={() => openModal(system.systemId)}
-                  onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); openModal(system.systemId); } }}
+                  onClick={onCardActivate}
+                  onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onCardActivate(); } }}
                   className={`relative text-left bg-white border rounded-xl p-4 shadow-sm hover:shadow-md transition-all cursor-pointer ${
-                    isInCompare ? 'border-indigo-400 ring-2 ring-indigo-200' : 'border-slate-200 hover:border-indigo-300'
+                    isExportSelected
+                      ? 'border-emerald-500 ring-2 ring-emerald-200'
+                      : isInCompare
+                        ? 'border-indigo-400 ring-2 ring-indigo-200'
+                        : 'border-slate-200 hover:border-indigo-300'
                   }`}
                 >
+                  {isExportSelectMode && (
+                    <div
+                      className={`absolute top-2 left-2 w-5 h-5 rounded border flex items-center justify-center ${
+                        isExportSelected ? 'bg-emerald-600 border-emerald-600 text-white' : 'bg-white border-slate-300 text-transparent'
+                      }`}
+                      aria-hidden="true"
+                    >
+                      <Check size={12} />
+                    </div>
+                  )}
                   {/* Compare toggle — top-right corner. We stop propagation
                       on BOTH click and keyDown so activating it via Space/
                       Enter doesn't bubble up to the parent card and open
