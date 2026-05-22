@@ -933,7 +933,6 @@ export function registerCatalogExportRoutes(app: Express): void {
                 const prod = productById.get(def.productId) || {};
                 const supplier = prod.supplier || prod.brand || "";
                 const stockCode = prod.stockCode || prod.productStockCode || "";
-                const desc = (prod.description || "").slice(0, 100);
 
                 // Skip the bold product-name heading when the customer
                 // wants only generic layer info. Supplier / stock-code
@@ -953,11 +952,10 @@ export function registerCatalogExportRoutes(app: Express): void {
                 if (meta.length) {
                   rightChildren.push(plain(meta.join("  ·  "), { size: 18, color: "64748B" }));
                 }
-                if (desc) {
-                  rightChildren.push(plain(desc + (prod.description && prod.description.length > 100 ? "…" : ""), { size: 18, color: "475569" }));
-                }
 
-                // qualification tags
+                // qualification tag pills — kept compact on a single
+                // italic meta line so they read like the in-app card's
+                // coloured pill row (Substrate · Humidity · Duty · Finish).
                 const tag = tagsById.get(def.productId);
                 if (tag) {
                   const tagBits: string[] = [];
@@ -969,6 +967,88 @@ export function registerCatalogExportRoutes(app: Express): void {
                   if (tagBits.length) {
                     rightChildren.push(plain(tagBits.join("  |  "), { size: 16, color: "64748B", italic: true }));
                   }
+                }
+
+                // ── Consumption + DFT spec row ──────────────────────
+                // Mirrors the small "Consumption 0.3 kg/m² / DFT 50 µm"
+                // grid on the in-app card. Pulled from the layer (not
+                // the product) since the same product can be specced
+                // differently per system. Rendered as a 2-column meta
+                // table so the labels align cleanly even when one
+                // value is missing.
+                const consumption = (l as any).consumptionRateKgM2;
+                const dft = (l as any).dftMicrons;
+                const specBits: { label: string; value: string }[] = [];
+                if (consumption != null && consumption !== "") {
+                  specBits.push({ label: "Consumption", value: `${consumption} kg/m²` });
+                }
+                if (dft != null && dft !== "") {
+                  specBits.push({ label: "DFT", value: `${dft} µm` });
+                }
+                if (specBits.length) {
+                  rightChildren.push(
+                    new Table({
+                      width: { size: 100, type: WidthType.PERCENTAGE },
+                      borders: borderless(),
+                      rows: [
+                        new TableRow({
+                          children: specBits.flatMap(b => [
+                            new TableCell({
+                              borders: borderless(),
+                              width: { size: 22, type: WidthType.PERCENTAGE },
+                              margins: { top: 60, bottom: 20, left: 0, right: 40 },
+                              children: [new Paragraph({ children: [new TextRun({ text: b.label, size: 16, color: "94A3B8" })] })],
+                            }),
+                            new TableCell({
+                              borders: borderless(),
+                              width: { size: 28, type: WidthType.PERCENTAGE },
+                              margins: { top: 60, bottom: 20, left: 0, right: 40 },
+                              children: [new Paragraph({ children: [new TextRun({ text: b.value, size: 18, color: "0F172A" })] })],
+                            }),
+                          ]),
+                        }),
+                      ],
+                    }),
+                  );
+                }
+
+                // ── Per-layer description headline + paragraph ──────
+                // Prefer the curated `previewDescription` field (the
+                // "PRODUCT — short blurb" format the AI Fill flow
+                // populates and the in-app card renders); fall back to
+                // the product's full description so legacy layers
+                // without preview content still show something useful.
+                // No truncation — the user explicitly asked for the
+                // complete paragraph.
+                const layerDesc = ((l as any).previewDescription || "").trim();
+                const fallbackDesc = (prod.description || "").trim();
+                const descToRender = layerDesc || fallbackDesc;
+                if (descToRender) {
+                  rightChildren.push(
+                    new Paragraph({
+                      spacing: { before: 120, after: 60 },
+                      children: [new TextRun({ text: descToRender, size: 18, color: "475569" })],
+                    }),
+                  );
+                }
+
+                // ── Bullet property list ────────────────────────────
+                // Renders the layer's `previewProperties` array as a
+                // proper Word bullet list (matches Sika/PPG technical
+                // datasheets and the in-app card's bullet row).
+                const props = Array.isArray((l as any).previewProperties)
+                  ? ((l as any).previewProperties as unknown[])
+                      .map(p => (typeof p === "string" ? p.trim() : ""))
+                      .filter(Boolean)
+                  : [];
+                for (const bullet of props) {
+                  rightChildren.push(
+                    new Paragraph({
+                      bullet: { level: 0 },
+                      spacing: { before: 20, after: 20 },
+                      children: [new TextRun({ text: bullet, size: 18, color: "334155" })],
+                    }),
+                  );
                 }
 
                 if (opts.includeAlternatives && !opts.hideProductNames && alts.length) {
