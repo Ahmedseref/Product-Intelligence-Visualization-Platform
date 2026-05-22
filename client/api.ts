@@ -1257,7 +1257,36 @@ export const primerLibraryApi = {
     if (!response.ok) throw new Error('Failed to deactivate primer library entry');
     return response.json();
   },
+  // Coverage-chart data feed — see PrimerCoverageChart.tsx. Returns the
+  // primer list with derived primer_base + the substrate/humidity axes.
+  coverageChart: async (): Promise<PrimerCoverageChartData> => {
+    const response = await fetch(`${API_BASE}/primer-library/coverage-chart`, {
+      headers: getAuthHeaders(),
+    });
+    if (!response.ok) throw new Error('Failed to load primer coverage chart');
+    return response.json();
+  },
 };
+
+export interface PrimerCoverageChartPrimer {
+  primer_id: string;
+  product_id: string;
+  stock_code: string;
+  product_name: string;
+  supplier: string;
+  taxonomy_path: string;
+  compatible_substrates: string[];
+  humidity_tolerance: string;
+  compatible_system_types: string[];
+  primer_base: string;
+  is_active: boolean;
+}
+
+export interface PrimerCoverageChartData {
+  primers: PrimerCoverageChartPrimer[];
+  substrates: string[];
+  humidities: string[];
+}
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Selector Guide (Analytics tab) — editable systems × applications matrix.

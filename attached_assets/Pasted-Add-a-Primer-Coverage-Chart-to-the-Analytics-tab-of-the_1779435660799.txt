@@ -1,0 +1,257 @@
+Add a Primer Coverage Chart to the Analytics tab of the System Builder. 
+It is a visual heatmap matrix showing which primers cover which 
+substrate/humidity combinations, colored by primer base type. 
+The chart can be exported as PNG, JPG, or SVG.
+
+Read the existing Analytics tab component, the primer_library table schema, 
+and the qualification_vocabularies table before writing any code.
+
+---
+
+## Part 1 — Data
+
+### New API endpoint
+GET /api/primer-library/coverage-chart
+
+Returns all active primers from primer_library joined with their product 
+record to get the stock code.
+
+Response shape:
+{
+  primers: [
+    {
+      primer_id: string,          // PL-0001
+      product_id: string,         // internal ID
+      stock_code: string,         // e.g. P.GR.CO.CC.WP.PR.0324 — the identifier
+      product_name: string,       // display only, not used as key
+      supplier: string,
+      compatible_substrates: string[],
+      humidity_tolerance: string,
+      compatible_system_types: string[],
+      primer_base: string,        // derived — see detection logic below
+      is_active: boolean
+    }
+  ],
+  substrates: string[],           // from qualification_vocabularies vocab_type='substrate'
+  humidities: string[],           // from qualification_vocabularies vocab_type='humidity'
+                                  // ordered Dry → Slightly Damp → Damp → Wet → Moisture-Tolerant → Damp-Surface → Underwater
+}
+
+### Primer base detection
+Derive primer_base from the product's taxonomy node path and product name/description.
+Add this logic to the endpoint — it is NOT stored in the database, computed at query time:
+
+```javascript
+function detectPrimerBase(product) {
+  const text = (product.name + ' ' + product.description).toLowerCase();
+  const nodePath = product.taxonomy_path?.toLowerCase() || '';
+  
+  if (text.includes('bitumen') || text.includes('bt primer') || 
+      nodePath.includes('bitumen')) return 'Bitumen';
+  
+  if ((text.includes('polyurethane') || text.includes(' pu ') || 
+       text.includes('pu primer') || text.includes('pur')) && 
+      !text.includes('epoxy')) return 'PU';
+  
+  if (text.includes('silane') || text.includes('siloxane')) return 'Silane';
+  
+  if (text.includes('acrylic') || text.includes('mma')) return 'Acrylic';
+  
+  if (text.includes('epoxy') || text.includes('epx') || 
+      text.includes('epo')) return 'Epoxy';
+  
+  return 'Other';
+}
+```
+
+---
+
+## Part 2 — Chart component
+
+Create a new file: components/PrimerCoverageChart.tsx
+
+### Color scheme per primer base (use these exact values):
+```typescript
+const BASE_COLORS: Record<string, {bg: string, border: string, text: string}> = {
+  Epoxy:   { bg: '#E6F1FB', border: '#378ADD', text: '#0C447C' },
+  PU:      { bg: '#FAEEDA', border: '#BA7517', text: '#633806' },
+  Bitumen: { bg: '#F1EFE8', border: '#888780', text: '#444441' },
+  Silane:  { bg: '#EAF3DE', border: '#639922', text: '#27500A' },
+  Acrylic: { bg: '#EEEDFE', border: '#7F77DD', text: '#26215C' },
+  Other:   { bg: '#F1EFE8', border: '#D3D1C7', text: '#888780' },
+};
+```
+
+### Chart structure
+
+The chart is an SVG grid built programmatically (not via a charting library).
+
+Axes:
+- X axis (columns): humidity levels in order — 
+  Dry (0-4%) · Slightly Damp (4-6%) · Damp (6-8%) · Wet (>8%) · Moisture-Tolerant · Damp-Surface · Underwater
+  Only show humidity values that have at least one primer matching them.
+- Y axis (rows): substrates — 
+  Concrete · Screed · Steel · Metal · Ceramic · Existing Coating · Over Primer · Over Base Coat
+  Only show substrates that have at least one primer.
+
+### Cell content
+Each cell at intersection (substrate, humidity) contains small colored chips, 
+one per matching primer. 
+
+Each chip:
+- Width: fills cell width proportionally if multiple chips, min 28px
+- Height: 28px
+- Background: BASE_COLORS[primer.primer_base].bg
+- Border: 1px solid BASE_COLORS[primer.primer_base].border
+- Border-radius: 4px
+- Text: primer stock_code in 8px monospace font, color BASE_COLORS[primer.primer_base].text
+  Truncated to fit — show first 12 chars if needed
+- Tooltip on hover: full stock_code · product_name · supplier · system types
+
+Empty cells: light gray dashed border, no content.
+
+Multiple primers in one cell:
+- Stack vertically with 2px gap if 3 or fewer
+- If 4+: show first 3 chips + a "+N more" chip in gray
+
+### Chart dimensions
+- Cell width: 110px fixed
+- Cell height: auto — grows to fit all chips (min 36px)
+- Y axis label column: 100px
+- X axis label row: 48px (two-line labels, small font)
+- Overall chart width: 100px + (visible humidity count × 110px)
+- Add 16px padding all around inside the SVG
+
+### Legend
+Below the chart, a horizontal legend row:
+One colored swatch + label per primer base type that appears in the data.
+Swatch: 12×12px rounded rect using bg+border colors.
+Label: base type name, 12px.
+Only show base types that actually appear in the current data.
+
+### System type indicators
+On each chip, show tiny colored dots in the bottom-right corner 
+indicating compatible system types:
+- Epoxy system: #378ADD dot
+- PU system: #BA7517 dot  
+- Polyurea system: #1D9E75 dot
+- Acrylic system: #7F77DD dot
+Dots are 5px circles, max 4 shown, stacked horizontally.
+
+---
+
+## Part 3 — Export functionality
+
+Add an export toolbar above the chart with three buttons:
+- "Export PNG"
+- "Export JPG"  
+- "Export SVG"
+
+For SVG export:
+- Serialize the SVG DOM element to string
+- Add XML declaration and proper namespaces
+- Trigger download as coverage-chart-[date].svg
+- Embed the fonts as base64 or use system fonts only (no external font URLs 
+  in the exported SVG — it must render correctly when opened standalone)
+
+For PNG and JPG export:
+- Use the html2canvas library (already installed in the project)
+- Wrap the SVG in a temporary div with white background
+- html2canvas captures it as a canvas
+- canvas.toDataURL('image/png') or ('image/jpeg', 0.95) for JPG
+- Trigger download as coverage-chart-[date].png or .jpg
+- Resolution: scale factor 2× for retina quality (html2canvas scale option)
+
+Export button implementation:
+```typescript
+async function exportChart(format: 'svg' | 'png' | 'jpg') {
+  const svgEl = document.getElementById('primer-coverage-svg');
+  
+  if (format === 'svg') {
+    const serializer = new XMLSerializer();
+    let svgStr = serializer.serializeToString(svgEl);
+    // Inline all styles — SVG must be self-contained
+    svgStr = '<?xml version="1.0" encoding="UTF-8"?>\n' + svgStr;
+    const blob = new Blob([svgStr], { type: 'image/svg+xml' });
+    triggerDownload(URL.createObjectURL(blob), `coverage-chart-${date}.svg`);
+    return;
+  }
+  
+  const canvas = await html2canvas(
+    document.getElementById('primer-coverage-wrapper'), 
+    { scale: 2, backgroundColor: '#ffffff', useCORS: true }
+  );
+  const mimeType = format === 'jpg' ? 'image/jpeg' : 'image/png';
+  const quality = format === 'jpg' ? 0.95 : undefined;
+  canvas.toBlob(blob => {
+    triggerDownload(URL.createObjectURL(blob), `coverage-chart-${date}.${format}`);
+  }, mimeType, quality);
+}
+```
+
+---
+
+## Part 4 — Where it lives in Analytics tab
+
+Read the existing Analytics tab component. Add the Primer Coverage Chart 
+as a new section at the bottom of the Analytics tab, below existing charts.
+
+Section header: "Primer coverage map"
+Subtitle: "Each chip represents one primer by stock code · color indicates primer base type · dots indicate compatible system types"
+
+The chart section has:
+- The export toolbar (PNG / JPG / SVG buttons, right-aligned)
+- A filter row: filter by system type (All / Epoxy / PU / Polyurea / Acrylic)
+  When a system type is selected, only show primers whose 
+  compatible_system_types includes that type. 
+  Empty cells remain visible as gaps — this is intentional so the user 
+  can see coverage holes for that system type.
+- The chart itself wrapped in a horizontally scrollable div 
+  (chart may exceed container width if many humidity columns)
+- The legend below
+
+---
+
+## Part 5 — Catalog export integration
+
+When the Word catalog is exported (POST /api/systems/export-catalog), 
+if the export options include a new boolean field 
+includePrimerChart: true (add this to the export options):
+
+Fetch GET /api/primer-library/coverage-chart and generate a 
+simplified version of the chart as a docx table:
+
+- Rows: substrates
+- Columns: humidity levels (only those with data)
+- Each cell: list of stock codes separated by line breaks, 
+  grouped by primer base type with a colored cell background 
+  using the BASE_COLORS values
+- The table appears as a full-width page in the catalog titled 
+  "Primer Selection Reference"
+- Add the checkbox "Include primer coverage chart" to the 
+  export options panel, checked by default
+
+---
+
+## Rules
+- The chart SVG must have id="primer-coverage-svg" and be wrapped 
+  in a div with id="primer-coverage-wrapper" for export to work
+- Stock code is the identifier — product name is shown in tooltip only, 
+  never as the primary label on the chip
+- If a primer has no stock code (null or empty), show primer_id (PL-0001) 
+  as fallback
+- Only show humidity and substrate axes for values that have at least 
+  one primer — do not show empty rows/columns (except when a system type 
+  filter reveals gaps — then keep the axis labels but show empty cells)
+- The chart must render correctly in both light and dark mode — 
+  use CSS variables for backgrounds and borders outside the SVG, 
+  but inside the SVG use the hardcoded hex values from BASE_COLORS 
+  (SVG does not inherit CSS variables reliably)
+- html2canvas is already installed — do not install it again
+- Do not modify any existing Analytics charts
+- After implementation, verify: (1) All 24 primers from primer_library 
+  appear as chips. (2) PRIMER W 832 (Wet humidity) appears only in 
+  the Wet column. (3) Filtering by Epoxy hides Bitumen-only primers 
+  but keeps their cells visible as empty. (4) SVG export opens 
+  standalone in a browser with correct colors. (5) PNG export is 
+  2× resolution (retina quality).

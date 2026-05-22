@@ -16,6 +16,9 @@ import {
   products,
   productQualificationTags,
   proformaSettings,
+  primerLibrary,
+  treeNodes,
+  qualificationVocabularies,
 } from "@shared/schema";
 import { eq, inArray, asc } from "drizzle-orm";
 import { authMiddleware, requirePasswordChange } from "./authRoutes";
@@ -337,6 +340,9 @@ type ExportOptions = {
   includeProducts: boolean;
   includeAlternatives: boolean;
   includeRecommendations: boolean;
+  // When true, append a "Primer Selection Reference" page at the end of
+  // the catalog summarising primer coverage by substrate × humidity.
+  includePrimerChart: boolean;
   hideStockCodes: boolean;
   hideSuppliers: boolean;
   hideStatus: boolean;
@@ -350,11 +356,244 @@ const DEFAULT_OPTS: ExportOptions = {
   includeProducts: true,
   includeAlternatives: true,
   includeRecommendations: true,
+  includePrimerChart: true,
   hideStockCodes: false,
   hideSuppliers: false,
   hideStatus: false,
   format: "docx",
 };
+
+// ─── Primer base detection + colors ──────────────────────────────────────
+// Mirrors components/PrimerCoverageChart.tsx + the /coverage-chart endpoint
+// so the catalog page uses the same chemistry classification and palette
+// as the on-screen chart. Kept here as plain constants (no import) to
+// avoid pulling client code into the server bundle.
+const PRIMER_BASE_COLORS: Record<string, { bg: string; border: string; text: string }> = {
+  Epoxy:   { bg: "E6F1FB", border: "378ADD", text: "0C447C" },
+  PU:      { bg: "FAEEDA", border: "BA7517", text: "633806" },
+  Bitumen: { bg: "F1EFE8", border: "888780", text: "444441" },
+  Silane:  { bg: "EAF3DE", border: "639922", text: "27500A" },
+  Acrylic: { bg: "EEEDFE", border: "7F77DD", text: "26215C" },
+  Other:   { bg: "F1EFE8", border: "D3D1C7", text: "888780" },
+};
+function detectPrimerBase(name: string, description: string, nodePath: string): string {
+  const text = `${name || ""} ${description || ""}`.toLowerCase();
+  const path = (nodePath || "").toLowerCase();
+  if (text.includes("bitumen") || text.includes("bt primer") || path.includes("bitumen")) return "Bitumen";
+  if ((text.includes("polyurethane") || text.includes(" pu ") || text.includes("pu primer") || text.includes("pur")) && !text.includes("epoxy")) return "PU";
+  if (text.includes("silane") || text.includes("siloxane")) return "Silane";
+  if (text.includes("acrylic") || text.includes("mma")) return "Acrylic";
+  if (text.includes("epoxy") || text.includes("epx") || text.includes("epo")) return "Epoxy";
+  return "Other";
+}
+
+// -----------------------------------------------------------------------------
+// Primer Selection Reference page (docx section)
+// -----------------------------------------------------------------------------
+// Reads primer_library + products + tree_nodes + qualification vocabularies
+// and produces a single-page substrate × humidity matrix. Cells list the
+// primers (stock_code – product_name) that cover that combination, shaded
+// by the primer's detected base chemistry. Returns null when there are no
+// primers to chart so the caller can skip the page entirely.
+async function buildPrimerChartSection(
+  theme: SystemTheme,
+  contact: { name: string; address: string; phone: string; email: string },
+): Promise<any | null> {
+  // Pull everything in parallel — these are independent reads.
+  const [primerRows, vocabRows, allNodes] = await Promise.all([
+    db
+      .select({ row: primerLibrary, product: products })
+      .from(primerLibrary)
+      .leftJoin(products, eq(products.productId, primerLibrary.productId))
+      .where(eq(primerLibrary.isActive, true)),
+    db.select().from(qualificationVocabularies).where(eq(qualificationVocabularies.isActive, true)),
+    db
+      .select({ nodeId: treeNodes.nodeId, name: treeNodes.name, parentId: treeNodes.parentId })
+      .from(treeNodes),
+  ]);
+
+  if (primerRows.length === 0) return null;
+
+  // Compute taxonomy paths for primer-base detection (matches /coverage-chart).
+  const nodeMap = new Map(allNodes.map(n => [n.nodeId, n] as const));
+  const pathCache = new Map<string, string>();
+  function pathFor(nodeId: string | null | undefined): string {
+    if (!nodeId) return "";
+    if (pathCache.has(nodeId)) return pathCache.get(nodeId)!;
+    const parts: string[] = [];
+    let cur = nodeMap.get(nodeId);
+    const seen = new Set<string>();
+    while (cur && !seen.has(cur.nodeId)) {
+      parts.unshift(cur.name);
+      seen.add(cur.nodeId);
+      cur = cur.parentId ? nodeMap.get(cur.parentId) : undefined;
+    }
+    const p = parts.join(" > ");
+    pathCache.set(nodeId, p);
+    return p;
+  }
+
+  // Normalised primer list with derived base + stock-code-first label.
+  const primers = primerRows.map(({ row, product }) => ({
+    label: (product?.stockCode || row.primerId || "").trim(),
+    name: row.productName || product?.name || "",
+    substrates: row.compatibleSubstrates || [],
+    humidity: row.humidityTolerance || "",
+    base: detectPrimerBase(product?.name || "", product?.description || "", pathFor(product?.nodeId)),
+  }));
+
+  // Build axes from used values only — same logic as the client chart.
+  const usedSubsSet = new Set<string>();
+  const usedHumSet = new Set<string>();
+  primers.forEach(p => {
+    p.substrates.forEach(s => usedSubsSet.add(s));
+    if (p.humidity) usedHumSet.add(p.humidity);
+  });
+  const SUBSTRATE_ORDER = ["Concrete", "Screed", "Steel", "Metal", "Ceramic", "Existing Coating", "Over Primer", "Over Base Coat"];
+  const substrates = [
+    ...SUBSTRATE_ORDER.filter(s => usedSubsSet.has(s)),
+    ...Array.from(usedSubsSet).filter(s => !SUBSTRATE_ORDER.includes(s)),
+  ];
+  const humidities = vocabRows
+    .filter(v => v.vocabType === "humidity")
+    .sort((a, b) => (a.sortOrder ?? 0) - (b.sortOrder ?? 0))
+    .map(v => v.value)
+    .filter(h => usedHumSet.has(h));
+
+  if (substrates.length === 0 || humidities.length === 0) return null;
+
+  // Cells: stock-code chips listed line-by-line. Cell shading is set
+  // from the *first* primer in the cell (mixed-base cells are rare; the
+  // chip text itself shows each base color via inline TextRun color).
+  function cellFor(substrate: string, humidity: string) {
+    const matching = primers.filter(
+      p => p.substrates.includes(substrate) && p.humidity === humidity,
+    );
+    if (matching.length === 0) {
+      return new TableCell({
+        width: { size: Math.floor(100 / (humidities.length + 1)), type: WidthType.PERCENTAGE },
+        margins: { top: 80, bottom: 80, left: 80, right: 80 },
+        borders: thinDashed(),
+        children: [new Paragraph({ children: [new TextRun({ text: "—", color: "CBD5E1", size: 16 })] })],
+      });
+    }
+    const firstBase = PRIMER_BASE_COLORS[matching[0].base] || PRIMER_BASE_COLORS.Other;
+    return new TableCell({
+      width: { size: Math.floor(100 / (humidities.length + 1)), type: WidthType.PERCENTAGE },
+      shading: { type: ShadingType.CLEAR, color: "auto", fill: firstBase.bg },
+      margins: { top: 80, bottom: 80, left: 100, right: 100 },
+      borders: thinSolid(firstBase.border),
+      children: matching.map(p => {
+        const c = PRIMER_BASE_COLORS[p.base] || PRIMER_BASE_COLORS.Other;
+        return new Paragraph({
+          spacing: { before: 20, after: 20 },
+          children: [
+            new TextRun({ text: p.label || "—", bold: true, size: 14, color: c.text, font: "Consolas" }),
+            ...(p.name ? [new TextRun({ text: " · " + p.name, size: 14, color: c.text })] : []),
+          ],
+        });
+      }),
+    });
+  }
+
+  // Header row: blank corner + one cell per humidity column.
+  const headerRow = new TableRow({
+    tableHeader: true,
+    children: [
+      new TableCell({
+        width: { size: Math.floor(100 / (humidities.length + 1)), type: WidthType.PERCENTAGE },
+        shading: { type: ShadingType.CLEAR, color: "auto", fill: theme.fill },
+        margins: { top: 80, bottom: 80, left: 100, right: 100 },
+        borders: thinSolid(theme.primary),
+        children: [new Paragraph({ children: [new TextRun({ text: "Substrate ↓ / Humidity →", bold: true, size: 16, color: theme.text })] })],
+      }),
+      ...humidities.map(h => new TableCell({
+        width: { size: Math.floor(100 / (humidities.length + 1)), type: WidthType.PERCENTAGE },
+        shading: { type: ShadingType.CLEAR, color: "auto", fill: theme.fill },
+        margins: { top: 80, bottom: 80, left: 80, right: 80 },
+        borders: thinSolid(theme.primary),
+        children: [new Paragraph({ alignment: AlignmentType.CENTER, children: [new TextRun({ text: h, bold: true, size: 14, color: theme.text })] })],
+      })),
+    ],
+  });
+
+  // Body rows: substrate label + one cell per humidity column.
+  const bodyRows = substrates.map(s =>
+    new TableRow({
+      children: [
+        new TableCell({
+          width: { size: Math.floor(100 / (humidities.length + 1)), type: WidthType.PERCENTAGE },
+          shading: { type: ShadingType.CLEAR, color: "auto", fill: "F8FAFC" },
+          margins: { top: 80, bottom: 80, left: 100, right: 100 },
+          borders: thinSolid("CBD5E1"),
+          children: [new Paragraph({ children: [new TextRun({ text: s, bold: true, size: 16, color: "0F172A" })] })],
+        }),
+        ...humidities.map(h => cellFor(s, h)),
+      ],
+    }),
+  );
+
+  // Legend paragraphs — only base types that actually appear in the data,
+  // shown as a single line of colored "■ Name" tokens.
+  const usedBases = Array.from(new Set(primers.map(p => p.base)));
+  const legendRuns: any[] = [new TextRun({ text: "Legend: ", bold: true, size: 16, color: "475569" })];
+  usedBases.forEach((b, i) => {
+    const c = PRIMER_BASE_COLORS[b] || PRIMER_BASE_COLORS.Other;
+    if (i > 0) legendRuns.push(new TextRun({ text: "   ", size: 16 }));
+    legendRuns.push(new TextRun({ text: "■ ", size: 18, color: c.border }));
+    legendRuns.push(new TextRun({ text: b, size: 16, color: "475569" }));
+  });
+
+  const children: any[] = [
+    new Paragraph({
+      heading: HeadingLevel.HEADING_2,
+      spacing: { before: 0, after: 120 },
+      children: [new TextRun({ text: "Primer Selection Reference", bold: true, size: 28, color: theme.text })],
+    }),
+    plain("Substrate × humidity coverage map for the active primer library. Cell color indicates the primer base chemistry.", { size: 18, color: "64748B" }),
+    new Paragraph({ spacing: { before: 160 } }),
+    new Table({
+      width: { size: 100, type: WidthType.PERCENTAGE },
+      rows: [headerRow, ...bodyRows],
+    }),
+    new Paragraph({ spacing: { before: 200 }, children: legendRuns }),
+  ];
+
+  return {
+    properties: {
+      page: {
+        // Landscape orientation gives us room for many humidity columns
+        // without crushing the cell text. A4 dimensions in twentieths
+        // of a point: 16838 × 11906 (landscape).
+        size: { width: 16838, height: 11906, orientation: "landscape" as const },
+        margin: { top: 720, bottom: 1000, left: 720, right: 720 },
+        borders: pageBordersFor(theme),
+      },
+    },
+    footers: { default: buildPageFooter(theme, contact) },
+    children,
+  };
+}
+
+// Thin solid border helper used by the primer chart cells.
+function thinSolid(colorHex: string) {
+  return {
+    top:    { style: BorderStyle.SINGLE, size: 6, color: colorHex },
+    bottom: { style: BorderStyle.SINGLE, size: 6, color: colorHex },
+    left:   { style: BorderStyle.SINGLE, size: 6, color: colorHex },
+    right:  { style: BorderStyle.SINGLE, size: 6, color: colorHex },
+  };
+}
+// Dashed border for empty (no-primer) cells so coverage holes are
+// visually obvious in the printed reference page.
+function thinDashed() {
+  return {
+    top:    { style: BorderStyle.DASHED, size: 4, color: "CBD5E1" },
+    bottom: { style: BorderStyle.DASHED, size: 4, color: "CBD5E1" },
+    left:   { style: BorderStyle.DASHED, size: 4, color: "CBD5E1" },
+    right:  { style: BorderStyle.DASHED, size: 4, color: "CBD5E1" },
+  };
+}
 
 export function registerCatalogExportRoutes(app: Express): void {
   app.post(
@@ -798,6 +1037,22 @@ export function registerCatalogExportRoutes(app: Express): void {
             footers: { default: buildPageFooter(theme, contact) },
             children,
           });
+        }
+
+        // ---- Primer Selection Reference (optional, appended last) ----
+        // Mirrors the on-screen Primer Coverage Chart: a substrate × humidity
+        // table whose cells list the matching primers' stock codes shaded by
+        // their detected primer base (Epoxy / PU / Bitumen / Silane / etc.).
+        // Skipped silently when the toggle is off or when no primer-library
+        // entries exist — the page would otherwise show an empty grid.
+        if (opts.includePrimerChart) {
+          try {
+            const primerSection = await buildPrimerChartSection(DEFAULT_THEME, contact);
+            if (primerSection) sections.push(primerSection);
+          } catch (e) {
+            // Don't let a primer-chart failure block the whole export.
+            console.warn("[catalog-export] primer chart skipped:", e);
+          }
         }
 
         const doc = new Document({

@@ -395,6 +395,7 @@ export default function SystemBuilderPreview({ onEditInBuilder }: Props) {
     includeProducts: true,
     includeAlternatives: true,
     includeRecommendations: true,
+    includePrimerChart: true,
     hideStockCodes: false,
     hideSuppliers: false,
     hideStatus: false,
@@ -1462,6 +1463,7 @@ export default function SystemBuilderPreview({ onEditInBuilder }: Props) {
                   ['includeProducts', 'Layer product cards'],
                   ['includeAlternatives', 'Alternative products'],
                   ['includeRecommendations', 'Recommendations / notes'],
+                  ['includePrimerChart', 'Primer coverage chart (appendix)'],
                 ] as const).map(([key, label]) => (
                   <label key={key} className="flex items-center gap-2 py-0.5 cursor-pointer">
                     <input

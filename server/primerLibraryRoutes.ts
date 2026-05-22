@@ -6,7 +6,7 @@
 // ─────────────────────────────────────────────────────────────────────────────
 import type { Express } from "express";
 import { db } from "./db";
-import { primerLibrary, products } from "@shared/schema";
+import { primerLibrary, products, treeNodes, qualificationVocabularies } from "@shared/schema";
 import { eq, and, desc, sql } from "drizzle-orm";
 import { authMiddleware, requirePasswordChange } from "./authRoutes";
 import { refreshState } from "./refreshState";
@@ -167,6 +167,104 @@ export function registerPrimerLibraryRoutes(app: Express): void {
     } catch (err) {
       console.error("Error resolving primer library:", err);
       res.status(500).json({ error: "Failed to resolve primer library" });
+    }
+  });
+
+  // GET /api/primer-library/coverage-chart
+  // Returns every active primer joined with its product (for stock_code and
+  // taxonomy-derived primer base) plus the substrate + humidity vocabularies
+  // — everything the Primer Coverage Chart needs in one round-trip.
+  // Primer base is derived here from name + description + taxonomy path; it
+  // is NOT a stored column, so chart colors stay in sync with the latest
+  // product data even when no one re-saves the library entry.
+  app.get("/api/primer-library/coverage-chart", async (_req, res) => {
+    try {
+      // 1) Pull active primers with their product record for description +
+      // stock code. Inactive rows are excluded so retired primers don't
+      // pollute the chart.
+      const rows = await db
+        .select({ row: primerLibrary, product: products })
+        .from(primerLibrary)
+        .leftJoin(products, eq(products.productId, primerLibrary.productId))
+        .where(eq(primerLibrary.isActive, true))
+        .orderBy(desc(primerLibrary.createdAt));
+
+      // 2) Build a taxonomy-path string per product by walking tree_nodes
+      // from the product's nodeId up to the root. Done with a single
+      // select-all to avoid N+1; the tree is small (hundreds of nodes max).
+      const allNodes = await db
+        .select({ nodeId: treeNodes.nodeId, name: treeNodes.name, parentId: treeNodes.parentId })
+        .from(treeNodes);
+      const nodeMap = new Map(allNodes.map(n => [n.nodeId, n] as const));
+      const pathCache = new Map<string, string>();
+      function pathFor(nodeId: string | null | undefined): string {
+        if (!nodeId) return "";
+        if (pathCache.has(nodeId)) return pathCache.get(nodeId)!;
+        const parts: string[] = [];
+        let cur = nodeMap.get(nodeId);
+        const seen = new Set<string>(); // cycle guard
+        while (cur && !seen.has(cur.nodeId)) {
+          parts.unshift(cur.name);
+          seen.add(cur.nodeId);
+          cur = cur.parentId ? nodeMap.get(cur.parentId) : undefined;
+        }
+        const p = parts.join(" > ");
+        pathCache.set(nodeId, p);
+        return p;
+      }
+
+      // Pure-function base detector — exact spec from the task brief.
+      function detectPrimerBase(name: string, description: string, nodePath: string): string {
+        const text = `${name || ""} ${description || ""}`.toLowerCase();
+        const path = (nodePath || "").toLowerCase();
+        if (text.includes("bitumen") || text.includes("bt primer") || path.includes("bitumen")) return "Bitumen";
+        if ((text.includes("polyurethane") || text.includes(" pu ") || text.includes("pu primer") || text.includes("pur")) && !text.includes("epoxy")) return "PU";
+        if (text.includes("silane") || text.includes("siloxane")) return "Silane";
+        if (text.includes("acrylic") || text.includes("mma")) return "Acrylic";
+        if (text.includes("epoxy") || text.includes("epx") || text.includes("epo")) return "Epoxy";
+        return "Other";
+      }
+
+      const primers = rows.map(({ row, product }) => {
+        const taxonomyPath = pathFor(product?.nodeId);
+        return {
+          primer_id: row.primerId,
+          product_id: row.productId,
+          // Stock code is the chart's identifier; fall back to primer_id if
+          // the product has no stock code so a chip never renders blank.
+          stock_code: (product?.stockCode || row.primerId || "").trim(),
+          product_name: row.productName || product?.name || "",
+          supplier: row.supplier || product?.supplier || "",
+          taxonomy_path: taxonomyPath,
+          compatible_substrates: row.compatibleSubstrates || [],
+          humidity_tolerance: row.humidityTolerance || "",
+          compatible_system_types: row.compatibleSystemTypes || [],
+          primer_base: detectPrimerBase(product?.name || "", product?.description || "", taxonomyPath),
+          is_active: row.isActive ?? true,
+        };
+      });
+
+      // 3) Pull the closed-list vocabularies for axis ordering. We respect
+      // the seeded sort_order so "Dry → Slightly Damp → Damp → Wet" stays
+      // in the expected meteorological progression even if the DB row
+      // order gets shuffled.
+      const vocab = await db
+        .select()
+        .from(qualificationVocabularies)
+        .where(eq(qualificationVocabularies.isActive, true));
+      const substrates = vocab
+        .filter(v => v.vocabType === "substrate")
+        .sort((a, b) => (a.sortOrder ?? 0) - (b.sortOrder ?? 0))
+        .map(v => v.value);
+      const humidities = vocab
+        .filter(v => v.vocabType === "humidity")
+        .sort((a, b) => (a.sortOrder ?? 0) - (b.sortOrder ?? 0))
+        .map(v => v.value);
+
+      res.json({ primers, substrates, humidities });
+    } catch (err: any) {
+      console.error("Error building primer coverage chart:", err);
+      res.status(500).json({ error: "Failed to build primer coverage chart", details: err?.message });
     }
   });
 
