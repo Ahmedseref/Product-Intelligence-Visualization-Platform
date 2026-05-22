@@ -111,6 +111,10 @@ type LayerRow = {
   dftMicrons?: number | null;
   recoatMinHours?: number | null;
   recoatMaxHours?: number | null;
+  // Per-layer marketing/technical content for the System Preview cards.
+  // Populated either by the user or by the System AI Fill flow.
+  previewDescription?: string | null;
+  previewProperties?: string[] | null;
   // Adaptive primer mode: when 'adaptive', the layer renders a primer
   // resolved from the Primer Library against the system parameters
   // instead of a fixed productOptions list.
@@ -640,7 +644,16 @@ export default function SystemBuilderPreview({ onEditInBuilder }: Props) {
   //   - recommendation + warnings are folded into the previewNote (warnings
   //     get a trailing "⚠ Warnings:" block) and pushed through the standard
   //     debounced save path so the saved-state UI stays consistent.
-  const applyAiFill = useCallback(async (next: { description: string; recommendation: string; warnings: string[]; usageAreas: string[] }) => {
+  const applyAiFill = useCallback(async (next: {
+    description: string;
+    recommendation: string;
+    warnings: string[];
+    usageAreas: string[];
+    // Per-layer card content keyed by layerId. Anything present here that
+    // differs from the layer's current saved value is fanned out to
+    // PUT /api/system-layers/:id in parallel after the main system PUT.
+    layerEnhancements: Record<string, { description: string; properties: string[] }>;
+  }) => {
     if (!openSystem) return;
     // Pin the systemId at call time so any modal switch mid-await won't
     // cause us to commit this AI proposal into an unrelated system's
@@ -723,16 +736,95 @@ export default function SystemBuilderPreview({ onEditInBuilder }: Props) {
       }
     }
 
-    // Always clear the proposal + queue entry for this system, regardless
-    // of whether the modal is still on it (the proposal has been actioned).
-    setBatchQueue(prev => {
-      const { [targetId]: _drop, ...rest } = prev;
-      return rest;
-    });
-    setOpenSystemId(currentId => {
-      if (currentId === targetId) setAiProposal(null);
-      return currentId;
-    });
+    // ── Fan out per-layer enhancements ──
+    // Diff each proposed layer enhancement against the layer's current
+    // saved value; only PUT the changed ones. All requests fire in
+    // parallel — order doesn't matter, each layer is independent and
+    // the server already has refreshState invalidation per call.
+    //
+    // Uses Promise.allSettled so a single layer failure doesn't lose the
+    // sibling saves. We then ONLY apply local state for fulfilled saves
+    // and surface a banner listing the failed layers. The proposal +
+    // queue entry are kept around when any layer failed so the user can
+    // retry without losing the AI output.
+    const layerPlan: { layerId: string; layerName: string; patch: { previewDescription: string; previewProperties: string[] } }[] = [];
+    for (const layer of openSystem.layers) {
+      const incoming = next.layerEnhancements?.[layer.layerId];
+      if (!incoming) continue;
+      const incDesc = (incoming.description || '').trim();
+      const incProps = (incoming.properties || []).map(p => p.trim()).filter(Boolean);
+      const curDesc = (layer.previewDescription || '').trim();
+      const curProps = (layer.previewProperties || []).map(p => (p || '').trim()).filter(Boolean);
+      const descChanged2 = incDesc !== curDesc;
+      const propsChanged =
+        incProps.length !== curProps.length ||
+        incProps.some((p, i) => p !== curProps[i]);
+      if (!descChanged2 && !propsChanged) continue;
+      layerPlan.push({
+        layerId: layer.layerId,
+        layerName: layer.layerName,
+        patch: { previewDescription: incDesc, previewProperties: incProps },
+      });
+    }
+    let anyLayerFailed = false;
+    if (layerPlan.length > 0) {
+      const results = await Promise.allSettled(
+        layerPlan.map(p => systemsApi.updateLayer(p.layerId, p.patch)),
+      );
+      const succeeded: Record<string, { previewDescription: string; previewProperties: string[] }> = {};
+      const failedNames: string[] = [];
+      results.forEach((r, i) => {
+        const item = layerPlan[i];
+        if (r.status === 'fulfilled') {
+          succeeded[item.layerId] = item.patch;
+        } else {
+          anyLayerFailed = true;
+          failedNames.push(item.layerName);
+          console.error(`Failed to save layer enhancement for ${item.layerId}:`, r.reason);
+        }
+      });
+      // Reflect only the fulfilled saves in the in-memory openSystem so
+      // the preview cards never display values we haven't actually
+      // persisted. Modal-switch race guard mirrors the description/note
+      // save above.
+      if (Object.keys(succeeded).length > 0) {
+        setOpenSystem(prev => {
+          if (!prev || prev.systemId !== targetId) return prev;
+          return {
+            ...prev,
+            layers: prev.layers.map(l => succeeded[l.layerId]
+              ? { ...l, previewDescription: succeeded[l.layerId].previewDescription, previewProperties: succeeded[l.layerId].previewProperties }
+              : l),
+          };
+        });
+      }
+      // Surface partial failures through the existing aiError banner so
+      // the user knows which layers need a retry. The proposal stays
+      // visible (see below) so they can click "Use this layer" again.
+      if (anyLayerFailed) {
+        setOpenSystemId(currentId => {
+          if (currentId === targetId) {
+            setAiError(`Failed to save AI suggestions for: ${failedNames.join(', ')}. Other changes were saved.`);
+          }
+          return currentId;
+        });
+      }
+    }
+
+    // Clear the proposal + queue entry only when EVERY layer save
+    // succeeded — otherwise the user would lose the AI output for the
+    // failed rows. The system-level fields (description / note / uses)
+    // were already persisted above, so partial success is fine.
+    if (!anyLayerFailed) {
+      setBatchQueue(prev => {
+        const { [targetId]: _drop, ...rest } = prev;
+        return rest;
+      });
+      setOpenSystemId(currentId => {
+        if (currentId === targetId) setAiProposal(null);
+        return currentId;
+      });
+    }
   }, [openSystem, noteText]);
 
   // ---------- AI Fill all systems (batch) ----------
@@ -2078,6 +2170,42 @@ export default function SystemBuilderPreview({ onEditInBuilder }: Props) {
                                     );
                                   })()}
 
+                                  {/* ── Per-layer "Description & key properties" ──
+                                      Mirrors the Sika / PPG technical-catalog
+                                      layer block (headline + paragraph + bullet
+                                      list of properties). Either field is
+                                      optional so partially-filled layers still
+                                      render cleanly. Populated either by the
+                                      user (future inline editor) or by the
+                                      System AI Fill flow.
+                                      The whole section is hidden when both
+                                      fields are empty so cards without
+                                      enhanced copy stay compact. */}
+                                  {(() => {
+                                    const desc = (l.previewDescription || '').trim();
+                                    const props = (l.previewProperties || []).filter(p => typeof p === 'string' && p.trim().length > 0);
+                                    if (!desc && props.length === 0) return null;
+                                    return (
+                                      <div
+                                        className="mt-3 pt-3 border-t border-slate-100"
+                                        data-testid={`preview-layer-enhancement-${l.layerId}`}
+                                      >
+                                        {desc && (
+                                          <p className="text-[12px] leading-snug text-slate-700 whitespace-pre-line">
+                                            {desc}
+                                          </p>
+                                        )}
+                                        {props.length > 0 && (
+                                          <ul className="mt-1.5 space-y-0.5 text-[11px] text-slate-600 list-disc list-inside marker:text-slate-400">
+                                            {props.map((p, i) => (
+                                              <li key={`prop-${l.layerId}-${i}`}>{p}</li>
+                                            ))}
+                                          </ul>
+                                        )}
+                                      </div>
+                                    );
+                                  })()}
+
                                   {/* Alternatives switcher */}
                                   {l.productOptions.length > 1 && (
                                     <div className="mt-3 pt-3 border-t border-slate-100">
@@ -2207,6 +2335,16 @@ export default function SystemBuilderPreview({ onEditInBuilder }: Props) {
                   {aiProposal && (
                     <SystemAIFillPanel
                       systemName={openSystem.name}
+                      // Pass each layer's current saved enhancement +
+                      // display metadata so the panel can diff per
+                      // layer and label rows like the preview cards
+                      // (order, layer name, default product name).
+                      layers={openSystem.layers.map(l => ({
+                        layerId: l.layerId,
+                        order: (l.orderSequence ?? 0) + 1,
+                        layerName: l.layerName,
+                        productName: (l.productOptions.find(o => o.isDefault) || l.productOptions[0])?.productName || null,
+                      }))}
                       current={{
                         description: openSystem.description || '',
                         recommendation: noteText,
@@ -2218,6 +2356,17 @@ export default function SystemBuilderPreview({ onEditInBuilder }: Props) {
                           .split('\n')
                           .map(s => s.trim())
                           .filter(Boolean),
+                        // Snapshot of each layer's currently-saved card
+                        // content so the panel can render current vs
+                        // proposed for the layer rows.
+                        layerEnhancements: Object.fromEntries(
+                          openSystem.layers
+                            .filter(l => (l.previewDescription || '').trim() || (l.previewProperties || []).length > 0)
+                            .map(l => [l.layerId, {
+                              description: l.previewDescription || '',
+                              properties: (l.previewProperties || []).filter(p => typeof p === 'string' && p.trim().length > 0),
+                            }]),
+                        ),
                       }}
                       proposed={aiProposal}
                       onApply={applyAiFill}

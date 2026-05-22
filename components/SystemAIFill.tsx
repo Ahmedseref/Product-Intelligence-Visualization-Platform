@@ -16,6 +16,27 @@
 import { useState } from 'react';
 import { Sparkles, X, Pencil, Check } from 'lucide-react';
 
+// Per-layer "Description & key properties" content shown on the System
+// Preview cards (Sika/PPG-style). Used in both directions:
+//   - AiFillResult.layerEnhancements: what the model proposes, keyed by
+//     layerId so the parent can fan out PUT /api/system-layers/:id calls.
+//   - AiFillCurrent.layerEnhancements: what is currently persisted on
+//     each layer, so the review panel can show current vs proposed.
+export type LayerEnhancement = {
+  description: string;
+  properties: string[];
+};
+// Display metadata attached to each layer row in the review panel so we
+// can render a meaningful label (e.g. "③ Topcoat — POLEPOX PU TP 600")
+// without needing to look the layer up by ID. Built by the parent from
+// the current open system's layers.
+export type LayerMeta = {
+  layerId: string;
+  order: number;
+  layerName: string;
+  productName: string | null;
+};
+
 export type AiFillResult = {
   description: string;
   recommendation: string;
@@ -24,6 +45,10 @@ export type AiFillResult = {
   // review panel and the modal body. Persisted to systems.typical_uses as
   // newline-joined text.
   usageAreas: string[];
+  // Per-layer card content keyed by `layerId`. May contain entries for
+  // any subset of the system's layers (the server only returns entries
+  // it could ground in real data).
+  layerEnhancements: Record<string, LayerEnhancement>;
   confidence: 'HIGH' | 'MEDIUM' | 'LOW';
   reasoning: string;
 };
@@ -33,6 +58,9 @@ export type AiFillCurrent = {
   recommendation: string;
   warnings: string[];
   usageAreas: string[];
+  // Current per-layer card content, keyed by layerId. Same shape as the
+  // proposal so the review panel can diff them side-by-side.
+  layerEnhancements: Record<string, LayerEnhancement>;
 };
 
 const CONFIDENCE_COLORS: Record<AiFillResult['confidence'], string> = {
@@ -47,8 +75,12 @@ export function SystemAIFillPanel(props: {
   onApply: (next: AiFillCurrent) => void;
   onDiscard: () => void;
   systemName?: string;
+  // Ordered list of layers in the open system, used to label per-layer
+  // review rows. The order here drives the rendering order so the panel
+  // matches the preview card sequence (Primer → Body → Topcoat).
+  layers?: LayerMeta[];
 }) {
-  const { current, proposed, onApply, onDiscard, systemName } = props;
+  const { current, proposed, onApply, onDiscard, systemName, layers = [] } = props;
 
   // Local editable copy of the proposed values so "Use this" / inline edits
   // mutate this scratch state, then "Apply all" / per-section apply pushes
@@ -58,6 +90,14 @@ export function SystemAIFillPanel(props: {
     recommendation: proposed.recommendation || '',
     warnings: [...(proposed.warnings || [])],
     usageAreas: [...(proposed.usageAreas || [])],
+    // Shallow-clone each layer enhancement so inline edits below don't
+    // accidentally mutate the immutable `proposed` reference.
+    layerEnhancements: Object.fromEntries(
+      Object.entries(proposed.layerEnhancements || {}).map(([k, v]) => [
+        k,
+        { description: v.description || '', properties: [...(v.properties || [])] },
+      ]),
+    ),
   });
   const [editing, setEditing] = useState<{ description: boolean; recommendation: boolean; warnings: boolean; usageAreas: boolean }>({
     description: false,
@@ -65,6 +105,10 @@ export function SystemAIFillPanel(props: {
     warnings: false,
     usageAreas: false,
   });
+  // Per-layer inline-edit toggles, keyed by layerId. Independent of the
+  // top-level `editing` object so toggling one layer doesn't collapse
+  // others.
+  const [layerEditing, setLayerEditing] = useState<Record<string, boolean>>({});
 
   // Per-section "Use this" — copies the draft for that field up into the
   // current values (which the parent persists). The other fields keep their
@@ -168,6 +212,138 @@ export function SystemAIFillPanel(props: {
             />
           </div>
         )}
+        {/* PER-LAYER CARD CONTENT (full width) — one collapsible row
+            per layer the model returned an enhancement for. Each row
+            shows the layer label + a side-by-side current/proposed
+            view for the description and the properties bullet list.
+            Inline edits mutate the draft; "Use this layer" copies just
+            this row's draft up into `current.layerEnhancements`. */}
+        {layers.length > 0 && (
+          (() => {
+            // Rows to render = every layer in the system that EITHER has
+            // a proposed enhancement OR already has saved content. This
+            // way the panel surfaces both new suggestions and any
+            // existing layer copy the user might want to discard.
+            const rows = layers.filter(
+              (lm) => draft.layerEnhancements[lm.layerId] || current.layerEnhancements[lm.layerId],
+            );
+            if (rows.length === 0) return null;
+            return (
+              <div className="md:col-span-2 space-y-3">
+                <div className="text-[11px] font-semibold uppercase tracking-wide text-violet-700">
+                  Layer cards — description &amp; properties
+                </div>
+                {rows.map((lm) => {
+                  const cur = current.layerEnhancements[lm.layerId] || { description: '', properties: [] };
+                  const prop = draft.layerEnhancements[lm.layerId] || { description: '', properties: [] };
+                  const isEditing = !!layerEditing[lm.layerId];
+                  const label = `${lm.order}. ${lm.layerName}${lm.productName ? ` — ${lm.productName}` : ''}`;
+                  const fmtProps = (arr: string[]) => arr.map((p) => `• ${p}`).join('\n');
+                  const updateDraft = (next: LayerEnhancement) => {
+                    setDraft((d) => ({
+                      ...d,
+                      layerEnhancements: { ...d.layerEnhancements, [lm.layerId]: next },
+                    }));
+                  };
+                  return (
+                    <div key={lm.layerId} className="bg-white border border-slate-200 rounded-xl overflow-hidden">
+                      <div className="px-3 py-2 bg-slate-50 border-b border-slate-200 flex items-center justify-between">
+                        <span className="text-xs font-semibold text-slate-700 truncate">{label}</span>
+                        <div className="flex items-center gap-1">
+                          <button
+                            type="button"
+                            onClick={() => setLayerEditing((e) => ({ ...e, [lm.layerId]: !e[lm.layerId] }))}
+                            className="px-1.5 py-0.5 text-[10px] text-slate-600 hover:bg-slate-200 rounded inline-flex items-center gap-1"
+                            title={isEditing ? 'Stop editing' : 'Edit'}
+                          >
+                            <Pencil size={10} /> {isEditing ? 'Done' : 'Edit'}
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() =>
+                              onApply({
+                                ...current,
+                                layerEnhancements: { ...current.layerEnhancements, [lm.layerId]: prop },
+                              })
+                            }
+                            className="px-2 py-0.5 text-[10px] font-semibold text-white bg-violet-600 hover:bg-violet-700 rounded"
+                          >
+                            Use this layer
+                          </button>
+                        </div>
+                      </div>
+                      <div className="grid grid-cols-2 text-[11px] font-semibold uppercase tracking-wide bg-slate-50/60 border-b border-slate-100">
+                        <div className="px-3 py-1.5 text-slate-500">Current</div>
+                        <div className="px-3 py-1.5 text-violet-700 border-l border-slate-200">AI proposed</div>
+                      </div>
+                      <div className="grid grid-cols-2 min-h-[80px]">
+                        {/* Current side: read-only diff target. Joins
+                            properties as bullets so it visually mirrors
+                            how the preview card itself renders them. */}
+                        <div className="px-3 py-2 text-xs space-y-1.5 text-slate-600">
+                          {cur.description
+                            ? <p className="whitespace-pre-wrap font-sans">{cur.description}</p>
+                            : <p className="italic text-slate-400">(no description)</p>}
+                          {cur.properties.length > 0 ? (
+                            <pre className="whitespace-pre-wrap font-sans">{fmtProps(cur.properties)}</pre>
+                          ) : (
+                            <p className="italic text-slate-400">(no properties)</p>
+                          )}
+                        </div>
+                        {/* Proposed side: editable when isEditing, read-
+                            only otherwise. Description + bullets share
+                            the same single textarea (one block per
+                            line, split back on blur via the same
+                            "strip leading bullet" rule the usageAreas
+                            block uses for symmetry). */}
+                        <div className="px-3 py-2 border-l border-slate-100">
+                          {isEditing ? (
+                            <div className="space-y-1.5">
+                              <textarea
+                                value={prop.description}
+                                onChange={(e) => updateDraft({ ...prop, description: e.target.value })}
+                                rows={Math.max(2, Math.min(5, prop.description.split('\n').length + 1))}
+                                placeholder="Headline — short technical paragraph"
+                                className="w-full text-xs bg-violet-50/40 border border-violet-200 rounded p-1.5 focus:ring-1 focus:ring-violet-400 outline-none font-sans"
+                              />
+                              <textarea
+                                value={fmtProps(prop.properties)}
+                                onChange={(e) =>
+                                  updateDraft({
+                                    ...prop,
+                                    properties: e.target.value
+                                      .split('\n')
+                                      .map((l) => l.replace(/^[•\-\*]\s*/, '').trim())
+                                      .filter(Boolean),
+                                  })
+                                }
+                                rows={Math.max(3, Math.min(8, prop.properties.length + 1))}
+                                placeholder="• one bullet per line"
+                                className="w-full text-xs bg-violet-50/40 border border-violet-200 rounded p-1.5 focus:ring-1 focus:ring-violet-400 outline-none font-sans"
+                              />
+                            </div>
+                          ) : (
+                            <div className="text-xs space-y-1.5 text-slate-800">
+                              {prop.description
+                                ? <p className="whitespace-pre-wrap font-sans">{prop.description}</p>
+                                : <p className="italic text-slate-400">(no description)</p>}
+                              {prop.properties.length > 0 ? (
+                                <pre className="whitespace-pre-wrap font-sans">{fmtProps(prop.properties)}</pre>
+                              ) : (
+                                <p className="italic text-slate-400">(no properties)</p>
+                              )}
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            );
+          })()
+        )}
+
         {/* WARNINGS (full width when present) */}
         {(draft.warnings.length > 0 || current.warnings.length > 0) && (
           <div className="md:col-span-2">

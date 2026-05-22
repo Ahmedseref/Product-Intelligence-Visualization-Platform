@@ -241,6 +241,17 @@ export const systemLayers = pgTable("system_layers", {
   // bounds are surfaced as first-class fields.
   recoatMinHours: real("recoat_min_hours"),
   recoatMaxHours: real("recoat_max_hours"),
+  // ── Per-layer marketing/technical card content (System Preview) ──
+  // `previewDescription` is the short headline + paragraph shown under the
+  // layer name on the Spec preview cards (mirrors the Sika/PPG layer
+  // description style — e.g. "Highly Penetrating Primer — This two-component
+  // epoxy primer …"). `previewProperties` is the bullet list of selling
+  // points rendered below it. Both are populated either manually by the
+  // user or via the System AI Fill flow which synthesises them from the
+  // default product's description, technical specs, supplier knowledge
+  // (Sika / PPG reference architecture) and the system parameters.
+  previewDescription: text("preview_description"),
+  previewProperties: jsonb("preview_properties").$type<string[]>().default([]),
   // ── Adaptive primer slot ──
   // 'fixed' (default) keeps the legacy behaviour where the user manually
   // assigns one or more products via system_product_options. 'adaptive' is

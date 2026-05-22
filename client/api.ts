@@ -1029,6 +1029,11 @@ export const systemsApi = {
       // Recoat window min/max in hours between this coat and the next.
       recoatMinHours?: number | null;
       recoatMaxHours?: number | null;
+      // Per-layer "Description & key properties" content shown on the
+      // System Preview cards (Sika/PPG-style). `previewProperties` is a
+      // bullet list. Both are nullable; sending `null` / `[]` clears them.
+      previewDescription?: string | null;
+      previewProperties?: string[] | null;
     }>
   ) => {
     const response = await fetch(`${API_BASE}/system-layers/${layerId}`, {

@@ -30,6 +30,13 @@ type AiFillResponse = {
   // Rendered as a bullet list in the UI and persisted to `systems.typical_uses`
   // as newline-joined text.
   usageAreas: string[];
+  // Per-layer "Description & key properties" content rendered on the
+  // System Preview cards (Sika/PPG-style). Keyed by `layerId` from the
+  // request payload — the client uses this to fan out PUT calls to
+  // /api/system-layers/:id when the user accepts the suggestion. The
+  // server treats the keys as opaque strings and never tries to mutate
+  // layers itself.
+  layerEnhancements: Record<string, { description: string; properties: string[] }>;
   confidence: "HIGH" | "MEDIUM" | "LOW";
   reasoning: string;
 };
@@ -44,6 +51,10 @@ type AiFillResponse = {
 type ProductSpecs = string;
 
 type LayerForPrompt = {
+  // Stable layerId — echoed back in the response's `layerEnhancements`
+  // map so the client can fan out per-layer PUT calls. Never shown to
+  // the user; only used as a key.
+  layerId: string;
   order: number;
   name: string;
   position: string;
@@ -52,6 +63,11 @@ type LayerForPrompt = {
     supplier: string;
     description: string;
     specs: ProductSpecs;
+    // Taxonomy hint pulled from `products.category` + `products.sector`,
+    // joined with " / " when both are present. Empty string when neither
+    // is set. Helps the model anchor the layer description in the
+    // product's actual taxonomy (e.g. "Coatings / Epoxy Primers").
+    taxonomy: string;
     tags: { substrate: string; humidity: string; duty: string; finish: string };
   } | null;
   // Alternatives now carry name + supplier + (full) description + specs so
@@ -135,6 +151,7 @@ export function buildSystemFillPrompt(
   // substitution rather than just acknowledging an alt exists.
   const layersBlock = system.layers.map((l) => {
     const defSpecs = l.defaultProduct?.specs ? `\n  Specs: ${l.defaultProduct.specs}` : "";
+    const defTax = l.defaultProduct?.taxonomy ? `\n  Taxonomy: ${l.defaultProduct.taxonomy}` : "";
     const altsBlock = l.alternatives.length === 0
       ? "  Alternatives: None"
       : `  Alternatives:\n${l.alternatives.map((a) => {
@@ -143,13 +160,18 @@ export function buildSystemFillPrompt(
           return `    - ${a.name} (supplier: ${a.supplier})${aDesc}${aSpecs}`;
         }).join("\n")}`;
     return `
-- Layer ${l.order}: ${l.name} (${l.position})
+- Layer ${l.order} [layerId="${l.layerId}"]: ${l.name} (${l.position})
   Default product: ${l.defaultProduct?.name || "None assigned"}
   Supplier: ${l.defaultProduct?.supplier || "—"}
-  Description: ${l.defaultProduct?.description || "—"}${defSpecs}
+  Description: ${l.defaultProduct?.description || "—"}${defTax}${defSpecs}
   Tags: substrate=${l.defaultProduct?.tags.substrate || "—"}, humidity=${l.defaultProduct?.tags.humidity || "—"}, duty=${l.defaultProduct?.tags.duty || "—"}, finish=${l.defaultProduct?.tags.finish || "—"}
 ${altsBlock}`;
   }).join("");
+
+  // Whitelist of layerIds the model is allowed to write to. The client
+  // ignores any unknown keys defensively, but listing them here keeps the
+  // model from inventing layerIds that don't exist.
+  const layerIdList = system.layers.map((l) => `"${l.layerId}"`).join(", ");
 
   const otherBlock = otherSystems
     .slice(0, 5)
@@ -311,14 +333,41 @@ Requested sections: ${sections.join(", ")}
    - Do NOT invent warnings — only flag genuine technical considerations
      based on the products and substrate configuration shown.
 
-5. CONFIDENCE:
+5. LAYER ENHANCEMENTS (object keyed by layerId — one entry per layer
+   in the system, even when the layer has no default product, so the
+   System Preview card can show a meaningful headline regardless):
+   - The valid layerIds are: ${layerIdList || "(no layers)"}.
+   - For each layer, return an object with:
+       "description": 1-3 short sentences in the style of a Sika / PPG
+         technical datasheet layer block. Start with a 2-4 word headline
+         followed by " — " and a short technical paragraph (e.g.
+         "Highly Penetrating Primer — This two-component epoxy primer
+         seals the substrate and provides an excellent mechanical bond
+         for the subsequent coats."). Ground the language in the
+         default product's description, taxonomy, technical specs and
+         the supplier knowledge base above. If the layer has no default
+         product, describe it generically based on its position + the
+         system parameters.
+       "properties": array of 3-6 short bullet phrases (NOT full
+         sentences) describing the key selling points / technical
+         properties of this layer in the context of THIS system. Pull
+         from the product's actual specs and description when possible
+         (e.g. "Low Viscosity", "Low Odor", "Bonds to Damp Concrete",
+         "Roller, Squeegee, or Brush Application", "200-400 µm DFT per
+         coat"). Avoid duplicating the system-level description's
+         language.
+   - Return [] for properties if you genuinely have no grounded bullets
+     for that layer — never invent specs that aren't supported by the
+     product description, specs or supplier knowledge above.
+
+6. CONFIDENCE:
    - HIGH if the system has complete parameters and at least 2 layers with
      products assigned.
    - MEDIUM if parameters are partially configured or only 1 layer has
      products.
    - LOW if most parameters are "Not configured".
 
-6. REASONING (one sentence): Why you described it this way — which data
+7. REASONING (one sentence): Why you described it this way — which data
    points drove the content.
 
 Respond with ONLY valid JSON, no markdown:
@@ -327,6 +376,9 @@ Respond with ONLY valid JSON, no markdown:
   "recommendation": "string",
   "usageAreas": ["string", "string", ...],
   "warnings": ["string"],
+  "layerEnhancements": {
+    "<layerId>": { "description": "string", "properties": ["string", ...] }
+  },
   "confidence": "HIGH|MEDIUM|LOW",
   "reasoning": "string"
 }`;
@@ -373,6 +425,13 @@ export function registerAiSystemFillRoutes(app: Express): void {
               // VOC) rather than catalog-style guesses.
               productTechnicalSpecs: products.technicalSpecs,
               productCustomFields: products.customFields,
+              // Pulled for the prompt's per-product "Taxonomy:" line so
+              // the AI can ground the layer description in the
+              // product's actual category path (e.g. "Coatings / Epoxy
+              // Primers"). Both columns are nullable; the formatter
+              // joins what's present with " / ".
+              productCategory: products.category,
+              productSector: products.sector,
             })
             .from(systemProductOptions)
             .leftJoin(products, eq(systemProductOptions.productId, products.productId))
@@ -393,7 +452,16 @@ export function registerAiSystemFillRoutes(app: Express): void {
             tag = t || null;
           }
 
+          // " / "-joined taxonomy hint from products.category +
+          // products.sector. Either may be null/empty; the join drops
+          // empty parts so we never emit " /  " or a leading slash.
+          const taxonomyParts = [def?.productCategory, def?.productSector]
+            .map((s) => (s || "").trim())
+            .filter(Boolean);
+          const taxonomy = taxonomyParts.join(" / ");
+
           return {
+            layerId: layer.layerId,
             order: (layer.orderSequence ?? 0) + 1,
             name: layer.layerName,
             position: inferLayerPosition(layer.layerName),
@@ -403,6 +471,7 @@ export function registerAiSystemFillRoutes(app: Express): void {
                   supplier: def.productSupplier || "—",
                   description: def.productDescription || "",
                   specs: formatProductSpecs(def.productTechnicalSpecs, def.productCustomFields),
+                  taxonomy,
                   tags: {
                     substrate: (tag?.substrateTypes || []).join(", "),
                     humidity: tag?.humidityTolerance || "",
@@ -488,7 +557,7 @@ export function registerAiSystemFillRoutes(app: Express): void {
       try {
         parsed = JSON.parse(cleaned);
       } catch {
-        return res.status(502).json({ error: "AI returned malformed JSON", raw: textBlock.text });
+        return res.status(502).json({ error: "AI returned malformed JSON", raw: cleaned });
       }
 
       // Normalise + clamp the response shape so the client can rely on it.
@@ -504,6 +573,33 @@ export function registerAiSystemFillRoutes(app: Express): void {
               .map((u) => u.trim())
               .filter(Boolean)
           : [],
+        // Normalise layerEnhancements: keep ONLY entries keyed by a
+        // layerId that actually exists in this system (drops any IDs
+        // hallucinated by the model), coerce missing fields to safe
+        // defaults, and trim/filter properties so empties never reach
+        // the UI as blank bullets.
+        layerEnhancements: (() => {
+          const out: Record<string, { description: string; properties: string[] }> = {};
+          const validIds = new Set(layersForPrompt.map((l) => l.layerId));
+          const raw = (parsed as any).layerEnhancements;
+          if (raw && typeof raw === "object" && !Array.isArray(raw)) {
+            for (const [k, v] of Object.entries(raw)) {
+              if (!validIds.has(k) || !v || typeof v !== "object") continue;
+              const e = v as { description?: unknown; properties?: unknown };
+              const description = typeof e.description === "string" ? e.description.trim() : "";
+              const properties = Array.isArray(e.properties)
+                ? e.properties
+                    .filter((p) => typeof p === "string")
+                    .map((p) => (p as string).trim())
+                    .filter(Boolean)
+                : [];
+              if (description || properties.length > 0) {
+                out[k] = { description, properties };
+              }
+            }
+          }
+          return out;
+        })(),
         confidence: ["HIGH", "MEDIUM", "LOW"].includes(String(parsed.confidence)) ? (parsed.confidence as AiFillResponse["confidence"]) : "LOW",
         reasoning: typeof parsed.reasoning === "string" ? parsed.reasoning : "",
       };
