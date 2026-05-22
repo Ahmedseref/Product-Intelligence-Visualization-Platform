@@ -403,6 +403,11 @@ export default function SystemBuilderPreview({ onEditInBuilder }: Props) {
     hideStockCodes: false,
     hideSuppliers: false,
     hideStatus: false,
+    // Customer-facing catalogs sometimes need to show only the layer
+    // category (e.g. "Primer · Epoxy") without exposing the specific
+    // product chosen. Toggling this on suppresses both the bold product
+    // name line on each layer card AND the "Alternatives: ..." line.
+    hideProductNames: false,
     format: 'docx' as 'docx' | 'pdf',
   });
   // Hidden offscreen container we render printable system summaries into
@@ -1261,12 +1266,23 @@ export default function SystemBuilderPreview({ onEditInBuilder }: Props) {
           if (!exportOpts.hideSuppliers && def.productSupplier) meta.push(def.productSupplier);
           if (!exportOpts.hideStockCodes && def.productStockCode) meta.push(def.productStockCode);
         }
-        const alts = (def && exportOpts.includeAlternatives)
+        // Suppress the "Alternatives: ..." line whenever the customer
+        // wants alternatives hidden — either via the dedicated catalog
+        // toggle or via the broader "hide product names" preset.
+        const alts = (def && exportOpts.includeAlternatives && !exportOpts.hideProductNames)
           ? l.productOptions.filter(o => o !== def).map(o => o.productName).filter(Boolean).join(', ')
           : '';
+        // When hiding product names we also drop the placeholder
+        // "No products assigned" line so the card reads as a pure
+        // layer-category swatch (matches Sika/PPG generic catalogs).
+        const productLine = exportOpts.hideProductNames
+          ? ''
+          : (def
+              ? `<div style="font-size:14px;font-weight:600;margin-top:4px">${escapeHtml(def.productName || def.productId)}</div>`
+              : '<div style="font-size:13px;font-style:italic;color:#64748b;margin-top:4px">No products assigned</div>');
         return `<div style="background:${c.fill};border-left:6px solid ${c.accent};padding:10px 14px;margin-bottom:6px;border-radius:6px">
           <div style="font-size:11px;font-weight:700;color:${c.text};letter-spacing:0.5px;text-transform:uppercase">${c.label} · ${escapeHtml(l.layerName)}</div>
-          ${def ? `<div style="font-size:14px;font-weight:600;margin-top:4px">${escapeHtml(def.productName || def.productId)}</div>` : '<div style="font-size:13px;font-style:italic;color:#64748b;margin-top:4px">No products assigned</div>'}
+          ${productLine}
           ${meta.length ? `<div style="font-size:12px;color:#64748b;margin-top:2px">${meta.map(escapeHtml).join(' · ')}</div>` : ''}
           ${alts ? `<div style="font-size:11px;color:#475569;margin-top:4px"><b>Alternatives:</b> ${escapeHtml(alts)}</div>` : ''}
         </div>`;
@@ -1576,6 +1592,7 @@ export default function SystemBuilderPreview({ onEditInBuilder }: Props) {
                   ['hideStockCodes', 'Hide stock codes'],
                   ['hideSuppliers', 'Hide supplier names'],
                   ['hideStatus', 'Hide status badges'],
+                  ['hideProductNames', 'Hide product names & alternatives'],
                 ] as const).map(([key, label]) => (
                   <label key={key} className="flex items-center gap-2 py-0.5 cursor-pointer">
                     <input

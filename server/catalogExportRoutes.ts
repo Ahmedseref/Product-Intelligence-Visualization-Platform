@@ -346,6 +346,11 @@ type ExportOptions = {
   hideStockCodes: boolean;
   hideSuppliers: boolean;
   hideStatus: boolean;
+  // When true, the bold product-name line and the "Alternatives: ..."
+  // paragraph are both omitted from each layer card so the catalog
+  // shows only generic layer categories. Useful for customer-facing
+  // technical proposals where the brand/SKU should stay private.
+  hideProductNames: boolean;
   format: "docx" | "pdf";
 };
 
@@ -360,6 +365,7 @@ const DEFAULT_OPTS: ExportOptions = {
   hideStockCodes: false,
   hideSuppliers: false,
   hideStatus: false,
+  hideProductNames: false,
   format: "docx",
 };
 
@@ -917,19 +923,30 @@ export function registerCatalogExportRoutes(app: Express): void {
               rightChildren.push(headerTable);
 
               if (!def) {
-                rightChildren.push(plain("Contact us for product recommendation.", { italic: true, color: "64748B", size: 18 }));
+                // When hiding product names entirely, drop the
+                // "Contact us..." placeholder too — the layer-category
+                // header is the only thing the customer should see.
+                if (!opts.hideProductNames) {
+                  rightChildren.push(plain("Contact us for product recommendation.", { italic: true, color: "64748B", size: 18 }));
+                }
               } else {
                 const prod = productById.get(def.productId) || {};
                 const supplier = prod.supplier || prod.brand || "";
                 const stockCode = prod.stockCode || prod.productStockCode || "";
                 const desc = (prod.description || "").slice(0, 100);
 
-                rightChildren.push(
-                  new Paragraph({
-                    spacing: { before: 80, after: 40 },
-                    children: [new TextRun({ text: prod.name || def.productId, bold: true, size: 22, color: "0F172A" })],
-                  }),
-                );
+                // Skip the bold product-name heading when the customer
+                // wants only generic layer info. Supplier / stock-code
+                // meta keep their own dedicated hide toggles so a user
+                // can still allow brand visibility without the SKU.
+                if (!opts.hideProductNames) {
+                  rightChildren.push(
+                    new Paragraph({
+                      spacing: { before: 80, after: 40 },
+                      children: [new TextRun({ text: prod.name || def.productId, bold: true, size: 22, color: "0F172A" })],
+                    }),
+                  );
+                }
                 const meta: string[] = [];
                 if (!opts.hideSuppliers && supplier) meta.push(`Supplier: ${supplier}`);
                 if (!opts.hideStockCodes && stockCode) meta.push(`Code: ${stockCode}`);
@@ -954,7 +971,7 @@ export function registerCatalogExportRoutes(app: Express): void {
                   }
                 }
 
-                if (opts.includeAlternatives && alts.length) {
+                if (opts.includeAlternatives && !opts.hideProductNames && alts.length) {
                   const altNames = alts
                     .map((a: any) => productById.get(a.productId)?.name || a.productId)
                     .filter(Boolean)
