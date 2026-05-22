@@ -13,6 +13,7 @@ import {
   Library
 } from 'lucide-react';
 import SystemDashboard from './SystemDashboard';
+import SelectorGuide from './SelectorGuide';
 import SystemBuilderQualification from '../SystemBuilderQualification';
 import SystemBuilderPreview from '../SystemBuilderPreview';
 import PrimerLibrary from './PrimerLibrary';
@@ -1367,8 +1368,9 @@ const SystemBuilder: React.FC<SystemBuilderProps> = ({ products, onProductUpdate
             </div>
           </div>
         </div>
-        <div className="flex-1 overflow-y-auto p-6">
+        <div className="flex-1 overflow-y-auto p-6 space-y-6">
           <SystemDashboard products={products} />
+          <SelectorGuide />
         </div>
       </div>
     );

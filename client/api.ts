@@ -1258,3 +1258,32 @@ export const primerLibraryApi = {
     return response.json();
   },
 };
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Selector Guide (Analytics tab) — editable systems × applications matrix.
+// Persisted as a single JSON doc in app_settings server-side, so the whole
+// document is fetched / saved at once. Small payload, simple semantics.
+// ─────────────────────────────────────────────────────────────────────────────
+export interface SelectorGuideDoc {
+  title: string;
+  systems: { id: string; name: string; color: string }[];
+  applications: { id: string; name: string }[];
+  cells: Record<string, boolean>;
+}
+
+export const selectorGuideApi = {
+  get: async (): Promise<SelectorGuideDoc> => {
+    const response = await fetch(`${API_BASE}/selector-guide`, { headers: getAuthHeaders() });
+    if (!response.ok) throw new Error('Failed to load selector guide');
+    return response.json();
+  },
+  save: async (doc: SelectorGuideDoc): Promise<SelectorGuideDoc> => {
+    const response = await fetch(`${API_BASE}/selector-guide`, {
+      method: 'PUT',
+      headers: { ...getAuthHeaders(), 'Content-Type': 'application/json' },
+      body: JSON.stringify(doc),
+    });
+    if (!response.ok) throw new Error('Failed to save selector guide');
+    return response.json();
+  },
+};
