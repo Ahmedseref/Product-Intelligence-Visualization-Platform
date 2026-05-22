@@ -442,23 +442,24 @@ async function buildPrimerChartSection(
     base: detectPrimerBase(product?.name || "", product?.description || "", pathFor(product?.nodeId)),
   }));
 
-  // Build axes from used values only — same logic as the client chart.
-  const usedSubsSet = new Set<string>();
-  const usedHumSet = new Set<string>();
-  primers.forEach(p => {
-    p.substrates.forEach(s => usedSubsSet.add(s));
-    if (p.humidity) usedHumSet.add(p.humidity);
-  });
+  // Build axes from the FULL vocabulary (not just values that already
+  // appear in the library) so the printed reference page shows every
+  // substrate × humidity combination, including empty ones the user
+  // can fill in later. Preferred substrates float to the top.
   const SUBSTRATE_ORDER = ["Concrete", "Screed", "Steel", "Metal", "Ceramic", "Existing Coating", "Over Primer", "Over Base Coat"];
+  const allSubs = vocabRows
+    .filter(v => v.vocabType === "substrate")
+    .sort((a, b) => (a.sortOrder ?? 0) - (b.sortOrder ?? 0))
+    .map(v => v.value);
+  const allSubsSet = new Set(allSubs);
   const substrates = [
-    ...SUBSTRATE_ORDER.filter(s => usedSubsSet.has(s)),
-    ...Array.from(usedSubsSet).filter(s => !SUBSTRATE_ORDER.includes(s)),
+    ...SUBSTRATE_ORDER.filter(s => allSubsSet.has(s)),
+    ...allSubs.filter(s => !SUBSTRATE_ORDER.includes(s)),
   ];
   const humidities = vocabRows
     .filter(v => v.vocabType === "humidity")
     .sort((a, b) => (a.sortOrder ?? 0) - (b.sortOrder ?? 0))
-    .map(v => v.value)
-    .filter(h => usedHumSet.has(h));
+    .map(v => v.value);
 
   if (substrates.length === 0 || humidities.length === 0) return null;
 
@@ -488,8 +489,9 @@ async function buildPrimerChartSection(
         return new Paragraph({
           spacing: { before: 20, after: 20 },
           children: [
-            new TextRun({ text: p.label || "—", bold: true, size: 14, color: c.text, font: "Consolas" }),
-            ...(p.name ? [new TextRun({ text: " · " + p.name, size: 14, color: c.text })] : []),
+            // Stock code intentionally hidden from the printed chart —
+            // product name only, matching the on-screen chip.
+            new TextRun({ text: p.name || p.label || "—", bold: true, size: 14, color: c.text }),
           ],
         });
       }),
@@ -533,9 +535,10 @@ async function buildPrimerChartSection(
     }),
   );
 
-  // Legend paragraphs — only base types that actually appear in the data,
-  // shown as a single line of colored "■ Name" tokens.
-  const usedBases = Array.from(new Set(primers.map(p => p.base)));
+  // Legend paragraphs — always show every supported primer base so the
+  // reader can recognise bases that are not in the library yet (e.g.
+  // Bitumen / Silane often come from the taxonomy tree only).
+  const usedBases = ["Epoxy", "PU", "Bitumen", "Silane", "Acrylic"];
   const legendRuns: any[] = [new TextRun({ text: "Legend: ", bold: true, size: 16, color: "475569" })];
   usedBases.forEach((b, i) => {
     const c = PRIMER_BASE_COLORS[b] || PRIMER_BASE_COLORS.Other;

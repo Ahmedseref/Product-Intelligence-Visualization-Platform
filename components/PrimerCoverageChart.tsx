@@ -52,7 +52,7 @@ const SUBSTRATE_PREFERRED_ORDER = [
 ];
 
 // Chart geometry — fixed values from the spec.
-const CELL_W = 110;
+const CELL_W = 160;
 const CHIP_H = 28;
 const CHIP_GAP = 2;
 const ROW_LABEL_W = 100;
@@ -100,13 +100,12 @@ function buildMatrix(primers: PrimerCoverageChartPrimer[]): Map<string, Map<stri
   return m;
 }
 
-// Truncate stock code to the chip's available label area. The cap is
-// 12 chars per the spec, with an ellipsis when we trim. Keeping the
-// first 12 chars preserves the most stable prefix (supplier/branch
-// codes) of structured stock codes like P.GR.CO.CC.WP.PR.0324.
-function fitStockCode(code: string, max = 12): string {
-  if (!code) return '';
-  return code.length <= max ? code : code.slice(0, max - 1) + '…';
+// Truncate product name to the chip's available label area. Stock codes
+// are intentionally hidden from chips (the user wanted the chart driven
+// by recognisable product names rather than internal SKUs).
+function fitName(name: string, max = 22): string {
+  if (!name) return '';
+  return name.length <= max ? name : name.slice(0, max - 1) + '…';
 }
 
 const PrimerCoverageChart: React.FC = () => {
@@ -139,30 +138,29 @@ const PrimerCoverageChart: React.FC = () => {
   //   - `cellPrimers` is the post-filter set used to render chips.
   const visible = useMemo(() => {
     if (!data) return null;
-    const axisPrimers = data.primers; // axis labels driven by full set
     const cellPrimers = filter === 'All'
       ? data.primers
       : data.primers.filter(p => (p.compatible_system_types || []).includes(filter));
 
-    // Used substrates: respect the spec's preferred order, drop unused.
-    const usedSubsSet = new Set<string>();
-    axisPrimers.forEach(p => (p.compatible_substrates || []).forEach(s => usedSubsSet.add(s)));
+    // Show ALL substrates from the vocabulary (not just the ones with
+    // primers today). The user wants to see the full coverage map up
+    // front so empty rows are visible as opportunities to enrich the
+    // primer library later. Preferred substrates float to the top.
+    const allSubs = new Set(data.substrates);
     const orderedSubs = [
-      ...SUBSTRATE_PREFERRED_ORDER.filter(s => usedSubsSet.has(s)),
-      ...Array.from(usedSubsSet).filter(s => !SUBSTRATE_PREFERRED_ORDER.includes(s)),
+      ...SUBSTRATE_PREFERRED_ORDER.filter(s => allSubs.has(s)),
+      ...data.substrates.filter(s => !SUBSTRATE_PREFERRED_ORDER.includes(s)),
     ];
 
-    // Used humidities: keep the vocabulary's sort_order from the server.
-    const usedHumSet = new Set<string>();
-    axisPrimers.forEach(p => { if (p.humidity_tolerance) usedHumSet.add(p.humidity_tolerance); });
-    const orderedHums = data.humidities.filter(h => usedHumSet.has(h));
+    // Show ALL humidities from the vocabulary too — same rationale.
+    const orderedHums = data.humidities.slice();
 
     const matrix = buildMatrix(cellPrimers);
 
-    // Used bases for the legend (drawn from the unfiltered set so users
-    // can recognise the colors of base types that the filter is hiding).
-    const usedBases = Array.from(new Set(axisPrimers.map(p => p.primer_base)))
-      .sort((a, b) => Object.keys(BASE_COLORS).indexOf(a) - Object.keys(BASE_COLORS).indexOf(b));
+    // Always show every supported primer base in the legend so the
+    // user can recognise colors of bases that aren't in the library
+    // yet (Bitumen/Silane often come from the taxonomy tree only).
+    const usedBases = ['Epoxy', 'PU', 'Bitumen', 'Silane', 'Acrylic'];
 
     return { orderedSubs, orderedHums, matrix, usedBases, cellPrimers };
   }, [data, filter]);
@@ -249,7 +247,7 @@ const PrimerCoverageChart: React.FC = () => {
           <div>
             <h2 className="text-lg font-bold text-slate-800">Primer coverage map</h2>
             <p className="text-xs text-slate-500 mt-1">
-              Each chip represents one primer by stock code · color indicates primer base type · dots indicate compatible system types
+              Each chip is one primer (product name) · color indicates primer base · dots indicate compatible system types · empty cells show where the library can be enriched
             </p>
           </div>
           <div className="flex items-center gap-2">
@@ -414,11 +412,11 @@ const PrimerCoverageChart: React.FC = () => {
                         const chipX = cellX + 4;
                         const chipY = startY + i * (CHIP_H + CHIP_GAP);
                         const chipW = CELL_W - 8;
-                        const label = fitStockCode(p.stock_code || p.primer_id);
+                        const label = fitName(p.product_name || p.primer_id);
                         chips.push(
                           <g key={p.primer_id}>
                             <title>
-                              {`${p.stock_code || p.primer_id} · ${p.product_name}${p.supplier ? ' · ' + p.supplier : ''}${p.compatible_system_types?.length ? ' · ' + p.compatible_system_types.join(', ') : ''}`}
+                              {`${p.product_name || p.primer_id}${p.supplier ? ' · ' + p.supplier : ''}${p.compatible_system_types?.length ? ' · ' + p.compatible_system_types.join(', ') : ''}`}
                             </title>
                             <rect
                               x={chipX}
@@ -434,8 +432,8 @@ const PrimerCoverageChart: React.FC = () => {
                             <text
                               x={chipX + 6}
                               y={chipY + CHIP_H / 2 + 3}
-                              fontSize={8}
-                              fontFamily="ui-monospace, Menlo, Consolas, monospace"
+                              fontSize={10}
+                              fontWeight={500}
                               fill={safeColor(colors.text, '#0F172A')}
                             >
                               {esc(label)}
