@@ -33,9 +33,10 @@ import {
   WidthType,
   AlignmentType,
   ShadingType,
-  PageBreak,
   TableOfContents,
   StyleLevel,
+  Footer,
+  PageNumber,
 } from "docx";
 import sharp from "sharp";
 
@@ -67,6 +68,33 @@ function detectMaterial(text: string): "Epoxy" | "PU" | "Polyurea" | "Acrylic" |
   if (/\b(pu|polyurethane|poliuretan)\b/i.test(text)) return "PU";
   if (/\b(acrylic|akrilik)\b/i.test(text)) return "Acrylic";
   return null;
+}
+
+// Per-material color theme. Drives the system header banner color, the
+// chemistry badge, the recommendation box border and the page border so
+// every system reads as a visually distinct "chapter" in the catalog.
+// Colors are picked for high contrast on white and to stay readable on
+// a light fill underneath dark text.
+type SystemTheme = {
+  primary: string;   // banner / page border / accent
+  fill: string;      // light header background
+  text: string;      // dark text on fill
+  badgeFill: string; // chemistry badge fill
+  badgeText: string; // chemistry badge text
+  label: string;     // pretty material label
+};
+
+const MATERIAL_THEMES: Record<string, SystemTheme> = {
+  Epoxy:    { primary: "1D4ED8", fill: "DBEAFE", text: "1E3A8A", badgeFill: "DBEAFE", badgeText: "1E3A8A", label: "Epoxy"    },
+  PU:       { primary: "7C3AED", fill: "EDE9FE", text: "5B21B6", badgeFill: "EDE9FE", badgeText: "5B21B6", label: "PU"       },
+  Polyurea: { primary: "C2410C", fill: "FFEDD5", text: "9A3412", badgeFill: "FFEDD5", badgeText: "9A3412", label: "Polyurea" },
+  Acrylic:  { primary: "BE185D", fill: "FCE7F3", text: "9D174D", badgeFill: "FCE7F3", badgeText: "9D174D", label: "Acrylic"  },
+};
+const DEFAULT_THEME: SystemTheme = {
+  primary: "0F766E", fill: "CCFBF1", text: "115E59", badgeFill: "CCFBF1", badgeText: "115E59", label: "System",
+};
+function themeFor(material: string | null): SystemTheme {
+  return (material && MATERIAL_THEMES[material]) || DEFAULT_THEME;
 }
 
 // -----------------------------------------------------------------------------
@@ -188,6 +216,82 @@ function borderless() {
 function thin(color = "E5E7EB") {
   const b = { style: BorderStyle.SINGLE, size: 4, color };
   return { top: b, bottom: b, left: b, right: b };
+}
+
+// Page footer: thin top border, company contact line on the left, page
+// "N of M" on the right. Color matches the section theme so each system's
+// footer reads as part of that system's chapter.
+function buildPageFooter(
+  theme: SystemTheme,
+  contact: { name: string; address: string; phone: string; email: string },
+): Footer {
+  // Build a compact contact line — skip empty fields so we don't leave
+  // dangling separators.
+  const contactBits = [contact.name, contact.address, contact.phone, contact.email]
+    .map((s) => (s || "").trim())
+    .filter(Boolean)
+    .join("  ·  ");
+
+  return new Footer({
+    children: [
+      new Table({
+        width: { size: 100, type: WidthType.PERCENTAGE },
+        borders: {
+          top: { style: BorderStyle.SINGLE, size: 6, color: theme.primary },
+          bottom: { style: BorderStyle.NONE, size: 0, color: "FFFFFF" },
+          left: { style: BorderStyle.NONE, size: 0, color: "FFFFFF" },
+          right: { style: BorderStyle.NONE, size: 0, color: "FFFFFF" },
+          insideHorizontal: { style: BorderStyle.NONE, size: 0, color: "FFFFFF" },
+          insideVertical: { style: BorderStyle.NONE, size: 0, color: "FFFFFF" },
+        },
+        rows: [
+          new TableRow({
+            children: [
+              new TableCell({
+                width: { size: 80, type: WidthType.PERCENTAGE },
+                borders: borderless(),
+                margins: { top: 80, bottom: 0, left: 0, right: 0 },
+                children: [
+                  new Paragraph({
+                    children: [new TextRun({ text: contactBits, size: 14, color: "64748B" })],
+                  }),
+                ],
+              }),
+              new TableCell({
+                width: { size: 20, type: WidthType.PERCENTAGE },
+                borders: borderless(),
+                margins: { top: 80, bottom: 0, left: 0, right: 0 },
+                children: [
+                  new Paragraph({
+                    alignment: AlignmentType.RIGHT,
+                    children: [
+                      new TextRun({ text: "Page ", size: 14, color: "64748B" }),
+                      new TextRun({ children: [PageNumber.CURRENT], size: 14, color: "64748B" }),
+                      new TextRun({ text: " of ", size: 14, color: "64748B" }),
+                      new TextRun({ children: [PageNumber.TOTAL_PAGES], size: 14, color: "64748B" }),
+                    ],
+                  }),
+                ],
+              }),
+            ],
+          }),
+        ],
+      }),
+    ],
+  });
+}
+
+// Page-border block for a section. We use a thin solid frame in the
+// theme color, offset slightly from the edge so it doesn't get clipped
+// by printers.
+function pageBordersFor(theme: SystemTheme) {
+  const border = { style: BorderStyle.SINGLE, size: 12, color: theme.primary, space: 16 };
+  return {
+    pageBorderTop: border,
+    pageBorderRight: border,
+    pageBorderBottom: border,
+    pageBorderLeft: border,
+  };
 }
 
 function paramTable(rows: Array<[string, string]>) {
@@ -312,7 +416,15 @@ export function registerCatalogExportRoutes(app: Express): void {
           return res.status(400).json({ error: "No matching systems found for the provided systemIds" });
         }
 
-        const companyName = settingsRows[0]?.companyName || "Flooring & Waterproofing Systems";
+        // Company contact block sourced from Proforma Invoice Settings.
+        // Falls back to friendly defaults when the row is missing so the
+        // export never breaks on a fresh install.
+        const settings = settingsRows[0] || ({} as any);
+        const companyName = settings.companyName || "Flooring & Waterproofing Systems";
+        const companyAddress = settings.address || "";
+        const companyPhone = settings.phone || "";
+        const companyEmail = settings.email || "";
+        const contact = { name: companyName, address: companyAddress, phone: companyPhone, email: companyEmail };
         const today = new Date().toISOString().split("T")[0];
 
         // ---------- build document sections ----------
@@ -333,43 +445,63 @@ export function registerCatalogExportRoutes(app: Express): void {
             if (mat) matCounts[mat]++;
           }
 
+          // Cover sizes are deliberately tight so the banner, the catalog
+          // summary, the company contact block, and the table of contents
+          // all fit on a single A4 page. If you grow any of these blocks,
+          // shrink another to keep the one-page guarantee.
           const coverChildren: any[] = [
             new Paragraph({
               shading: { type: ShadingType.CLEAR, color: "auto", fill: "0F766E" },
-              spacing: { before: 0, after: 0 },
-              children: [new TextRun({ text: " ", color: "FFFFFF" })],
+              spacing: { before: 80, after: 80 },
+              alignment: AlignmentType.CENTER,
+              children: [new TextRun({ text: companyName, bold: true, size: 28, color: "FFFFFF" })],
             }),
             new Paragraph({
               shading: { type: ShadingType.CLEAR, color: "auto", fill: "0F766E" },
-              spacing: { before: 120, after: 120 },
+              spacing: { before: 0, after: 80 },
               alignment: AlignmentType.CENTER,
-              children: [new TextRun({ text: companyName, bold: true, size: 36, color: "FFFFFF" })],
+              children: [new TextRun({ text: "TECHNICAL SYSTEMS CATALOG", bold: true, size: 16, color: "CCFBF1", characterSpacing: 50 })],
             }),
-            new Paragraph({
-              shading: { type: ShadingType.CLEAR, color: "auto", fill: "0F766E" },
-              spacing: { before: 0, after: 120 },
-              alignment: AlignmentType.CENTER,
-              children: [new TextRun({ text: "TECHNICAL SYSTEMS CATALOG", bold: true, size: 22, color: "CCFBF1", characterSpacing: 50 })],
-            }),
-            new Paragraph({ spacing: { before: 600 } }),
-            plain(`Generated: ${today}`, { size: 22, color: "64748B" }),
-            plain(`Systems included: ${orderedSystems.length}  ·  Active: ${activeCount}  ·  Draft: ${draftCount}`, { size: 22, color: "64748B" }),
+            // Company contact block — only render rows that exist, so a
+            // missing address/phone/email doesn't leave a blank line.
+            ...((companyAddress || companyPhone || companyEmail)
+              ? [
+                  new Paragraph({ spacing: { before: 200, after: 40 } }),
+                  ...(companyAddress ? [plain(companyAddress, { size: 18, color: "475569" })] : []),
+                  ...((companyPhone || companyEmail)
+                    ? [plain(
+                        [companyPhone, companyEmail].filter(Boolean).join("  ·  "),
+                        { size: 18, color: "475569" },
+                      )]
+                    : []),
+                ]
+              : []),
+            new Paragraph({ spacing: { before: 240 } }),
+            plain(`Generated: ${today}`, { size: 18, color: "64748B" }),
+            plain(`Systems included: ${orderedSystems.length}  ·  Active: ${activeCount}  ·  Draft: ${draftCount}`, { size: 18, color: "64748B" }),
             plain(
               `Type breakdown — Epoxy: ${matCounts.Epoxy}  ·  PU: ${matCounts.PU}  ·  Polyurea: ${matCounts.Polyurea}  ·  Acrylic: ${matCounts.Acrylic}`,
-              { size: 22, color: "64748B" },
+              { size: 18, color: "64748B" },
             ),
-            new Paragraph({ spacing: { before: 400 } }),
-            heading("Table of contents", HeadingLevel.HEADING_2, 26),
+            new Paragraph({ spacing: { before: 200 } }),
+            heading("Table of contents", HeadingLevel.HEADING_2, 20),
             new TableOfContents("Systems", {
               hyperlink: true,
               headingStyleRange: "2-2",
               stylesWithLevels: [new StyleLevel("Heading2", 1)],
             }),
-            new Paragraph({ children: [new PageBreak()] }),
+            // No explicit PageBreak here — each system uses its own
+            // docx section, which naturally starts on a new page.
           ];
 
           sections.push({
-            properties: { page: { margin: { top: 720, bottom: 720, left: 720, right: 720 } } },
+            properties: {
+              page: {
+                margin: { top: 720, bottom: 1000, left: 720, right: 720 },
+                borders: pageBordersFor(DEFAULT_THEME),
+              },
+            },
+            footers: { default: buildPageFooter(DEFAULT_THEME, contact) },
             children: coverChildren,
           });
         }
@@ -380,19 +512,40 @@ export function registerCatalogExportRoutes(app: Express): void {
           const layers = layersBySystem.get(s.systemId) || [];
           const children: any[] = [];
 
+          // Detect chemistry early and resolve the theme — drives the
+          // heading color, badge color, recommendation box border, page
+          // border, and footer accent for this system. We look at the
+          // system name + description + every layer-product name so we
+          // catch systems whose name doesn't spell out the chemistry.
+          const sysAllText = [s.name, s.description || ""]
+            .concat(layers.flatMap((l: any) =>
+              (optionsByLayer.get(l.layerId) || []).map((o: any) => productById.get(o.productId)?.name || "")))
+            .join(" ");
+          const material = detectMaterial(sysAllText);
+          const theme = themeFor(material);
+
           // -- system heading (used by TOC) --
+          // Heading2 style is required so the TOC picks it up; we keep
+          // that, but tint the title in the theme color and add a thin
+          // themed band above it so each chapter reads as a distinct
+          // color block.
           children.push(
             new Paragraph({
+              shading: { type: ShadingType.CLEAR, color: "auto", fill: theme.fill },
+              spacing: { before: 0, after: 0 },
+              children: [new TextRun({ text: " ", size: 6 })],
+            }),
+            new Paragraph({
               heading: HeadingLevel.HEADING_2,
-              spacing: { before: 0, after: 120 },
-              children: [new TextRun({ text: s.name, bold: true, size: 32, color: "0F172A" })],
+              shading: { type: ShadingType.CLEAR, color: "auto", fill: theme.fill },
+              spacing: { before: 80, after: 80 },
+              children: [new TextRun({ text: s.name, bold: true, size: 30, color: theme.text })],
             }),
           );
 
           // -- badges row --
           const badgeCells: TableCell[] = [];
-          const material = detectMaterial(s.name + " " + (s.description || ""));
-          if (material) badgeCells.push(badge(material, "DBEAFE", "1E3A8A"));
+          if (material) badgeCells.push(badge(material, theme.badgeFill, theme.badgeText));
           if (!opts.hideStatus) {
             const isActive = (s.status || "draft").toLowerCase() === "active";
             badgeCells.push(badge(isActive ? "ACTIVE" : "DRAFT", isActive ? "D1FAE5" : "FEF3C7", isActive ? "065F46" : "92400E"));
@@ -606,23 +759,23 @@ export function registerCatalogExportRoutes(app: Express): void {
             }),
           );
 
-          // -- recommendation box --
+          // -- recommendation box -- (themed to the system's chemistry)
           if (opts.includeRecommendations && s.previewNote) {
             children.push(new Paragraph({ spacing: { before: 240 } }));
             children.push(
               new Table({
                 width: { size: 100, type: WidthType.PERCENTAGE },
-                borders: thin("BBF7D0"),
+                borders: thin(theme.primary),
                 rows: [
                   new TableRow({
                     children: [
                       new TableCell({
-                        shading: { type: ShadingType.CLEAR, color: "auto", fill: "EAF3DE" },
+                        shading: { type: ShadingType.CLEAR, color: "auto", fill: theme.fill },
                         margins: { top: 140, bottom: 140, left: 160, right: 160 },
-                        borders: thin("BBF7D0"),
+                        borders: thin(theme.primary),
                         children: [
-                          new Paragraph({ children: [new TextRun({ text: "RECOMMENDATION", bold: true, size: 16, color: "27500A", characterSpacing: 50 })] }),
-                          plain(s.previewNote, { size: 20, color: "27500A" }),
+                          new Paragraph({ children: [new TextRun({ text: "RECOMMENDATION", bold: true, size: 16, color: theme.text, characterSpacing: 50 })] }),
+                          plain(s.previewNote, { size: 20, color: theme.text }),
                         ],
                       }),
                     ],
@@ -632,13 +785,17 @@ export function registerCatalogExportRoutes(app: Express): void {
             );
           }
 
-          // Page break between systems (not after the last one).
-          if (idx < orderedSystems.length - 1) {
-            children.push(new Paragraph({ children: [new PageBreak()] }));
-          }
+          // Each system is its own docx section, so Word starts it on a
+          // fresh page automatically — no manual PageBreak required.
 
           sections.push({
-            properties: { page: { margin: { top: 720, bottom: 720, left: 720, right: 720 } } },
+            properties: {
+              page: {
+                margin: { top: 720, bottom: 1000, left: 720, right: 720 },
+                borders: pageBordersFor(theme),
+              },
+            },
+            footers: { default: buildPageFooter(theme, contact) },
             children,
           });
         }
