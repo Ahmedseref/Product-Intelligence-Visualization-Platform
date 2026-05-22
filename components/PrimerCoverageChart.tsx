@@ -358,61 +358,67 @@ const PrimerCoverageChart: React.FC = () => {
             </button>
           )}
 
-          {/* Hide rows / cols picker */}
-          <div className="relative" ref={pickerRef}>
-            <button
-              onClick={() => setPickerOpen(o => (o === 'rows' ? null : 'rows'))}
-              className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs rounded-lg border border-slate-300 bg-white text-slate-700 hover:bg-slate-100"
-            >
-              Rows {hiddenSubs.size > 0 && <span className="text-blue-600">({allSubsForPicker.length - hiddenSubs.size}/{allSubsForPicker.length})</span>}
-            </button>
-            {pickerOpen === 'rows' && (
-              <div className="absolute z-20 mt-1 left-0 w-56 bg-white border border-slate-200 rounded-lg shadow-lg p-2 max-h-72 overflow-y-auto">
-                <div className="flex items-center justify-between px-1 pb-1 border-b border-slate-100 mb-1">
-                  <span className="text-xs font-semibold text-slate-600">Substrates</span>
-                  <button onClick={() => setHiddenSubs(new Set())} className="text-xs text-blue-600 hover:underline">Show all</button>
+          {/* Hide rows / cols pickers — both share one ref so the
+              click-outside handler only fires on clicks that are truly
+              outside either picker. Previously the Columns picker had
+              its own un-ref'd wrapper, so any click inside it was
+              treated as "outside" and closed the menu immediately. */}
+          <div className="flex items-center gap-3" ref={pickerRef}>
+            <div className="relative">
+              <button
+                onClick={() => setPickerOpen(o => (o === 'rows' ? null : 'rows'))}
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs rounded-lg border border-slate-300 bg-white text-slate-700 hover:bg-slate-100"
+              >
+                Rows {hiddenSubs.size > 0 && <span className="text-blue-600">({allSubsForPicker.length - hiddenSubs.size}/{allSubsForPicker.length})</span>}
+              </button>
+              {pickerOpen === 'rows' && (
+                <div className="absolute z-20 mt-1 left-0 w-56 bg-white border border-slate-200 rounded-lg shadow-lg p-2 max-h-72 overflow-y-auto">
+                  <div className="flex items-center justify-between px-1 pb-1 border-b border-slate-100 mb-1">
+                    <span className="text-xs font-semibold text-slate-600">Substrates</span>
+                    <button onClick={() => setHiddenSubs(new Set())} className="text-xs text-blue-600 hover:underline">Show all</button>
+                  </div>
+                  {allSubsForPicker.map(s => (
+                    <label key={s} className="flex items-center gap-2 px-1.5 py-1 hover:bg-slate-50 rounded cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={!hiddenSubs.has(s)}
+                        onChange={() => toggleSub(s)}
+                        className="rounded border-slate-300"
+                      />
+                      <span className="text-xs text-slate-700">{s}</span>
+                    </label>
+                  ))}
                 </div>
-                {allSubsForPicker.map(s => (
-                  <label key={s} className="flex items-center gap-2 px-1.5 py-1 hover:bg-slate-50 rounded cursor-pointer">
-                    <input
-                      type="checkbox"
-                      checked={!hiddenSubs.has(s)}
-                      onChange={() => toggleSub(s)}
-                      className="rounded border-slate-300"
-                    />
-                    <span className="text-xs text-slate-700">{s}</span>
-                  </label>
-                ))}
-              </div>
-            )}
-          </div>
+              )}
+            </div>
 
-          <div className="relative">
-            <button
-              onClick={() => setPickerOpen(o => (o === 'cols' ? null : 'cols'))}
-              className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs rounded-lg border border-slate-300 bg-white text-slate-700 hover:bg-slate-100"
-            >
-              Columns {hiddenHums.size > 0 && <span className="text-blue-600">({data.humidities.length - hiddenHums.size}/{data.humidities.length})</span>}
-            </button>
-            {pickerOpen === 'cols' && (
-              <div className="absolute z-20 mt-1 left-0 w-56 bg-white border border-slate-200 rounded-lg shadow-lg p-2 max-h-72 overflow-y-auto">
-                <div className="flex items-center justify-between px-1 pb-1 border-b border-slate-100 mb-1">
-                  <span className="text-xs font-semibold text-slate-600">Humidities</span>
-                  <button onClick={() => setHiddenHums(new Set())} className="text-xs text-blue-600 hover:underline">Show all</button>
+            <div className="relative">
+              <button
+                onClick={() => setPickerOpen(o => (o === 'cols' ? null : 'cols'))}
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs rounded-lg border border-slate-300 bg-white text-slate-700 hover:bg-slate-100"
+              >
+                Columns {hiddenHums.size > 0 && <span className="text-blue-600">({data.humidities.length - hiddenHums.size}/{data.humidities.length})</span>}
+              </button>
+              {pickerOpen === 'cols' && (
+                <div className="absolute z-20 mt-1 left-0 w-56 bg-white border border-slate-200 rounded-lg shadow-lg p-2 max-h-72 overflow-y-auto">
+                  <div className="flex items-center justify-between px-1 pb-1 border-b border-slate-100 mb-1">
+                    <span className="text-xs font-semibold text-slate-600">Humidities</span>
+                    <button onClick={() => setHiddenHums(new Set())} className="text-xs text-blue-600 hover:underline">Show all</button>
+                  </div>
+                  {data.humidities.map(h => (
+                    <label key={h} className="flex items-center gap-2 px-1.5 py-1 hover:bg-slate-50 rounded cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={!hiddenHums.has(h)}
+                        onChange={() => toggleHum(h)}
+                        className="rounded border-slate-300"
+                      />
+                      <span className="text-xs text-slate-700">{h}</span>
+                    </label>
+                  ))}
                 </div>
-                {data.humidities.map(h => (
-                  <label key={h} className="flex items-center gap-2 px-1.5 py-1 hover:bg-slate-50 rounded cursor-pointer">
-                    <input
-                      type="checkbox"
-                      checked={!hiddenHums.has(h)}
-                      onChange={() => toggleHum(h)}
-                      className="rounded border-slate-300"
-                    />
-                    <span className="text-xs text-slate-700">{h}</span>
-                  </label>
-                ))}
-              </div>
-            )}
+              )}
+            </div>
           </div>
 
           {filter !== 'All' && (
