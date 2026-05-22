@@ -37,6 +37,12 @@ type AiFillResponse = {
 // ─────────────────────────────────────────────────────────────────────────────
 // Prompt builder
 // ─────────────────────────────────────────────────────────────────────────────
+// Compact "key: value" string built from a product's `technicalSpecs` /
+// `customFields` jsonb arrays. Stored as a single pre-formatted string on
+// the prompt-side type so the prompt template can splice it directly
+// without re-doing the array → text shaping.
+type ProductSpecs = string;
+
 type LayerForPrompt = {
   order: number;
   name: string;
@@ -45,9 +51,18 @@ type LayerForPrompt = {
     name: string;
     supplier: string;
     description: string;
+    specs: ProductSpecs;
     tags: { substrate: string; humidity: string; duty: string; finish: string };
   } | null;
-  alternatives: { name: string }[];
+  // Alternatives now carry name + supplier + (full) description + specs so
+  // the AI can reason about substitution options, not just acknowledge
+  // their existence.
+  alternatives: {
+    name: string;
+    supplier: string;
+    description: string;
+    specs: ProductSpecs;
+  }[];
 };
 
 type SystemForPrompt = {
@@ -74,6 +89,32 @@ function inferSystemType(name: string, description: string): string {
   return "Generic";
 }
 
+// Flatten a product's `technicalSpecs` / `customFields` jsonb arrays into
+// a single "key: value; key: value" string for the prompt. Both columns
+// are arrays of `{ key/name/label, value }` objects in this codebase, so
+// the formatter accepts either shape defensively (different product
+// imports use slightly different keys). Returns "" when the array is
+// empty/missing — the prompt template hides the line in that case.
+function formatProductSpecs(
+  technicalSpecs: unknown,
+  customFields: unknown,
+): string {
+  const out: string[] = [];
+  const push = (arr: unknown) => {
+    if (!Array.isArray(arr)) return;
+    for (const row of arr) {
+      if (!row || typeof row !== "object") continue;
+      const r = row as Record<string, unknown>;
+      const key = (r.key ?? r.name ?? r.label ?? r.field ?? "").toString().trim();
+      const val = (r.value ?? r.val ?? "").toString().trim();
+      if (key && val) out.push(`${key}: ${val}`);
+    }
+  };
+  push(technicalSpecs);
+  push(customFields);
+  return out.join("; ");
+}
+
 function inferLayerPosition(name: string): string {
   const n = name.toLowerCase();
   if (/\bprimer\b/.test(n)) return "primer";
@@ -88,13 +129,27 @@ export function buildSystemFillPrompt(
   otherSystems: { name: string; type: string; description: string | null }[],
   sections: string[],
 ): string {
-  const layersBlock = system.layers.map((l) => `
+  // Full per-layer block: default product (name + supplier + FULL
+  // description + technical/custom specs + qualification tags) and the
+  // same depth for every alternative so the AI can reason about
+  // substitution rather than just acknowledging an alt exists.
+  const layersBlock = system.layers.map((l) => {
+    const defSpecs = l.defaultProduct?.specs ? `\n  Specs: ${l.defaultProduct.specs}` : "";
+    const altsBlock = l.alternatives.length === 0
+      ? "  Alternatives: None"
+      : `  Alternatives:\n${l.alternatives.map((a) => {
+          const aSpecs = a.specs ? `\n      Specs: ${a.specs}` : "";
+          const aDesc = a.description ? `\n      Description: ${a.description}` : "";
+          return `    - ${a.name} (supplier: ${a.supplier})${aDesc}${aSpecs}`;
+        }).join("\n")}`;
+    return `
 - Layer ${l.order}: ${l.name} (${l.position})
   Default product: ${l.defaultProduct?.name || "None assigned"}
   Supplier: ${l.defaultProduct?.supplier || "—"}
-  Description: ${l.defaultProduct?.description?.slice(0, 150) || "—"}
+  Description: ${l.defaultProduct?.description || "—"}${defSpecs}
   Tags: substrate=${l.defaultProduct?.tags.substrate || "—"}, humidity=${l.defaultProduct?.tags.humidity || "—"}, duty=${l.defaultProduct?.tags.duty || "—"}, finish=${l.defaultProduct?.tags.finish || "—"}
-  Alternatives: ${l.alternatives.map((a) => a.name).join(", ") || "None"}`).join("");
+${altsBlock}`;
+  }).join("");
 
   const otherBlock = otherSystems
     .slice(0, 5)
@@ -126,22 +181,85 @@ Suppliers involved: ${system.uniqueSuppliers.join(", ") || "—"}
 
 ${otherBlock || "(no other systems available)"}
 
-## Reference architecture knowledge
+## Reference architecture knowledge (Sika + PPG flooring systems)
 
-Use your knowledge of Sika, PPG, Mapei, and Fosroc flooring systems to inform
-the description. Key facts to reflect accurately:
-- Epoxy self-leveling systems: seamless, chemical resistant, high-gloss,
-  2-4mm application, suitable for food processing, pharma, logistics.
-- Epoxy paint systems: thin-coat 200-500 micron, decorative or functional,
-  suitable for light-medium traffic.
-- Polyurea waterproofing: fast-cure, flexible, UV-stable with aliphatic
-  topcoat, suitable for roofs, bridges, car parks, water tanks.
-- PU waterproofing: elastic, crack-bridging, suitable for terraces and roofs.
-- PU flooring: comfortable underfoot, flexible, suitable for sports and
-  commercial environments.
-- Antistatic/ESD systems: conductive primer required, resistance 10^4-10^9
-  ohm, suitable for electronics, cleanrooms, operating theatres.
-- Acrylic systems: fast-dry, suitable for sports courts and outdoor areas.
+Use this expanded knowledge of Sika and PPG (Sikafloor / Sikagard / Sikalastic
+and PPG Pitt-Glaze / Pittsburgh Paints / Amercoat / Sigmatherm / Sigmacover)
+to inform the description, recommendation, usage areas and warnings.
+Match terminology, build-up logic and use-case language used in those
+technical datasheets.
+
+### Sika — Sikafloor® (resin flooring)
+- Sikafloor®-2 SynTop / 3 QuartzTop: dry-shake cementitious topping, monolithic
+  with concrete pour, heavy industrial floors (warehouses, workshops).
+- Sikafloor®-150/151/156/161 series: low-viscosity epoxy primers (and binder
+  for screeds), substrate sealing, max RH 4% CM, two coats common.
+- Sikafloor®-263 SL / 264: solvent-free pigmented epoxy SL 2-3 mm, glossy,
+  chemical resistant — food processing, pharma, electronics, logistics.
+- Sikafloor®-269 / 269 CR / 220 W: epoxy roller-applied 200-400 µm, light
+  industrial, decorative, garages.
+- Sikafloor®-325 / 327 / 330 (Sikafloor MultiDur): elastic epoxy 2-4 mm with
+  crack-bridging, commercial and underground parking decks.
+- Sikafloor®-PurCem® (HC/HM/HS): polyurethane-cement 4-9 mm, thermal-shock,
+  steam-clean, food & beverage wet-process areas, breweries, dairies.
+- Sikafloor®-21/22 N PurCem: hybrid PUMA for fast-track food production.
+- Sikafloor®-2530 W / 2540 W: water-based epoxy decorative finish or sealer.
+- Sikafloor®-359 / 358: tough elastic PU finish, fall-protection floors,
+  multi-storey car parks (intermediate), 1-4 mm.
+- Sikafloor®-381/390 ECF: conductive epoxy for ESD areas (resistance
+  10⁴-10⁹ Ω), requires conductive primer (Sikafloor®-220 W Conductive)
+  and copper grounding tape.
+- Sikafloor®-Marine: glassflake / vinyl ester for ship decks.
+
+### Sika — Sikalastic® & Sikagard® (waterproofing / protection)
+- Sikalastic®-612/618/625/641 LO: liquid-applied PU/polyurea hybrid roof
+  membranes, cold-applied, seamless, exposed (UV-stable).
+- Sikalastic®-851 RD / 826 RD: spray polyurea, fast-cure, parking decks,
+  ponds, secondary containment.
+- Sikagard®-550 W Elastic: protective elastomeric coating for concrete
+  facades, carbonation barrier, crack-bridging.
+- Sikagard®-63 N / 75 EpoCem: chemical-resistant lining for tanks, bunds.
+
+### PPG — Industrial & protective coatings
+- Pitt-Glaze® WB1 / WB2: acrylic/epoxy interior wall coatings, hygienic
+  scrub-resistant — hospitals, schools, kitchens.
+- Amercoat® 385 / 400 / 450 H: epoxy and polyurethane high-build maintenance
+  coatings for structural steel and marine environments.
+- Sigmacover® 280 / 350: surface-tolerant epoxy primer/intermediate for
+  steelwork (offshore, water tanks, bridges).
+- Sigmadur® 550 / 1800: aliphatic polyurethane topcoats, UV-stable color
+  retention.
+- Sigmaguard® CSF 575 / 650: novolac epoxy tank linings for crude oil,
+  chemicals, potable water (with NSF approval).
+- Sigmatherm® 540 / 230: high-temperature silicone coatings up to 540 °C
+  for stacks, exhausts.
+- Hi-Temp® 1027 / 1000 V: inorganic copolymer for insulated-jacket
+  corrosion-under-insulation (CUI) protection.
+- Pittguard® / NovaGuard 840 / 890: chemically-resistant linings for
+  secondary containment, pulp & paper.
+
+### Build-up logic and rules to reflect
+- Every cementitious substrate needs a primer (epoxy WB or SB) unless
+  the topcoat is explicitly self-priming.
+- Polyurea waterproofing needs a primer matched to substrate (epoxy on
+  concrete, anti-corrosive epoxy on steel) AND an aliphatic UV topcoat
+  when exposed.
+- PU-cement systems (PurCem-class) DO NOT need a primer on sound new
+  concrete cured 7+ days (laitance removed by shotblast/grinding).
+- Conductive/ESD systems require a conductive primer + copper grounding
+  strip; the conductive layer is between primer and topcoat.
+- Self-leveling epoxy floors: total system ~2-4 mm = primer (0.3 mm) +
+  SL body (1.5-3 mm) + optional seal coat.
+- Roller-applied epoxy: 2 coats × 150-200 µm = ~300-400 µm DFT.
+- Aliphatic PU/polyurea topcoats are required for UV exposure; aromatic
+  versions chalk and yellow outdoors.
+- Recoat windows are typically 12-24 h between coats at 20 °C; exceeding
+  the max window requires light abrasion to re-key.
+- Substrate moisture: concrete must be < 4% CM (≈ 75% RH) for epoxy/PU;
+  PurCem tolerates higher.
+- Compatibility: never put PU directly on fresh cement without primer
+  (CO₂ blistering risk); never put solvent-based topcoat on water-based
+  intermediate without test patch.
 
 ## Your task
 
@@ -250,6 +368,11 @@ export function registerAiSystemFillRoutes(app: Express): void {
               productName: products.name,
               productSupplier: products.supplier,
               productDescription: products.description,
+              // Pulled so the AI can ground recommendations + warnings in
+              // real product specs (e.g. recoat windows, DFT, density,
+              // VOC) rather than catalog-style guesses.
+              productTechnicalSpecs: products.technicalSpecs,
+              productCustomFields: products.customFields,
             })
             .from(systemProductOptions)
             .leftJoin(products, eq(systemProductOptions.productId, products.productId))
@@ -279,6 +402,7 @@ export function registerAiSystemFillRoutes(app: Express): void {
                   name: def.productName || "—",
                   supplier: def.productSupplier || "—",
                   description: def.productDescription || "",
+                  specs: formatProductSpecs(def.productTechnicalSpecs, def.productCustomFields),
                   tags: {
                     substrate: (tag?.substrateTypes || []).join(", "),
                     humidity: tag?.humidityTolerance || "",
@@ -289,7 +413,12 @@ export function registerAiSystemFillRoutes(app: Express): void {
               : null,
             alternatives: opts
               .filter((o) => o.optionId !== def?.optionId)
-              .map((o) => ({ name: o.productName || "—" })),
+              .map((o) => ({
+                name: o.productName || "—",
+                supplier: o.productSupplier || "—",
+                description: o.productDescription || "",
+                specs: formatProductSpecs(o.productTechnicalSpecs, o.productCustomFields),
+              })),
           };
         }),
       );
