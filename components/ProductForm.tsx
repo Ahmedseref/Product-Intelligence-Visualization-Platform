@@ -1,5 +1,5 @@
 import React, { useState, useMemo, useEffect } from 'react';
-import { Product, User, CustomField, TreeNode, TechnicalSpec, Supplier, Color } from '../types';
+import { Product, User, CustomField, TreeNode, TechnicalSpec, Supplier, Color, ProductType } from '../types';
 import { CURRENCIES, UNITS, ICONS } from '../constants';
 import { Plus, Trash2, X, Check, Hash } from 'lucide-react';
 import TaxonomyNodeSelector from './TaxonomyNodeSelector';
@@ -21,6 +21,34 @@ interface ProductFormProps {
   initialProduct?: Product;
   mode?: 'create' | 'edit';
 }
+
+// ── Product-type spec templates ──────────────────────────────────────
+// Selecting a non-standalone product type seeds the Technical
+// Specifications list with these attribute rows (blank values, unit
+// hints) so the user just fills in the numbers. Standalone seeds
+// nothing. `valueOptions` marks a row as a fixed choice (rendered as a
+// dropdown in edit mode) — used for the Tiles "Rectified" Yes/No field.
+type SpecTemplate = { name: string; unit?: string; valueOptions?: string[] };
+
+const PRODUCT_TYPE_OPTIONS: { value: ProductType; label: string }[] = [
+  { value: 'standalone', label: 'Standalone product' },
+  { value: 'flooring', label: 'Flooring system product' },
+  { value: 'tiles', label: 'Tiles product' },
+];
+
+const SPEC_TEMPLATES: Record<ProductType, SpecTemplate[]> = {
+  standalone: [],
+  flooring: [
+    { name: 'Consumption', unit: 'kg/m²' },
+    { name: 'Dry film thickness', unit: 'µm' },
+    { name: 'Surface type' },
+  ],
+  tiles: [
+    { name: 'Tile size', unit: 'cm' },
+    { name: 'Rectified', valueOptions: ['Yes', 'No'] },
+    { name: 'Surface finish' },
+  ],
+};
 
 const ProductForm: React.FC<ProductFormProps> = ({ onSubmit, onCancel, currentUser, customFields, treeNodes, suppliers = [], usageAreas = [], units: unitsProp, colors = [], onAddFieldDefinition, onAddTreeNode, initialProduct, mode = 'create' }) => {
   const { lockEditing, unlockEditing } = useRefreshContext();
@@ -59,6 +87,7 @@ const ProductForm: React.FC<ProductFormProps> = ({ onSubmit, onCancel, currentUs
   const [newNodeName, setNewNodeName] = useState('');
   
   const [technicalSpecs, setTechnicalSpecs] = useState<TechnicalSpec[]>(initialProduct?.technicalSpecs || []);
+  const [productType, setProductType] = useState<ProductType>(initialProduct?.productType || 'standalone');
   const [newSpecName, setNewSpecName] = useState('');
   const [newSpecValue, setNewSpecValue] = useState('');
   const [newSpecUnit, setNewSpecUnit] = useState('');
@@ -243,6 +272,38 @@ const ProductForm: React.FC<ProductFormProps> = ({ onSubmit, onCancel, currentUs
     setTechnicalSpecs(technicalSpecs.filter(s => s.id !== id));
   };
 
+  // Switching product type seeds the matching template attribute rows
+  // (blank values) without disturbing any specs the user already has.
+  // We match on attribute name case-insensitively so re-selecting a
+  // type — or selecting one whose attributes were added manually —
+  // never produces duplicates. Standalone seeds nothing and leaves
+  // existing specs untouched.
+  const handleProductTypeChange = (next: ProductType) => {
+    setProductType(next);
+    const template = SPEC_TEMPLATES[next] || [];
+    if (template.length === 0) return;
+    setTechnicalSpecs(prev => {
+      const existingNames = new Set(prev.map(s => s.name.trim().toLowerCase()));
+      const additions: TechnicalSpec[] = template
+        .filter(t => !existingNames.has(t.name.trim().toLowerCase()))
+        .map((t, i) => ({
+          id: `spec-${Date.now()}-${i}`,
+          name: t.name,
+          value: '',
+          unit: t.unit,
+          affectsPrice: false,
+        }));
+      return additions.length ? [...prev, ...additions] : prev;
+    });
+  };
+
+  // Fixed-choice value options for a template-seeded attribute (e.g.
+  // Tiles "Rectified" → Yes/No). Returns undefined for free-text specs.
+  const valueOptionsFor = (specName: string): string[] | undefined =>
+    SPEC_TEMPLATES[productType]?.find(
+      t => t.name.trim().toLowerCase() === specName.trim().toLowerCase(),
+    )?.valueOptions;
+
   const startEditSpec = (specId: string, field: 'name' | 'value' | 'unit', currentValue: string) => {
     setEditingSpec({ specId, field });
     setEditSpecValue(currentValue);
@@ -349,6 +410,7 @@ const ProductForm: React.FC<ProductFormProps> = ({ onSubmit, onCancel, currentUs
       sector,
       category: node?.name || 'Uncategorized',
       technicalSpecs,
+      productType,
       customFields: updatedCustomFields,
       history: updatedHistory,
       lastUpdated: new Date().toISOString(),
@@ -622,6 +684,40 @@ const ProductForm: React.FC<ProductFormProps> = ({ onSubmit, onCancel, currentUs
                   <span className="w-1.5 h-6 bg-emerald-500 rounded-full"></span> Technical Specifications
                 </h3>
               </div>
+
+              {/* Product type selector — tailors which template attribute
+                  rows are pre-seeded below. Choosing flooring/tiles adds
+                  the matching rows once (no duplicates); standalone adds
+                  nothing and preserves any existing specs. */}
+              <div className="space-y-2">
+                <label className="text-[10px] font-bold text-slate-500 uppercase">Product Type</label>
+                <div className="flex flex-wrap gap-2">
+                  {PRODUCT_TYPE_OPTIONS.map(opt => {
+                    const isSelected = productType === opt.value;
+                    return (
+                      <button
+                        key={opt.value}
+                        type="button"
+                        onClick={() => handleProductTypeChange(opt.value)}
+                        className={`px-3 py-1.5 rounded-full text-xs font-medium transition-all flex items-center gap-1.5 ${
+                          isSelected
+                            ? 'bg-emerald-600 text-white'
+                            : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+                        }`}
+                      >
+                        {isSelected && <Check className="w-3 h-3" />}
+                        {opt.label}
+                      </button>
+                    );
+                  })}
+                </div>
+                {productType !== 'standalone' && (
+                  <p className="text-xs text-emerald-600">
+                    Template attributes for {PRODUCT_TYPE_OPTIONS.find(o => o.value === productType)?.label} have been added below — just fill in the values.
+                  </p>
+                )}
+              </div>
+
               <p className="text-sm text-slate-500">Add multiple specifications like thickness, density, color, size, etc. Each specification can affect pricing.</p>
 
               {technicalSpecs.length > 0 && (
@@ -657,18 +753,40 @@ const ProductForm: React.FC<ProductFormProps> = ({ onSubmit, onCancel, currentUs
                         <div>
                           <span className="text-[10px] text-slate-400 uppercase">Value</span>
                           {editingSpec?.specId === spec.id && editingSpec?.field === 'value' ? (
-                            <input
-                              type="text"
-                              autoFocus
-                              className="w-full bg-white border border-emerald-400 rounded px-2 py-1 text-sm font-semibold text-slate-800 outline-none focus:ring-2 focus:ring-emerald-500"
-                              value={editSpecValue}
-                              onChange={e => setEditSpecValue(e.target.value)}
-                              onBlur={saveSpecEdit}
-                              onKeyDown={e => {
-                                if (e.key === 'Enter') saveSpecEdit();
-                                if (e.key === 'Escape') cancelSpecEdit();
-                              }}
-                            />
+                            // Template-seeded fixed-choice specs (e.g. Tiles
+                            // "Rectified") edit via a dropdown; everything
+                            // else stays a free-text input.
+                            valueOptionsFor(spec.name) ? (
+                              <select
+                                autoFocus
+                                className="w-full bg-white border border-emerald-400 rounded px-2 py-1 text-sm font-semibold text-slate-800 outline-none focus:ring-2 focus:ring-emerald-500"
+                                value={editSpecValue}
+                                onChange={e => setEditSpecValue(e.target.value)}
+                                onBlur={saveSpecEdit}
+                                onKeyDown={e => {
+                                  if (e.key === 'Enter') saveSpecEdit();
+                                  if (e.key === 'Escape') cancelSpecEdit();
+                                }}
+                              >
+                                <option value="">—</option>
+                                {valueOptionsFor(spec.name)!.map(opt => (
+                                  <option key={opt} value={opt}>{opt}</option>
+                                ))}
+                              </select>
+                            ) : (
+                              <input
+                                type="text"
+                                autoFocus
+                                className="w-full bg-white border border-emerald-400 rounded px-2 py-1 text-sm font-semibold text-slate-800 outline-none focus:ring-2 focus:ring-emerald-500"
+                                value={editSpecValue}
+                                onChange={e => setEditSpecValue(e.target.value)}
+                                onBlur={saveSpecEdit}
+                                onKeyDown={e => {
+                                  if (e.key === 'Enter') saveSpecEdit();
+                                  if (e.key === 'Escape') cancelSpecEdit();
+                                }}
+                              />
+                            )
                           ) : (
                             <p 
                               className="font-semibold text-slate-800 cursor-pointer hover:bg-emerald-100 rounded px-1 py-0.5 -mx-1 transition-colors"

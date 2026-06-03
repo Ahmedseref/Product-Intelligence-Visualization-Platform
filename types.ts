@@ -21,6 +21,10 @@ export interface TechnicalSpec {
   affectsPrice?: boolean;
 }
 
+// Product classification used by the product form to tailor the
+// Technical Specifications template. Defaults to 'standalone'.
+export type ProductType = 'standalone' | 'flooring' | 'tiles';
+
 export interface HistoryEntry {
   id: string;
   timestamp: string;
@@ -126,6 +130,9 @@ export interface Product {
   storageConditions: string;
   customFields: Record<string, any>;
   technicalSpecs?: TechnicalSpec[]; // Multiple technical specifications
+  // Product classification driving the Technical Specifications template
+  // in the product form: 'standalone' (default), 'flooring', or 'tiles'.
+  productType?: ProductType;
   dateAdded: string;
   lastUpdated: string;
   createdBy: string;

@@ -46,6 +46,7 @@ export interface ProductData {
   storageConditions?: string;
   customFields?: Record<string, any>;
   technicalSpecs?: TechnicalSpecData[];
+  productType?: string;
   category?: string;
   sector?: string;
   createdBy?: string;

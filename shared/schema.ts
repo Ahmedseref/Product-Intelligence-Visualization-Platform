@@ -105,6 +105,11 @@ export const products = pgTable("products", {
   storageConditions: text("storage_conditions"),
   customFields: jsonb("custom_fields").default([]),
   technicalSpecs: jsonb("technical_specs").default([]),
+  // Classifies the product so the Add/Edit form can tailor which
+  // technical-specification attributes are pre-seeded. One of
+  // "standalone" | "flooring" | "tiles". Nullable + defaulted so
+  // existing products read back as standalone without a backfill.
+  productType: varchar("product_type", { length: 30 }).default("standalone"),
   category: varchar("category", { length: 255 }),
   sector: varchar("sector", { length: 255 }),
   createdBy: varchar("created_by", { length: 255 }),
