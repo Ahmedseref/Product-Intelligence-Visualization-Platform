@@ -899,7 +899,8 @@ const ProformaInvoiceEditor: React.FC<ProformaInvoiceEditorProps> = ({
             {/* 1. Customer & Header */}
             <Section
               title="Customer & Header"
-              icon={<User className="w-4 h-4 text-slate-500" />}
+              icon={<User className="w-4 h-4 text-emerald-600" />}
+              theme="emerald"
               open={openSections.customer}
               onToggle={() => toggleSection('customer')}
             >
@@ -941,7 +942,8 @@ const ProformaInvoiceEditor: React.FC<ProformaInvoiceEditorProps> = ({
             {/* 2. Shipping & Logistics */}
             <Section
               title="Shipping & Logistics"
-              icon={<Truck className="w-4 h-4 text-slate-500" />}
+              icon={<Truck className="w-4 h-4 text-blue-600" />}
+              theme="blue"
               open={openSections.shipping}
               onToggle={() => toggleSection('shipping')}
             >
@@ -980,7 +982,8 @@ const ProformaInvoiceEditor: React.FC<ProformaInvoiceEditorProps> = ({
             {/* 3. Products */}
             <Section
               title="Products"
-              icon={<Package className="w-4 h-4 text-slate-500" />}
+              icon={<Package className="w-4 h-4 text-amber-600" />}
+              theme="amber"
               open={openSections.products}
               onToggle={() => toggleSection('products')}
               right={
@@ -1271,7 +1274,8 @@ const ProformaInvoiceEditor: React.FC<ProformaInvoiceEditorProps> = ({
             {/* 4. Financial Calculations */}
             <Section
               title="Financial Calculations"
-              icon={<Calculator className="w-4 h-4 text-slate-500" />}
+              icon={<Calculator className="w-4 h-4 text-purple-600" />}
+              theme="purple"
               open={openSections.financials}
               onToggle={() => toggleSection('financials')}
             >
@@ -1371,7 +1375,8 @@ const ProformaInvoiceEditor: React.FC<ProformaInvoiceEditorProps> = ({
             {/* 5. Notes & Bank Details */}
             <Section
               title="Notes & Bank Details"
-              icon={<StickyNote className="w-4 h-4 text-slate-500" />}
+              icon={<StickyNote className="w-4 h-4 text-rose-600" />}
+              theme="rose"
               open={openSections.notes}
               onToggle={() => toggleSection('notes')}
             >
@@ -1441,42 +1446,104 @@ const ProformaInvoiceEditor: React.FC<ProformaInvoiceEditorProps> = ({
 // Reusable left-column primitives
 // =============================================================================
 
+type SectionTheme = 'emerald' | 'blue' | 'amber' | 'purple' | 'rose';
+
+const THEME_STYLES: Record<SectionTheme, {
+  headerBg: string;
+  headerHover: string;
+  headerBorder: string;
+  text: string;
+  icon: string;
+  chevron: string;
+  bodyBorder: string;
+}> = {
+  emerald: {
+    headerBg: 'bg-emerald-50',
+    headerHover: 'hover:bg-emerald-100',
+    headerBorder: 'border-emerald-100',
+    text: 'text-emerald-800',
+    icon: 'text-emerald-600',
+    chevron: 'text-emerald-500',
+    bodyBorder: 'border-emerald-200',
+  },
+  blue: {
+    headerBg: 'bg-blue-50',
+    headerHover: 'hover:bg-blue-100',
+    headerBorder: 'border-blue-100',
+    text: 'text-blue-800',
+    icon: 'text-blue-600',
+    chevron: 'text-blue-500',
+    bodyBorder: 'border-blue-200',
+  },
+  amber: {
+    headerBg: 'bg-amber-50',
+    headerHover: 'hover:bg-amber-100',
+    headerBorder: 'border-amber-100',
+    text: 'text-amber-800',
+    icon: 'text-amber-600',
+    chevron: 'text-amber-500',
+    bodyBorder: 'border-amber-200',
+  },
+  purple: {
+    headerBg: 'bg-purple-50',
+    headerHover: 'hover:bg-purple-100',
+    headerBorder: 'border-purple-100',
+    text: 'text-purple-800',
+    icon: 'text-purple-600',
+    chevron: 'text-purple-500',
+    bodyBorder: 'border-purple-200',
+  },
+  rose: {
+    headerBg: 'bg-rose-50',
+    headerHover: 'hover:bg-rose-100',
+    headerBorder: 'border-rose-100',
+    text: 'text-rose-800',
+    icon: 'text-rose-600',
+    chevron: 'text-rose-500',
+    bodyBorder: 'border-rose-200',
+  },
+};
+
 const Section: React.FC<{
   title: string;
   icon: React.ReactNode;
   open: boolean;
   onToggle: () => void;
   right?: React.ReactNode;
+  theme?: SectionTheme;
   children: React.ReactNode;
-}> = ({ title, icon, open, onToggle, right, children }) => (
-  // Outer is a div (not <button>) so callers can nest interactive controls
-  // (e.g. the Columns toggle in `right`) without producing invalid
-  // <button>-in-<button> HTML and the React hydration warning that follows.
-  <div className="bg-white rounded-xl border border-slate-200 overflow-hidden shadow-sm">
-    <div
-      role="button"
-      tabIndex={0}
-      onClick={onToggle}
-      onKeyDown={(e) => {
-        if (e.key === 'Enter' || e.key === ' ') {
-          e.preventDefault();
-          onToggle();
-        }
-      }}
-      className="w-full flex items-center justify-between px-4 py-3 bg-slate-50 hover:bg-slate-100 transition-colors border-b border-slate-100 cursor-pointer select-none"
-    >
-      <div className="flex items-center gap-2">
-        {icon}
-        <h3 className="text-sm font-semibold text-slate-700">{title}</h3>
+}> = ({ title, icon, open, onToggle, right, theme = 'emerald', children }) => {
+  const t = THEME_STYLES[theme];
+  return (
+    // Outer is a div (not <button>) so callers can nest interactive controls
+    // (e.g. the Columns toggle in `right`) without producing invalid
+    // <button>-in-<button> HTML and the React hydration warning that follows.
+    <div className={`bg-white rounded-xl border ${t.bodyBorder} overflow-hidden shadow-sm`}>
+      <div
+        role="button"
+        tabIndex={0}
+        onClick={onToggle}
+        onKeyDown={(e) => {
+          if (e.key === 'Enter' || e.key === ' ') {
+            e.preventDefault();
+            onToggle();
+          }
+        }}
+        className={`w-full flex items-center justify-between px-4 py-3 ${t.headerBg} ${t.headerHover} transition-colors border-b ${t.headerBorder} cursor-pointer select-none`}
+      >
+        <div className="flex items-center gap-2">
+          {icon}
+          <h3 className={`text-sm font-semibold ${t.text}`}>{title}</h3>
+        </div>
+        <div className="flex items-center gap-2">
+          {right}
+          {open ? <ChevronUp className={`w-4 h-4 ${t.chevron}`} /> : <ChevronDown className={`w-4 h-4 ${t.chevron}`} />}
+        </div>
       </div>
-      <div className="flex items-center gap-2">
-        {right}
-        {open ? <ChevronUp className="w-4 h-4 text-slate-400" /> : <ChevronDown className="w-4 h-4 text-slate-400" />}
-      </div>
+      {open && <div className="p-4">{children}</div>}
     </div>
-    {open && <div className="p-4">{children}</div>}
-  </div>
-);
+  );
+};
 
 const Label: React.FC<{ children: React.ReactNode; small?: boolean }> = ({ children, small }) => (
   <label className={`block ${small ? 'text-[10px]' : 'text-xs'} font-medium text-slate-500 mb-1`}>
