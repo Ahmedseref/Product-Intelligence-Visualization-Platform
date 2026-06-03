@@ -44,9 +44,20 @@ const SPEC_TEMPLATES: Record<ProductType, SpecTemplate[]> = {
     { name: 'Surface type' },
   ],
   tiles: [
-    { name: 'Tile size', unit: 'cm' },
+    {
+      name: 'Tile size',
+      unit: 'cm',
+      valueOptions: [
+        '10X10', '15X15', '20X20', '25X40', '30X30', '30X60', '33X33',
+        '40X40', '45X45', '50X50', '60X60', '60X120', '80X80', '80X160',
+        '100X100', '120X120',
+      ],
+    },
     { name: 'Rectified', valueOptions: ['Yes', 'No'] },
-    { name: 'Surface finish' },
+    {
+      name: 'Surface finish',
+      valueOptions: ['Matt', 'Polished', 'Textured/Grip', 'Semi Polished', 'Glazed'],
+    },
   ],
 };
 
