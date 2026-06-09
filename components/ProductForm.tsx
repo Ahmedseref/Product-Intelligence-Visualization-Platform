@@ -61,13 +61,6 @@ const SPEC_TEMPLATES: Record<ProductType, SpecTemplate[]> = {
   ],
 };
 
-// Every attribute name that any template can seed, lowercased. Used when
-// switching product type to recognise (and clear) leftover template
-// placeholder rows from a previously selected type.
-const ALL_TEMPLATE_NAMES = new Set(
-  Object.values(SPEC_TEMPLATES).flat().map(t => t.name.trim().toLowerCase()),
-);
-
 const ProductForm: React.FC<ProductFormProps> = ({ onSubmit, onCancel, currentUser, customFields, treeNodes, suppliers = [], usageAreas = [], units: unitsProp, colors = [], onAddFieldDefinition, onAddTreeNode, initialProduct, mode = 'create' }) => {
   const { lockEditing, unlockEditing } = useRefreshContext();
 
@@ -290,34 +283,21 @@ const ProductForm: React.FC<ProductFormProps> = ({ onSubmit, onCancel, currentUs
     setTechnicalSpecs(technicalSpecs.filter(s => s.id !== id));
   };
 
-  // Switching product type seeds the matching template attribute rows
-  // (blank values) without disturbing any specs the user already has.
-  // We match on attribute name case-insensitively so re-selecting a
-  // type — or selecting one whose attributes were added manually —
-  // never produces duplicates. Switching type also clears the *blank*
-  // template rows left behind by the previous type (including switching
-  // back to Standalone), while always preserving filled-in and custom
-  // specs.
+  // Switching product type is strictly ADDITIVE: it seeds any missing
+  // template attributes for the newly selected type and never deletes
+  // existing rows. We match on attribute name case-insensitively so
+  // re-selecting a type — or one whose attributes were added manually —
+  // never produces duplicates. Existing specs (filled-in, blank, or
+  // custom) are always preserved, so switching back to Standalone leaves
+  // the user's data fully intact.
   const handleProductTypeChange = (next: ProductType) => {
     setProductType(next);
     setTechnicalSpecs(prev => {
-      // 1) Drop leftover template placeholder rows from the previously
-      //    selected type that the user never filled in. A row is cleared
-      //    only when BOTH its name matches a known template attribute AND
-      //    its value is still blank — so anything the user typed, and any
-      //    custom rows they added, are always preserved. This is what
-      //    makes switching back to Standalone show a clean list.
-      const cleaned = prev.filter(s => {
-        const isTemplateName = ALL_TEMPLATE_NAMES.has(s.name.trim().toLowerCase());
-        const isBlank = !s.value || s.value.trim() === '';
-        return !(isTemplateName && isBlank);
-      });
-
-      // 2) Seed the newly selected type's template rows, skipping any
-      //    attribute name already present (case-insensitive) so we never
-      //    create duplicates.
+      // Seed the newly selected type's template rows, skipping any
+      // attribute name already present (case-insensitive) so we never
+      // create duplicates. No existing row is ever removed here.
       const template = SPEC_TEMPLATES[next] || [];
-      const existingNames = new Set(cleaned.map(s => s.name.trim().toLowerCase()));
+      const existingNames = new Set(prev.map(s => s.name.trim().toLowerCase()));
       const additions: TechnicalSpec[] = template
         .filter(t => !existingNames.has(t.name.trim().toLowerCase()))
         .map((t, i) => ({
@@ -328,7 +308,7 @@ const ProductForm: React.FC<ProductFormProps> = ({ onSubmit, onCancel, currentUs
           affectsPrice: false,
         }));
 
-      return [...cleaned, ...additions];
+      return [...prev, ...additions];
     });
   };
 
@@ -825,10 +805,10 @@ const ProductForm: React.FC<ProductFormProps> = ({ onSubmit, onCancel, currentUs
                           ) : (
                             <p 
                               className="font-semibold text-slate-800 cursor-pointer hover:bg-emerald-100 rounded px-1 py-0.5 -mx-1 transition-colors"
-                              onClick={() => startEditSpec(spec.id, 'value', spec.value)}
-                              title="Click to edit"
+                              onDoubleClick={() => startEditSpec(spec.id, 'value', spec.value)}
+                              title="Double-click to edit"
                             >
-                              {spec.value || <span className="text-slate-400 italic font-normal">Click to add value</span>}
+                              {spec.value || <span className="text-slate-400 italic font-normal">Double-click to add value</span>}
                             </p>
                           )}
                         </div>
