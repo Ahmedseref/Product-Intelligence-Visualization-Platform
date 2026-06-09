@@ -1698,6 +1698,139 @@ const Field: React.FC<{
 // row-total formula. All state is owned by the parent editor.
 // =============================================================================
 
+// =============================================================================
+// FormulaInput — a text input for formula authoring with a token autocomplete.
+// =============================================================================
+// When the caret sits inside an unclosed `{ … }` the component shows a dropdown
+// of available tokens (built-in {qty}/{unit_price}/{total} plus every column
+// name) filtered by what the user has typed so far. Picking one inserts the
+// correctly-braced token, preventing the typos that silently break formulas
+// (e.g. typing `{Unit}` correctly instead of guessing `{col:Unit}`).
+//
+// Navigation: ↑/↓ move the highlight, Enter/Tab accept, Esc dismisses, and the
+// suggestions can also be clicked. We use onMouseDown (not onClick) for the
+// options so the insertion runs before the input's blur fires.
+// =============================================================================
+interface FormulaInputProps {
+  value: string;
+  onChange: (next: string) => void;
+  // Bare token names to suggest (without braces), e.g. ['qty', 'Pallet'].
+  suggestions: string[];
+  placeholder?: string;
+  className?: string;
+  // Extra classes for the relative wrapper (e.g. 'flex-1' / 'w-full').
+  wrapperClassName?: string;
+}
+
+const FormulaInput: React.FC<FormulaInputProps> = ({
+  value, onChange, suggestions, placeholder, className, wrapperClassName,
+}) => {
+  const inputRef = useRef<HTMLInputElement>(null);
+  const [open, setOpen] = useState(false);
+  // Index of the `{` that opened the current suggestion session.
+  const [anchor, setAnchor] = useState(0);
+  // Partial text the user has typed after that `{`.
+  const [query, setQuery] = useState('');
+  // Which suggestion is keyboard-highlighted.
+  const [highlight, setHighlight] = useState(0);
+
+  // Suggestions matching the partial query (case-insensitive substring).
+  const filtered = useMemo(() => {
+    const q = query.trim().toLowerCase();
+    const list = q === '' ? suggestions : suggestions.filter(s => s.toLowerCase().includes(q));
+    return list.slice(0, 8); // cap the dropdown height
+  }, [suggestions, query]);
+
+  // Decide whether the caret is inside an unclosed brace and, if so, capture
+  // the anchor `{` position and the partial query for filtering.
+  const refresh = (val: string, caret: number) => {
+    const before = val.slice(0, caret);
+    const lastOpen = before.lastIndexOf('{');
+    const lastClose = before.lastIndexOf('}');
+    if (lastOpen > lastClose) {
+      setOpen(true);
+      setAnchor(lastOpen);
+      setQuery(before.slice(lastOpen + 1));
+      setHighlight(0);
+    } else {
+      setOpen(false);
+    }
+  };
+
+  const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    onChange(e.target.value);
+    refresh(e.target.value, e.target.selectionStart ?? e.target.value.length);
+  };
+
+  // Replace the open `{partial` with a fully-braced `{Name}` token and move the
+  // caret to just after the inserted token.
+  const insert = (name: string) => {
+    const el = inputRef.current;
+    const caret = el?.selectionStart ?? value.length;
+    const next = value.slice(0, anchor) + '{' + name + '}' + value.slice(caret);
+    onChange(next);
+    setOpen(false);
+    const pos = anchor + name.length + 2; // '{' + name + '}'
+    requestAnimationFrame(() => {
+      if (el) { el.focus(); el.setSelectionRange(pos, pos); }
+    });
+  };
+
+  const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (!open || filtered.length === 0) return;
+    if (e.key === 'ArrowDown') {
+      e.preventDefault();
+      setHighlight(h => (h + 1) % filtered.length);
+    } else if (e.key === 'ArrowUp') {
+      e.preventDefault();
+      setHighlight(h => (h - 1 + filtered.length) % filtered.length);
+    } else if (e.key === 'Enter' || e.key === 'Tab') {
+      e.preventDefault();
+      insert(filtered[highlight]);
+    } else if (e.key === 'Escape') {
+      e.preventDefault();
+      setOpen(false);
+    }
+  };
+
+  return (
+    <div className={`relative ${wrapperClassName ?? ''}`}>
+      <input
+        ref={inputRef}
+        type="text"
+        value={value}
+        onChange={handleChange}
+        onKeyDown={handleKeyDown}
+        onFocus={e => refresh(value, e.target.selectionStart ?? value.length)}
+        // Re-evaluate on caret moves not caused by typing (click, arrow keys,
+        // selection) so the anchor `{` never goes stale.
+        onSelect={e => refresh(value, (e.target as HTMLInputElement).selectionStart ?? value.length)}
+        // Delay close so an option's onMouseDown can run first.
+        onBlur={() => setTimeout(() => setOpen(false), 120)}
+        placeholder={placeholder}
+        className={className}
+      />
+      {open && filtered.length > 0 && (
+        <div className="absolute z-30 left-0 top-full mt-0.5 w-56 max-h-44 overflow-y-auto bg-white border border-slate-200 rounded-lg shadow-lg">
+          {filtered.map((s, i) => (
+            <button
+              key={s}
+              type="button"
+              onMouseDown={e => { e.preventDefault(); insert(s); }}
+              onMouseEnter={() => setHighlight(i)}
+              className={`w-full text-left px-2.5 py-1.5 text-[11px] font-mono ${
+                i === highlight ? 'bg-blue-50 text-blue-700' : 'text-slate-600 hover:bg-slate-50'
+              }`}
+            >
+              {'{' + s + '}'}
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+};
+
 interface ColumnsPanelProps {
   allColumns: DisplayColumn[];
   customColumns: ProformaCustomColumn[];
@@ -1730,6 +1863,28 @@ const ColumnsPanel: React.FC<ColumnsPanelProps> = ({
   const [totalDraft, setTotalDraft] = useState(totalFormula ?? '');
   // Keep the draft in sync if the parent ever resets it (e.g. preset button).
   useEffect(() => { setTotalDraft(totalFormula ?? ''); }, [totalFormula]);
+
+  // Token names offered by the formula autocomplete. Built-in numeric columns
+  // map to their canonical aliases (qty/unit_price/total); built-in text
+  // columns (Description/Unit) are omitted because they hold no number. Custom
+  // columns are offered by their display name (deduped, blanks skipped).
+  const tokenSuggestions = useMemo(() => {
+    const out: string[] = [];
+    const seen = new Set<string>();
+    const push = (name: string) => {
+      const key = name.toLowerCase();
+      if (name && !seen.has(key)) { seen.add(key); out.push(name); }
+    };
+    push('qty');
+    push('unit_price');
+    push('total');
+    for (const c of allColumns) {
+      if (c.builtIn) continue;
+      const label = (c.label ?? '').trim();
+      if (label) push(label);
+    }
+    return out;
+  }, [allColumns]);
 
   // Reorder helper: move column id `id` by `delta` (-1 up, +1 down) within
   // the allColumns visual order. We materialise the current full order from
@@ -1902,12 +2057,13 @@ const ColumnsPanel: React.FC<ColumnsPanelProps> = ({
                       className="w-32 px-1.5 py-0.5 text-[11px] text-slate-600 border border-slate-200 rounded focus:outline-none focus:border-blue-400"
                     />
                     {col.type === 'formula' && (
-                      <input
-                        type="text"
+                      <FormulaInput
                         value={col.formula ?? ''}
-                        onChange={e => setCustomFormula(col.id, e.target.value)}
+                        onChange={v => setCustomFormula(col.id, v)}
+                        suggestions={tokenSuggestions}
                         placeholder="e.g. {qty} * {unit_price} * 0.9"
-                        className="flex-1 px-1.5 py-0.5 text-[11px] font-mono text-slate-600 border border-slate-200 rounded focus:outline-none focus:border-blue-400"
+                        wrapperClassName="flex-1"
+                        className="w-full px-1.5 py-0.5 text-[11px] font-mono text-slate-600 border border-slate-200 rounded focus:outline-none focus:border-blue-400"
                       />
                     )}
                   </div>
@@ -1985,12 +2141,13 @@ const ColumnsPanel: React.FC<ColumnsPanelProps> = ({
             <Plus className="w-3.5 h-3.5" /> Add
           </button>
           {draftType === 'formula' && (
-            <input
-              type="text"
+            <FormulaInput
               value={draftFormula}
-              onChange={e => setDraftFormula(e.target.value)}
-              placeholder="Formula — e.g. {qty} * {unit_price} * 0.9 or {col:Discount %}"
-              className="col-span-12 px-2 py-1 text-[11px] font-mono border border-slate-200 rounded focus:outline-none focus:border-blue-400"
+              onChange={setDraftFormula}
+              suggestions={tokenSuggestions}
+              placeholder="Formula — e.g. {qty} * {unit_price} * 0.9 or {Discount %}"
+              wrapperClassName="col-span-12"
+              className="w-full px-2 py-1 text-[11px] font-mono border border-slate-200 rounded focus:outline-none focus:border-blue-400"
             />
           )}
         </div>
@@ -2004,10 +2161,11 @@ const ColumnsPanel: React.FC<ColumnsPanelProps> = ({
             <Percent className="w-3.5 h-3.5" /> Apply Discount % Preset
           </button>
           <span className="text-[10px] text-slate-500">
+            Type <code className="bg-slate-100 px-1 rounded">{'{'}</code> for suggestions ·
             Tokens: <code className="bg-slate-100 px-1 rounded">{'{qty}'}</code>{' '}
             <code className="bg-slate-100 px-1 rounded">{'{unit_price}'}</code>{' '}
             <code className="bg-slate-100 px-1 rounded">{'{total}'}</code>{' '}
-            <code className="bg-slate-100 px-1 rounded">{'{col:Name}'}</code>
+            <code className="bg-slate-100 px-1 rounded">{'{Column Name}'}</code>
           </span>
         </div>
       </div>
@@ -2036,11 +2194,12 @@ const ColumnsPanel: React.FC<ColumnsPanelProps> = ({
           </label>
         </div>
         {isCustomTotal && (
-          <input
-            type="text"
+          <FormulaInput
             value={totalDraft}
-            onChange={e => { setTotalDraft(e.target.value); onSetTotalFormula(e.target.value); }}
-            placeholder="e.g. {qty} * {unit_price} * (1 - {col:Discount %} / 100)"
+            onChange={v => { setTotalDraft(v); onSetTotalFormula(v); }}
+            suggestions={tokenSuggestions}
+            placeholder="e.g. {qty} * {unit_price} * (1 - {Discount %} / 100)"
+            wrapperClassName="w-full"
             className="w-full px-2 py-1 text-[11px] font-mono border border-slate-200 rounded focus:outline-none focus:border-blue-400"
           />
         )}
