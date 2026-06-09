@@ -93,6 +93,10 @@ interface DraftItem {
   customDescription: string | null;
   customPrice: number | null;
   quantity: number;
+  // Original persisted ordering (from the server). Used purely for
+  // change-detection so a drag-reorder of unchanged rows still PATCHes
+  // sortOrder. 0 for brand-new items (they always POST).
+  sortOrder: number;
   // Per-row values for the proforma's user-defined custom columns. Keyed
   // by column id (NOT name). Values are stored as strings so we never
   // lose a partial entry like "12." while the user is typing; the
@@ -242,6 +246,7 @@ function itemFromServer(it: ProformaItemData): DraftItem {
     customDescription: it.customDescription ?? null,
     customPrice: it.customPrice ?? null,
     quantity: it.quantity,
+    sortOrder: it.sortOrder ?? 0,
     customValues: (it.customValues && typeof it.customValues === 'object') ? { ...it.customValues } : {},
   };
 }
@@ -351,6 +356,31 @@ const ProformaInvoiceEditor: React.FC<ProformaInvoiceEditorProps> = ({
 
   const [productSearch, setProductSearch] = useState('');
   const [showProductDropdown, setShowProductDropdown] = useState(false);
+
+  // ── Drag-and-drop reordering of the selected products list ──
+  // `dragIndex` is the index of the row currently being dragged; `dragOverIndex`
+  // is the row it is hovering over (used to show a drop indicator). Order is
+  // persisted on save because we write sortOrder = array index.
+  const [dragIndex, setDragIndex] = useState<number | null>(null);
+  const [dragOverIndex, setDragOverIndex] = useState<number | null>(null);
+
+  // Move an item from one position to another, returning a new array so React
+  // re-renders. No-op when the indices are equal or out of range.
+  const reorderItems = (from: number, to: number) => {
+    setItems(prev => {
+      if (
+        from === to ||
+        from < 0 || to < 0 ||
+        from >= prev.length || to >= prev.length
+      ) {
+        return prev;
+      }
+      const next = [...prev];
+      const [moved] = next.splice(from, 1);
+      next.splice(to, 0, moved);
+      return next;
+    });
+  };
 
   // Close the product search modal on Escape and reset the query, so the
   // keyboard alone can dismiss it for a faster selection workflow.
@@ -544,6 +574,7 @@ const ProformaInvoiceEditor: React.FC<ProformaInvoiceEditorProps> = ({
       customDescription: null,
       customPrice: null,
       quantity: 1,
+      sortOrder: 0,
       customValues: {},
     }]);
     // Keep the modal open and clear the query so several products can be
@@ -684,12 +715,15 @@ const ProformaInvoiceEditor: React.FC<ProformaInvoiceEditorProps> = ({
         } else {
           const orig = originalItemsById.current.get(it.id);
           if (!orig) return;
-          // Only PATCH if anything changed (customValues compared via stable JSON).
+          // Only PATCH if anything changed (customValues compared via stable
+          // JSON). A pure drag-reorder counts as a change too: orig.sortOrder
+          // is the persisted position and idx is the new array position.
           const changed =
             orig.customName !== it.customName ||
             orig.customDescription !== it.customDescription ||
             orig.customPrice !== it.customPrice ||
             orig.quantity !== it.quantity ||
+            orig.sortOrder !== idx ||
             stringifyValues(orig.customValues) !== stringifyValues(it.customValues);
           if (changed) {
             itemWrites.push(api.updateProformaItem(it.id, {
@@ -1141,11 +1175,40 @@ const ProformaInvoiceEditor: React.FC<ProformaInvoiceEditorProps> = ({
                       const productVisible = visibleColumns.some(c => c.id === 'product');
                       const otherCols = visibleColumns.filter(c => c.id !== 'product');
                       return (
-                        <div key={it.id} className="border border-slate-200 rounded-lg bg-white p-3 space-y-2">
-                          {/* Header row: name + reset/delete actions */}
+                        <div
+                          key={it.id}
+                          onDragOver={e => {
+                            // Allow dropping and track the hovered row for the indicator.
+                            e.preventDefault();
+                            if (dragIndex !== null && dragOverIndex !== idx) setDragOverIndex(idx);
+                          }}
+                          onDrop={e => {
+                            e.preventDefault();
+                            if (dragIndex !== null) reorderItems(dragIndex, idx);
+                            setDragIndex(null);
+                            setDragOverIndex(null);
+                          }}
+                          className={`border rounded-lg bg-white p-3 space-y-2 transition-all ${
+                            dragIndex === idx
+                              ? 'opacity-50 border-amber-400 ring-2 ring-amber-400/30'
+                              : dragOverIndex === idx
+                                ? 'border-amber-400 border-dashed'
+                                : 'border-slate-200'
+                          }`}
+                        >
+                          {/* Header row: drag handle + name + reset/delete actions */}
                           {productVisible && (
                             <>
                               <div className="flex items-start gap-2">
+                                <span
+                                  draggable
+                                  onDragStart={() => { setDragIndex(idx); setDragOverIndex(idx); }}
+                                  onDragEnd={() => { setDragIndex(null); setDragOverIndex(null); }}
+                                  title="Drag to reorder"
+                                  className="mt-0.5 flex-shrink-0 cursor-grab active:cursor-grabbing text-slate-300 hover:text-amber-500 transition-colors"
+                                >
+                                  <GripVertical className="w-4 h-4" />
+                                </span>
                                 <span className="text-xs text-slate-400 font-mono mt-0.5 w-5 flex-shrink-0">
                                   {String(idx + 1).padStart(2, '0')}
                                 </span>
