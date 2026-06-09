@@ -1544,6 +1544,8 @@ const ProformaInvoiceEditor: React.FC<ProformaInvoiceEditorProps> = ({
                 visibleColumns={visibleColumns}
                 lineTotalFor={lineTotalFor}
                 evalFormulaCell={evalFormulaCell}
+                onUpdateItem={updateItem}
+                onUpdateCustomValue={updateItemCustomValue}
               />
             </div>
           </div>
@@ -2009,11 +2011,13 @@ const ColumnsPanel: React.FC<ColumnsPanelProps> = ({
 };
 
 // =============================================================================
-// InvoicePreview — read-only invoice document for the right column
+// InvoicePreview — live invoice document for the right column. Most cells are
+// inline-editable (name, description, unit price, qty, custom text/number);
+// computed columns (total/formula) and the catalog unit stay read-only. During
+// PDF capture the inputs flip to plain text for a clean export.
 // =============================================================================
-// Visually mirrors the legacy ProformaPreview component but with no editing
-// affordances (no click-to-edit cells, no inline buttons). Driven entirely by
-// props so it can be reused in any context where a static preview is needed.
+// Visually mirrors the legacy ProformaPreview component. Driven entirely by
+// props (including inline-edit handlers) so it stays in sync with the editor.
 // =============================================================================
 
 interface InvoicePreviewProps {
@@ -2045,15 +2049,27 @@ interface InvoicePreviewProps {
   // preview cannot drift from the editor.
   lineTotalFor: (it: DraftItem) => number;
   evalFormulaCell: (it: DraftItem, col: DisplayColumn) => number;
+  // Inline-edit handlers (shared with the editor card so both surfaces stay
+  // in sync). Computed columns (total/formula) and the catalog-derived unit
+  // are intentionally NOT editable.
+  onUpdateItem: <K extends keyof DraftItem>(id: number, field: K, value: DraftItem[K]) => void;
+  onUpdateCustomValue: (id: number, columnId: string, value: string) => void;
 }
 
 const InvoicePreview: React.FC<InvoicePreviewProps> = ({
   invoiceRef, settings, proformaIdDisplay, customerName, customerCountry,
   customerFields, currency, shipTo, portOfLoading, placeOfDestination,
   finalPlaceOfDelivery, countryOfOrigin, transportationMode, paymentTerms,
-  deliveryTerms, notes, items, subtotal, steps, finalTotal,
-  visibleColumns, lineTotalFor, evalFormulaCell,
+  deliveryTerms, notes, items, subtotal, steps, finalTotal, pdfCapturing,
+  visibleColumns, lineTotalFor, evalFormulaCell, onUpdateItem, onUpdateCustomValue,
 }) => {
+  // While capturing the PDF we render plain text instead of <input> elements
+  // so the exported document is clean (no focus rings / caret artifacts).
+  const editable = !pdfCapturing;
+  // Shared classes for the borderless "looks like text until you hover" inputs.
+  const inlineBase =
+    'w-full bg-transparent border border-transparent rounded px-1 -mx-1 ' +
+    'hover:border-slate-200 focus:border-blue-400 focus:ring-2 focus:ring-blue-500/20 focus:outline-none transition-colors';
   const today = new Date().toLocaleDateString('en-GB', { day: '2-digit', month: '2-digit', year: 'numeric' });
   const invoicedTo = shipTo.trim() || 'SAME AS CONSIGNEE';
   const effectivePaymentTerms = paymentTerms || settings.paymentTerms || '';
@@ -2169,34 +2185,85 @@ const InvoicePreview: React.FC<InvoicePreviewProps> = ({
             const desc = it.customDescription ?? it.productDescription;
             const price = it.customPrice ?? it.productPrice;
             const isLast = idx === items.length - 1;
+            // Auto-size the description box to its content (1–6 rows) so the
+            // editable preview keeps roughly the same height as the print view.
+            const descRows = Math.min(6, Math.max(1, (desc || '').split('\n').length));
             return (
               <tr key={it.id} className={isLast ? '' : 'border-b border-slate-200'}>
                 {visibleColumns.map(col => {
+                  // ── Description of goods: name + description (editable) ──
                   if (col.id === 'product') {
                     return (
                       <td key={col.id} className="px-3 py-2 align-top">
-                        <div className="text-xs font-semibold text-slate-800">{name || <span className="italic text-slate-400">Unnamed product</span>}</div>
-                        {desc && <div className="text-[11px] text-slate-600 mt-0.5 whitespace-pre-line">{desc}</div>}
+                        {editable ? (
+                          <>
+                            <input
+                              type="text"
+                              value={name}
+                              placeholder="Unnamed product"
+                              onChange={e => onUpdateItem(it.id, 'customName', e.target.value)}
+                              className={`${inlineBase} text-xs font-semibold text-slate-800 placeholder:italic placeholder:text-slate-400`}
+                            />
+                            <textarea
+                              value={desc}
+                              rows={descRows}
+                              placeholder="Description"
+                              onChange={e => onUpdateItem(it.id, 'customDescription', e.target.value)}
+                              className={`${inlineBase} text-[11px] text-slate-600 mt-0.5 resize-none whitespace-pre-line`}
+                            />
+                          </>
+                        ) : (
+                          <>
+                            <div className="text-xs font-semibold text-slate-800">{name || <span className="italic text-slate-400">Unnamed product</span>}</div>
+                            {desc && <div className="text-[11px] text-slate-600 mt-0.5 whitespace-pre-line">{desc}</div>}
+                          </>
+                        )}
                         {it.productStockCode && (
                           <div className="text-[10px] text-slate-400 font-mono mt-0.5">{it.productStockCode}</div>
                         )}
                       </td>
                     );
                   }
+                  // ── Unit price (editable number; falls back to catalog) ──
                   if (col.id === 'unitPrice') {
                     return (
                       <td key={col.id} className="px-3 py-2 text-right align-top text-xs text-slate-700 tabular-nums">
-                        {fmt(price)}
+                        {editable ? (
+                          <input
+                            type="number"
+                            min="0"
+                            step="any"
+                            value={price}
+                            onChange={e => {
+                              // Guard transient invalid input ("-", ".") — keep
+                              // null rather than writing NaN into the price.
+                              const parsed = parseFloat(e.target.value);
+                              onUpdateItem(it.id, 'customPrice', e.target.value === '' || !Number.isFinite(parsed) ? null : parsed);
+                            }}
+                            className={`${inlineBase} text-right tabular-nums`}
+                          />
+                        ) : fmt(price)}
                       </td>
                     );
                   }
+                  // ── Quantity (editable number) ──
                   if (col.id === 'quantity') {
                     return (
                       <td key={col.id} className="px-3 py-2 text-center align-top text-xs text-slate-700 tabular-nums">
-                        {it.quantity}
+                        {editable ? (
+                          <input
+                            type="number"
+                            min="0"
+                            step="any"
+                            value={it.quantity}
+                            onChange={e => onUpdateItem(it.id, 'quantity', parseFloat(e.target.value) || 0)}
+                            className={`${inlineBase} text-center tabular-nums`}
+                          />
+                        ) : it.quantity}
                       </td>
                     );
                   }
+                  // ── Unit: catalog-derived, not editable inline ──
                   if (col.id === 'unit') {
                     return (
                       <td key={col.id} className="px-3 py-2 text-center align-top text-[11px] text-slate-500">
@@ -2204,6 +2271,7 @@ const InvoicePreview: React.FC<InvoicePreviewProps> = ({
                       </td>
                     );
                   }
+                  // ── Total: computed, not editable ──
                   if (col.id === 'total') {
                     // Mirror the editor: render '—' when the totalFormula is broken
                     // so the printed/exported preview never silently shows 0.
@@ -2214,23 +2282,40 @@ const InvoicePreview: React.FC<InvoicePreviewProps> = ({
                       </td>
                     );
                   }
-                  // Custom columns
+                  // ── Custom text column (editable) ──
                   if (col.type === 'text') {
                     return (
                       <td key={col.id} className="px-3 py-2 text-right align-top text-xs text-slate-700">
-                        {it.customValues?.[col.id] || '—'}
+                        {editable ? (
+                          <input
+                            type="text"
+                            value={it.customValues?.[col.id] ?? ''}
+                            onChange={e => onUpdateCustomValue(it.id, col.id, e.target.value)}
+                            className={`${inlineBase} text-right`}
+                          />
+                        ) : (it.customValues?.[col.id] || '—')}
                       </td>
                     );
                   }
+                  // ── Custom number column (editable) ──
                   if (col.type === 'number') {
                     const raw = it.customValues?.[col.id];
                     const n = raw == null || raw === '' ? null : parseFloat(raw);
                     return (
                       <td key={col.id} className="px-3 py-2 text-right align-top text-xs text-slate-700 tabular-nums">
-                        {n == null || !Number.isFinite(n) ? '—' : fmt(n)}
+                        {editable ? (
+                          <input
+                            type="number"
+                            step="any"
+                            value={raw ?? ''}
+                            onChange={e => onUpdateCustomValue(it.id, col.id, e.target.value)}
+                            className={`${inlineBase} text-right tabular-nums`}
+                          />
+                        ) : (n == null || !Number.isFinite(n) ? '—' : fmt(n))}
                       </td>
                     );
                   }
+                  // ── Custom formula column: computed, not editable ──
                   if (col.type === 'formula') {
                     const v = evalFormulaCell(it, col);
                     return (
