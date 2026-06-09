@@ -1720,6 +1720,10 @@ const ColumnsPanel: React.FC<ColumnsPanelProps> = ({
   const [draftUnit, setDraftUnit] = useState('');
   const [draftFormula, setDraftFormula] = useState('');
 
+  // Which custom column's type badge is currently being edited (double-click
+  // to open an inline type dropdown). null = none.
+  const [editingTypeId, setEditingTypeId] = useState<string | null>(null);
+
   // ── Local state for the row-total formula override ──
   // 'default' means qty × unit_price (legacy behavior).
   const isCustomTotal = !!totalFormula && totalFormula.trim() !== '';
@@ -1762,6 +1766,17 @@ const ColumnsPanel: React.FC<ColumnsPanelProps> = ({
   // Update formula on a formula-type custom column.
   const setCustomFormula = (id: string, formula: string) => {
     onSetCustomColumns(customColumns.map(c => c.id === id ? { ...c, formula } : c));
+  };
+  // Change a custom column's data type (text / number / formula). When
+  // switching to formula we seed an empty formula so the formula input shows;
+  // the previous formula (if any) is preserved when switching away.
+  const setCustomType = (id: string, type: 'text' | 'number' | 'formula') => {
+    onSetCustomColumns(customColumns.map(c => {
+      if (c.id !== id) return c;
+      const next: ProformaCustomColumn = { ...c, type };
+      if (type === 'formula' && next.formula == null) next.formula = '';
+      return next;
+    }));
   };
   // Delete a custom column. Also strips its id from columnOrder + hiddenColumns
   // so we don't leak orphan ids into the persisted state.
@@ -1846,9 +1861,33 @@ const ColumnsPanel: React.FC<ColumnsPanelProps> = ({
                       className="flex-1 px-1.5 py-0.5 text-xs font-medium text-slate-700 border border-slate-200 rounded focus:outline-none focus:border-blue-400"
                     />
                   )}
-                  <span className="text-[10px] text-slate-400 uppercase tracking-wide">
-                    {col.type === 'builtin' ? 'built-in' : col.type}
-                  </span>
+                  {col.builtIn ? (
+                    <span className="text-[10px] text-slate-400 uppercase tracking-wide">built-in</span>
+                  ) : editingTypeId === col.id ? (
+                    // Inline type editor — opened by double-clicking the badge.
+                    <select
+                      autoFocus
+                      value={col.type}
+                      onChange={e => {
+                        setCustomType(col.id, e.target.value as 'text' | 'number' | 'formula');
+                        setEditingTypeId(null);
+                      }}
+                      onBlur={() => setEditingTypeId(null)}
+                      className="text-[10px] uppercase tracking-wide border border-blue-300 rounded px-1 py-0.5 bg-white focus:outline-none focus:ring-2 focus:ring-blue-500/20"
+                    >
+                      <option value="text">text</option>
+                      <option value="number">number</option>
+                      <option value="formula">formula</option>
+                    </select>
+                  ) : (
+                    <span
+                      onDoubleClick={() => setEditingTypeId(col.id)}
+                      title="Double-click to change the data type"
+                      className="text-[10px] text-slate-400 uppercase tracking-wide cursor-pointer hover:text-blue-600 hover:underline decoration-dotted"
+                    >
+                      {col.type}
+                    </span>
+                  )}
                   {col.required && (
                     <span className="text-[10px] text-amber-600 uppercase tracking-wide">required</span>
                   )}
