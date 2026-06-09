@@ -445,6 +445,12 @@ export const proformas = pgTable("proformas", {
   // {col:Name}, {total}) the row total is computed by evaluating it for
   // each row, and the proforma subtotal aggregates those evaluated totals.
   totalFormula: text("total_formula"),
+  // Optional quantity formula. When NULL or 'default' each row's quantity is
+  // entered manually (the legacy behavior). When set to a formula string (same
+  // token grammar as totalFormula — {qty}, {unit_price}, {col:Name}, {Column
+  // Name}) the per-row quantity is computed by evaluating it for each row, and
+  // that computed quantity feeds the row total and subtotal.
+  quantityFormula: text("quantity_formula"),
   // Versioning: version number (1 = original, 2+ = revisions). The proformaId
   // encodes the version suffix (e.g. PI-0001-v2) but we store the integer
   // separately for easy sorting and max-version queries.
@@ -464,6 +470,9 @@ export const proformaItems = pgTable("proforma_items", {
   customDescription: text("custom_description"),
   customPrice: real("custom_price"),
   quantity: real("quantity").notNull().default(1),
+  // User-set unit of measure for this row (e.g. "kg", "piece"). When NULL the
+  // editor/preview/export fall back to the linked product's catalog unit.
+  unit: varchar("unit", { length: 50 }),
   // Per-row values for the proforma's customColumns. Keyed by column id from
   // proformas.customColumns. Stored values are always strings — number columns
   // parse on read so we never lose a partial entry like "12." while typing.

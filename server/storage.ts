@@ -591,6 +591,7 @@ export class DatabaseStorage implements IStorage {
       hiddenColumns: source.hiddenColumns,
       columnOrder: source.columnOrder,
       totalFormula: source.totalFormula,
+      quantityFormula: source.quantityFormula,
       version: opts?.version ?? 1,
       parentProformaId: opts?.parentProformaId ?? null,
       date: now,
@@ -607,6 +608,7 @@ export class DatabaseStorage implements IStorage {
         customDescription: it.customDescription,
         customPrice: it.customPrice,
         quantity: it.quantity,
+        unit: it.unit,
         customValues: it.customValues,
         sortOrder: it.sortOrder,
       });

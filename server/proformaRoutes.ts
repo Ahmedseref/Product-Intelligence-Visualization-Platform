@@ -189,7 +189,7 @@ export function registerProformaRoutes(app: Express): void {
       if (!full) return res.status(404).json({ error: "Proforma not found" });
 
       const settings = await storage.getProformaSettings();
-      const items = (full.items || []) as Array<{ productStockCode?: string; customName?: string | null; productName?: string; customDescription?: string | null; productDescription?: string; quantity: number; customPrice?: number | null; productPrice?: number; productUnit?: string; customValues?: Record<string, string> | null }>;
+      const items = (full.items || []) as Array<{ productStockCode?: string; customName?: string | null; productName?: string; customDescription?: string | null; productDescription?: string; quantity: number; customPrice?: number | null; productPrice?: number; productUnit?: string; unit?: string | null; customValues?: Record<string, string> | null }>;
       const financials = (full.financials || []) as Array<{ id: number; name: string; type: string; valueType: string; value: number; orderIndex: number }>;
       const customerFields = (full.customerFields || []) as Array<{ fieldName: string; fieldValue?: string | null }>;
       const currency = full.currency || settings?.defaultCurrency || "USD";
@@ -203,7 +203,7 @@ export function registerProformaRoutes(app: Express): void {
       const BUILTIN: PCol[] = [
         { id: 'product',   name: 'Description', type: 'builtin', required: true  },
         { id: 'unitPrice', name: 'Unit Price',  type: 'builtin' },
-        { id: 'quantity',  name: 'Qty',         type: 'builtin', required: true  },
+        { id: 'quantity',  name: 'Quantity',    type: 'builtin', required: true  },
         { id: 'unit',      name: 'Unit',        type: 'builtin' },
         { id: 'total',     name: 'Total',       type: 'builtin' },
       ];
@@ -211,6 +211,8 @@ export function registerProformaRoutes(app: Express): void {
       const hiddenIds = new Set(Array.isArray((full as any).hiddenColumns) ? ((full as any).hiddenColumns as string[]) : []);
       const colOrder = Array.isArray((full as any).columnOrder) ? ((full as any).columnOrder as string[]) : [];
       const totalFormulaCfg = (full as any).totalFormula as string | null | undefined;
+      const quantityFormulaCfg = (full as any).quantityFormula as string | null | undefined;
+      const hasQtyFormula = !!quantityFormulaCfg && quantityFormulaCfg.trim() !== '' && quantityFormulaCfg !== 'default';
       const allCols: PCol[] = [
         ...BUILTIN,
         ...customCols.map<PCol>(c => ({ id: c.id, name: c.name, type: c.type, unit: c.unit, formula: c.formula })),
@@ -233,11 +235,21 @@ export function registerProformaRoutes(app: Express): void {
 
       // Reusable formula-engine column shape (drops editor-only flags).
       const formulaCols: FormulaColumn[] = allCols.map(c => ({ id: c.id, name: c.name, type: c.type, unit: c.unit, formula: c.formula }));
-      const toFRow = (it: typeof items[number]): FormulaRow => ({
-        qty: it.quantity,
-        unitPrice: it.customPrice ?? it.productPrice ?? 0,
-        customValues: (it.customValues ?? {}) as Record<string, string>,
-      });
+      const toFRow = (it: typeof items[number]): FormulaRow => {
+        const base: FormulaRow = {
+          qty: it.quantity,
+          unitPrice: it.customPrice ?? it.productPrice ?? 0,
+          customValues: (it.customValues ?? {}) as Record<string, string>,
+        };
+        // When a quantity formula is configured, the per-row quantity is the
+        // evaluated formula rather than the stored manual value. We evaluate
+        // against `base` (qty = manual entry) so any {qty}/{total} self-reference
+        // resolves to a stable value instead of recursing. A structurally broken
+        // formula yields NaN, which downstream code renders as '—' / 0.
+        if (!hasQtyFormula) return base;
+        const q = evaluateFormula(quantityFormulaCfg as string, base, formulaCols, totalFormulaCfg ?? null, 0);
+        return { ...base, qty: q };
+      };
 
       // Subtotal uses the shared computeSubtotal — automatically picks up
       // any totalFormula override the user configured.
@@ -462,9 +474,11 @@ export function registerProformaRoutes(app: Express): void {
           if (col.id === 'product') {
             cell.value = descText;
           } else if (col.id === 'quantity') {
-            cell.value = item.quantity;
+            // fRow.qty already reflects the quantity formula (when configured);
+            // NaN means the formula is broken, so render '—' like the editor.
+            cell.value = Number.isFinite(fRow.qty) ? fRow.qty : '—';
           } else if (col.id === 'unit') {
-            cell.value = item.productUnit || 'pc';
+            cell.value = item.unit || item.productUnit || 'pc';
             cell.font = { name: FONT_FAMILY, size: 9, color: { argb: MED } };
           } else if (col.id === 'unitPrice') {
             cell.value = `${currency} ${fmt(displayPrice)}`;

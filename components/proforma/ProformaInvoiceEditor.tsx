@@ -93,6 +93,9 @@ interface DraftItem {
   customDescription: string | null;
   customPrice: number | null;
   quantity: number;
+  // User-set unit of measure for this row. Falls back to productUnit when
+  // empty. Stored separately so editing it never mutates the catalog product.
+  unit: string | null;
   // Original persisted ordering (from the server). Used purely for
   // change-detection so a drag-reorder of unchanged rows still PATCHes
   // sortOrder. 0 for brand-new items (they always POST).
@@ -130,7 +133,7 @@ interface DisplayColumn {
 const BUILTIN_COLUMNS: DisplayColumn[] = [
   { id: 'product',   label: 'Description', type: 'builtin', builtIn: true, required: true  },
   { id: 'unitPrice', label: 'Unit Price',  type: 'builtin', builtIn: true, required: false },
-  { id: 'quantity',  label: 'Qty',         type: 'builtin', builtIn: true, required: true  },
+  { id: 'quantity',  label: 'Quantity',    type: 'builtin', builtIn: true, required: true  },
   { id: 'unit',      label: 'Unit',        type: 'builtin', builtIn: true, required: false },
   { id: 'total',     label: 'Total',       type: 'builtin', builtIn: true, required: false },
 ];
@@ -246,6 +249,7 @@ function itemFromServer(it: ProformaItemData): DraftItem {
     customDescription: it.customDescription ?? null,
     customPrice: it.customPrice ?? null,
     quantity: it.quantity,
+    unit: it.unit ?? null,
     sortOrder: it.sortOrder ?? 0,
     customValues: (it.customValues && typeof it.customValues === 'object') ? { ...it.customValues } : {},
   };
@@ -326,6 +330,9 @@ const ProformaInvoiceEditor: React.FC<ProformaInvoiceEditorProps> = ({
   const [columnOrder, setColumnOrder] = useState<string[]>([]);
   // Row-total formula override. null/'default' → qty * unit_price.
   const [totalFormula, setTotalFormula] = useState<string | null>(null);
+  // Quantity formula override. null/'default' → quantity is entered manually
+  // per row. When set, each row's quantity is computed from this formula.
+  const [quantityFormula, setQuantityFormula] = useState<string | null>(null);
   // Toggle for the Columns management panel inside the Products section.
   const [showColumnsPanel, setShowColumnsPanel] = useState(false);
 
@@ -485,6 +492,7 @@ const ProformaInvoiceEditor: React.FC<ProformaInvoiceEditorProps> = ({
     setHiddenColumns(Array.isArray(pf.hiddenColumns) ? (pf.hiddenColumns as string[]) : []);
     setColumnOrder(Array.isArray(pf.columnOrder) ? (pf.columnOrder as string[]) : []);
     setTotalFormula(pf.totalFormula ?? null);
+    setQuantityFormula(pf.quantityFormula ?? null);
 
     // Versioning metadata (read-only)
     setVersionNum(pf.version ?? 1);
@@ -518,11 +526,38 @@ const ProformaInvoiceEditor: React.FC<ProformaInvoiceEditorProps> = ({
     [allColumns],
   );
 
+  // True when a quantity formula is configured (vs. manual per-row entry).
+  const hasQuantityFormula = !!quantityFormula && quantityFormula.trim() !== '' && quantityFormula !== 'default';
+
+  // Effective per-row quantity. When a quantity formula is set we evaluate it
+  // against the row (qty token = the stored manual value, so any self-reference
+  // resolves to a stable number instead of recursing). Returns NaN when the
+  // formula is structurally broken so the cell renderer can show '—'.
+  const effectiveQtyFor = useCallback(
+    (it: DraftItem): number => {
+      if (!hasQuantityFormula) return it.quantity;
+      return evaluateFormula(quantityFormula as string, toFormulaRow(it), formulaColumns, totalFormula, 0);
+    },
+    [hasQuantityFormula, quantityFormula, formulaColumns, totalFormula],
+  );
+
+  // Build the formula-engine row for a DraftItem, injecting the computed
+  // quantity when a quantity formula is active. All downstream math (subtotal,
+  // row totals, formula columns) flows through this so the computed quantity is
+  // applied consistently.
+  const rowFor = useCallback(
+    (it: DraftItem): FormulaRow => {
+      const base = toFormulaRow(it);
+      return hasQuantityFormula ? { ...base, qty: effectiveQtyFor(it) } : base;
+    },
+    [hasQuantityFormula, effectiveQtyFor],
+  );
+
   // Subtotal: sum of computeRowTotal across rows. When totalFormula is
   // null/'default' this collapses to the legacy qty * unit_price math.
   const subtotal = useMemo(
-    () => computeSubtotal(items.map(toFormulaRow), formulaColumns, totalFormula),
-    [items, formulaColumns, totalFormula],
+    () => computeSubtotal(items.map(rowFor), formulaColumns, totalFormula),
+    [items, rowFor, formulaColumns, totalFormula],
   );
   const calc = useMemo(
     () => computeFinancials(subtotal, financials as ProformaFinancialData[]),
@@ -531,8 +566,8 @@ const ProformaInvoiceEditor: React.FC<ProformaInvoiceEditorProps> = ({
 
   // Per-row line total (qty × unit_price OR custom totalFormula).
   const lineTotalFor = useCallback(
-    (it: DraftItem) => computeRowTotal(toFormulaRow(it), formulaColumns, totalFormula),
-    [formulaColumns, totalFormula],
+    (it: DraftItem) => computeRowTotal(rowFor(it), formulaColumns, totalFormula),
+    [rowFor, formulaColumns, totalFormula],
   );
 
   // Evaluate a formula column's cell for a given row. Returns NaN when the
@@ -540,9 +575,9 @@ const ProformaInvoiceEditor: React.FC<ProformaInvoiceEditorProps> = ({
   const evalFormulaCell = useCallback(
     (it: DraftItem, col: DisplayColumn): number => {
       if (!col.formula || col.formula.trim() === '') return NaN;
-      return evaluateFormula(col.formula, toFormulaRow(it), formulaColumns, totalFormula, 0);
+      return evaluateFormula(col.formula, rowFor(it), formulaColumns, totalFormula, 0);
     },
-    [formulaColumns, totalFormula],
+    [rowFor, formulaColumns, totalFormula],
   );
 
   // ────────────────────────────────────────────────────────────────────────
@@ -574,6 +609,7 @@ const ProformaInvoiceEditor: React.FC<ProformaInvoiceEditorProps> = ({
       customDescription: null,
       customPrice: null,
       quantity: 1,
+      unit: null,
       sortOrder: 0,
       customValues: {},
     }]);
@@ -657,6 +693,7 @@ const ProformaInvoiceEditor: React.FC<ProformaInvoiceEditorProps> = ({
       hiddenColumns,
       columnOrder,
       totalFormula: totalFormula && totalFormula.trim() !== '' ? totalFormula : null,
+      quantityFormula: quantityFormula && quantityFormula.trim() !== '' ? quantityFormula : null,
     };
   };
 
@@ -709,6 +746,7 @@ const ProformaInvoiceEditor: React.FC<ProformaInvoiceEditorProps> = ({
             customDescription: it.customDescription,
             customPrice: it.customPrice,
             quantity: it.quantity,
+            unit: it.unit,
             sortOrder: idx,
             customValues: it.customValues || {},
           }));
@@ -723,6 +761,7 @@ const ProformaInvoiceEditor: React.FC<ProformaInvoiceEditorProps> = ({
             orig.customDescription !== it.customDescription ||
             orig.customPrice !== it.customPrice ||
             orig.quantity !== it.quantity ||
+            orig.unit !== it.unit ||
             orig.sortOrder !== idx ||
             stringifyValues(orig.customValues) !== stringifyValues(it.customValues);
           if (changed) {
@@ -731,6 +770,7 @@ const ProformaInvoiceEditor: React.FC<ProformaInvoiceEditorProps> = ({
               customDescription: it.customDescription,
               customPrice: it.customPrice,
               quantity: it.quantity,
+              unit: it.unit,
               sortOrder: idx,
               customValues: it.customValues || {},
             }));
@@ -1062,10 +1102,12 @@ const ProformaInvoiceEditor: React.FC<ProformaInvoiceEditorProps> = ({
                     hiddenSet={hiddenSet}
                     columnOrder={columnOrder}
                     totalFormula={totalFormula}
+                    quantityFormula={quantityFormula}
                     onSetCustomColumns={setCustomColumns}
                     onSetHiddenColumns={setHiddenColumns}
                     onSetColumnOrder={setColumnOrder}
                     onSetTotalFormula={setTotalFormula}
+                    onSetQuantityFormula={setQuantityFormula}
                   />
                 )}
                 {/* Product picker — the bar is a trigger that opens a
@@ -1268,6 +1310,28 @@ const ProformaInvoiceEditor: React.FC<ProformaInvoiceEditorProps> = ({
                                   );
                                 }
                                 if (col.id === 'quantity') {
+                                  // When a quantity formula is configured the qty is
+                                  // computed per row and shown read-only; otherwise
+                                  // it stays a manual numeric input. A broken formula
+                                  // surfaces as '—' with an explanatory tooltip.
+                                  if (hasQuantityFormula) {
+                                    const q = effectiveQtyFor(it);
+                                    const qOk = Number.isFinite(q);
+                                    return (
+                                      <div key={col.id}>
+                                        <Label small>{col.label}</Label>
+                                        <div
+                                          className={`px-2 py-1 text-sm rounded border ${
+                                            qOk ? 'text-slate-600 bg-slate-50 border-slate-100'
+                                                : 'text-amber-700 bg-amber-50 border-amber-200'
+                                          }`}
+                                          title={qOk ? 'Computed from the quantity formula (Columns panel).' : 'Quantity formula is invalid — check the formula in the Columns panel.'}
+                                        >
+                                          {qOk ? q : '—'}
+                                        </div>
+                                      </div>
+                                    );
+                                  }
                                   return (
                                     <div key={col.id}>
                                       <Label small>{col.label}</Label>
@@ -1283,12 +1347,19 @@ const ProformaInvoiceEditor: React.FC<ProformaInvoiceEditorProps> = ({
                                   );
                                 }
                                 if (col.id === 'unit') {
+                                  // User-editable unit of measure. Placeholder shows
+                                  // the catalog unit so it is obvious what the export
+                                  // falls back to when the field is left blank.
                                   return (
                                     <div key={col.id}>
                                       <Label small>{col.label}</Label>
-                                      <div className="px-2 py-1 text-sm text-slate-600 bg-slate-50 rounded border border-slate-100">
-                                        {it.productUnit || '—'}
-                                      </div>
+                                      <input
+                                        type="text"
+                                        value={it.unit ?? ''}
+                                        placeholder={it.productUnit || '—'}
+                                        onChange={e => updateItem(it.id, 'unit', e.target.value === '' ? null : e.target.value)}
+                                        className="w-full px-2 py-1 text-sm border border-slate-200 rounded focus:outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-500/20"
+                                      />
                                     </div>
                                   );
                                 }
@@ -1544,6 +1615,8 @@ const ProformaInvoiceEditor: React.FC<ProformaInvoiceEditorProps> = ({
                 visibleColumns={visibleColumns}
                 lineTotalFor={lineTotalFor}
                 evalFormulaCell={evalFormulaCell}
+                hasQuantityFormula={hasQuantityFormula}
+                effectiveQtyFor={effectiveQtyFor}
                 onUpdateItem={updateItem}
                 onUpdateCustomValue={updateItemCustomValue}
               />
@@ -1837,15 +1910,18 @@ interface ColumnsPanelProps {
   hiddenSet: Set<string>;
   columnOrder: string[];
   totalFormula: string | null;
+  quantityFormula: string | null;
   onSetCustomColumns: (cols: ProformaCustomColumn[]) => void;
   onSetHiddenColumns: (ids: string[]) => void;
   onSetColumnOrder: (ids: string[]) => void;
   onSetTotalFormula: (f: string | null) => void;
+  onSetQuantityFormula: (f: string | null) => void;
 }
 
 const ColumnsPanel: React.FC<ColumnsPanelProps> = ({
-  allColumns, customColumns, hiddenSet, columnOrder, totalFormula,
+  allColumns, customColumns, hiddenSet, columnOrder, totalFormula, quantityFormula,
   onSetCustomColumns, onSetHiddenColumns, onSetColumnOrder, onSetTotalFormula,
+  onSetQuantityFormula,
 }) => {
   // ── Local form state for the "Add Column" sub-form ──
   const [draftName, setDraftName] = useState('');
@@ -1863,6 +1939,15 @@ const ColumnsPanel: React.FC<ColumnsPanelProps> = ({
   const [totalDraft, setTotalDraft] = useState(totalFormula ?? '');
   // Keep the draft in sync if the parent ever resets it (e.g. preset button).
   useEffect(() => { setTotalDraft(totalFormula ?? ''); }, [totalFormula]);
+
+  // ── Local state for the quantity formula override ──
+  // Empty means "manual entry" (legacy behavior); a non-empty string makes the
+  // quantity column computed per row.
+  // Mirror the compute-path guard (`hasQuantityFormula`) so a stored 'default'
+  // sentinel is treated as manual mode here too, keeping the radio in sync.
+  const isCustomQuantity = !!quantityFormula && quantityFormula.trim() !== '' && quantityFormula !== 'default';
+  const [quantityDraft, setQuantityDraft] = useState(quantityFormula ?? '');
+  useEffect(() => { setQuantityDraft(quantityFormula ?? ''); }, [quantityFormula]);
 
   // Token names offered by the formula autocomplete. Built-in numeric columns
   // map to their canonical aliases (qty/unit_price/total); built-in text
@@ -2204,6 +2289,47 @@ const ColumnsPanel: React.FC<ColumnsPanelProps> = ({
           />
         )}
       </div>
+
+      {/* Quantity formula override */}
+      <div className="border-t border-blue-200 pt-3 space-y-2">
+        <div className="text-[11px] font-semibold text-slate-600 uppercase tracking-wider">Quantity</div>
+        <div className="flex items-center gap-3 text-xs">
+          <label className="inline-flex items-center gap-1.5 cursor-pointer">
+            <input
+              type="radio"
+              name="quantityMode"
+              checked={!isCustomQuantity}
+              onChange={() => onSetQuantityFormula(null)}
+            />
+            <span>Manual entry</span>
+          </label>
+          <label className="inline-flex items-center gap-1.5 cursor-pointer">
+            <input
+              type="radio"
+              name="quantityMode"
+              checked={isCustomQuantity}
+              onChange={() => onSetQuantityFormula(quantityDraft.trim() === '' ? '{unit_price}' : quantityDraft)}
+            />
+            <span>Custom formula</span>
+          </label>
+        </div>
+        {isCustomQuantity && (
+          <FormulaInput
+            value={quantityDraft}
+            onChange={v => { setQuantityDraft(v); onSetQuantityFormula(v); }}
+            suggestions={tokenSuggestions}
+            placeholder="e.g. {Units per Pallet} * {Pallets}"
+            wrapperClassName="w-full"
+            className="w-full px-2 py-1 text-[11px] font-mono border border-slate-200 rounded focus:outline-none focus:border-blue-400"
+          />
+        )}
+        {isCustomQuantity && (
+          <p className="text-[10px] text-slate-500">
+            Each row's quantity is computed from this formula and feeds the row total.
+            Leave on "Manual entry" to type quantities yourself.
+          </p>
+        )}
+      </div>
     </div>
   );
 };
@@ -2247,8 +2373,12 @@ interface InvoicePreviewProps {
   // preview cannot drift from the editor.
   lineTotalFor: (it: DraftItem) => number;
   evalFormulaCell: (it: DraftItem, col: DisplayColumn) => number;
+  // True when a quantity formula is configured — the quantity column then
+  // renders the computed value (read-only) instead of a manual input.
+  hasQuantityFormula: boolean;
+  effectiveQtyFor: (it: DraftItem) => number;
   // Inline-edit handlers (shared with the editor card so both surfaces stay
-  // in sync). Computed columns (total/formula) and the catalog-derived unit
+  // in sync). Computed columns (total/formula) and a formula-driven quantity
   // are intentionally NOT editable.
   onUpdateItem: <K extends keyof DraftItem>(id: number, field: K, value: DraftItem[K]) => void;
   onUpdateCustomValue: (id: number, columnId: string, value: string) => void;
@@ -2259,7 +2389,8 @@ const InvoicePreview: React.FC<InvoicePreviewProps> = ({
   customerFields, currency, shipTo, portOfLoading, placeOfDestination,
   finalPlaceOfDelivery, countryOfOrigin, transportationMode, paymentTerms,
   deliveryTerms, notes, items, subtotal, steps, finalTotal, pdfCapturing,
-  visibleColumns, lineTotalFor, evalFormulaCell, onUpdateItem, onUpdateCustomValue,
+  visibleColumns, lineTotalFor, evalFormulaCell, hasQuantityFormula, effectiveQtyFor,
+  onUpdateItem, onUpdateCustomValue,
 }) => {
   // While capturing the PDF we render plain text instead of <input> elements
   // so the exported document is clean (no focus rings / caret artifacts).
@@ -2444,8 +2575,17 @@ const InvoicePreview: React.FC<InvoicePreviewProps> = ({
                       </td>
                     );
                   }
-                  // ── Quantity (editable number) ──
+                  // ── Quantity: computed (read-only) when a quantity formula is
+                  //    configured, otherwise an editable manual number. ──
                   if (col.id === 'quantity') {
+                    if (hasQuantityFormula) {
+                      const q = effectiveQtyFor(it);
+                      return (
+                        <td key={col.id} className="px-3 py-2 text-center align-top text-xs text-slate-700 tabular-nums">
+                          {Number.isFinite(q) ? q : '—'}
+                        </td>
+                      );
+                    }
                     return (
                       <td key={col.id} className="px-3 py-2 text-center align-top text-xs text-slate-700 tabular-nums">
                         {editable ? (
@@ -2461,11 +2601,20 @@ const InvoicePreview: React.FC<InvoicePreviewProps> = ({
                       </td>
                     );
                   }
-                  // ── Unit: catalog-derived, not editable inline ──
+                  // ── Unit: user-editable, falls back to the catalog unit. ──
                   if (col.id === 'unit') {
+                    const unitDisplay = it.unit || it.productUnit || '—';
                     return (
                       <td key={col.id} className="px-3 py-2 text-center align-top text-[11px] text-slate-500">
-                        {it.productUnit || '—'}
+                        {editable ? (
+                          <input
+                            type="text"
+                            value={it.unit ?? ''}
+                            placeholder={it.productUnit || '—'}
+                            onChange={e => onUpdateItem(it.id, 'unit', e.target.value === '' ? null : e.target.value)}
+                            className={`${inlineBase} text-center`}
+                          />
+                        ) : unitDisplay}
                       </td>
                     );
                   }

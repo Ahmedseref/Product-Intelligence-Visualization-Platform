@@ -334,6 +334,8 @@ export interface ProformaItemData {
   customDescription?: string | null;
   customPrice?: number | null;
   quantity: number;
+  // User-set unit of measure for this row. Falls back to productUnit when null.
+  unit?: string | null;
   sortOrder?: number;
   productName?: string;
   productDescription?: string;
@@ -438,6 +440,10 @@ export interface ProformaData {
   // Optional row-total formula override. When null/empty/'default', row
   // totals use qty × unit_price. See shared/proformaFormula.ts.
   totalFormula?: string | null;
+  // Optional quantity formula. When null/empty/'default', each row's quantity
+  // is entered manually. When set, the per-row quantity is computed from this
+  // formula and feeds the row total / subtotal. See shared/proformaFormula.ts.
+  quantityFormula?: string | null;
   // Versioning: version number (1 = original). Versions > 1 have a
   // parentProformaId linking them to the base invoice.
   version?: number | null;
