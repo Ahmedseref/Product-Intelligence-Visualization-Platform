@@ -352,6 +352,20 @@ const ProformaInvoiceEditor: React.FC<ProformaInvoiceEditorProps> = ({
   const [productSearch, setProductSearch] = useState('');
   const [showProductDropdown, setShowProductDropdown] = useState(false);
 
+  // Close the product search modal on Escape and reset the query, so the
+  // keyboard alone can dismiss it for a faster selection workflow.
+  useEffect(() => {
+    if (!showProductDropdown) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        setShowProductDropdown(false);
+        setProductSearch('');
+      }
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [showProductDropdown]);
+
   const invoiceRef = useRef<HTMLDivElement>(null);
 
   // ────────────────────────────────────────────────────────────────────────
@@ -532,8 +546,9 @@ const ProformaInvoiceEditor: React.FC<ProformaInvoiceEditorProps> = ({
       quantity: 1,
       customValues: {},
     }]);
+    // Keep the modal open and clear the query so several products can be
+    // added in a row; the just-added one shows an "Added" badge.
     setProductSearch('');
-    setShowProductDropdown(false);
   };
 
   const updateItem = <K extends keyof DraftItem>(id: number, field: K, value: DraftItem[K]) => {
@@ -1019,29 +1034,57 @@ const ProformaInvoiceEditor: React.FC<ProformaInvoiceEditorProps> = ({
                     onSetTotalFormula={setTotalFormula}
                   />
                 )}
-                {/* Product picker */}
-                <div className="relative">
-                  <div className="flex items-center gap-2 px-3 py-2 border border-slate-200 rounded-lg focus-within:ring-2 focus-within:ring-blue-500/20 focus-within:border-blue-400">
-                    <Search className="w-4 h-4 text-slate-400 flex-shrink-0" />
-                    <input
-                      type="text"
-                      value={productSearch}
-                      onChange={e => { setProductSearch(e.target.value); setShowProductDropdown(true); }}
-                      onFocus={() => setShowProductDropdown(true)}
-                      placeholder="Search and add products…"
-                      className="flex-1 text-sm outline-none bg-transparent"
-                    />
-                    {productSearch && (
-                      <button onClick={() => { setProductSearch(''); setShowProductDropdown(false); }}>
-                        <X className="w-3.5 h-3.5 text-slate-400 hover:text-slate-600" />
-                      </button>
-                    )}
-                  </div>
-                  {showProductDropdown && (
-                    <>
-                      <div className="absolute top-full left-0 right-0 mt-1 bg-white border border-slate-200 rounded-xl shadow-lg z-20 max-h-60 overflow-y-auto">
+                {/* Product picker — the bar is a trigger that opens a
+                    focused modal for fast searching/selecting. */}
+                <button
+                  type="button"
+                  onClick={() => setShowProductDropdown(true)}
+                  className="w-full flex items-center gap-2 px-3 py-2 border border-slate-200 rounded-lg text-left bg-white hover:border-amber-400 hover:bg-amber-50/40 transition-colors"
+                >
+                  <Search className="w-4 h-4 text-slate-400 flex-shrink-0" />
+                  <span className="flex-1 text-sm text-slate-400">Search and add products…</span>
+                  <span className="text-[10px] font-medium text-slate-400 border border-slate-200 rounded px-1.5 py-0.5">Click to search</span>
+                </button>
+
+                {showProductDropdown && (
+                  // Centered modal overlay. Click the backdrop or press Esc
+                  // (handled by the effect above) to close.
+                  <div
+                    className="fixed inset-0 z-50 flex items-start justify-center pt-[10vh] px-4 bg-slate-900/40 backdrop-blur-sm"
+                    onClick={() => { setShowProductDropdown(false); setProductSearch(''); }}
+                  >
+                    <div
+                      className="w-full max-w-lg bg-white rounded-2xl shadow-2xl border border-slate-200 overflow-hidden flex flex-col max-h-[70vh]"
+                      onClick={e => e.stopPropagation()}
+                    >
+                      {/* Search input */}
+                      <div className="flex items-center gap-2 px-4 py-3 border-b border-slate-100">
+                        <Search className="w-4 h-4 text-slate-400 flex-shrink-0" />
+                        <input
+                          type="text"
+                          autoFocus
+                          value={productSearch}
+                          onChange={e => setProductSearch(e.target.value)}
+                          placeholder="Search products by name, code, or supplier…"
+                          className="flex-1 text-sm outline-none bg-transparent"
+                        />
+                        {productSearch && (
+                          <button onClick={() => setProductSearch('')} className="text-slate-400 hover:text-slate-600">
+                            <X className="w-4 h-4" />
+                          </button>
+                        )}
+                        <button
+                          onClick={() => { setShowProductDropdown(false); setProductSearch(''); }}
+                          className="ml-1 text-[11px] font-medium text-slate-500 border border-slate-200 rounded px-2 py-1 hover:bg-slate-50"
+                        >
+                          Esc
+                        </button>
+                      </div>
+
+                      {/* Results */}
+                      <div className="flex-1 overflow-y-auto">
                         {filteredProducts.length === 0 ? (
-                          <div className="px-4 py-3 text-sm text-slate-400">No products found</div>
+                          <div className="px-4 py-8 text-center text-sm text-slate-400">No products found</div>
                         ) : filteredProducts.slice(0, 50).map(p => {
                           const already = items.some(i => i.productId === p.id);
                           return (
@@ -1049,8 +1092,8 @@ const ProformaInvoiceEditor: React.FC<ProformaInvoiceEditorProps> = ({
                               key={p.id}
                               onClick={() => !already && addProduct(p)}
                               disabled={already}
-                              className={`w-full flex items-center gap-3 px-4 py-2.5 text-left text-sm transition-colors ${
-                                already ? 'opacity-40 cursor-not-allowed bg-slate-50' : 'hover:bg-blue-50 cursor-pointer'
+                              className={`w-full flex items-center gap-3 px-4 py-2.5 text-left text-sm transition-colors border-b border-slate-50 last:border-b-0 ${
+                                already ? 'opacity-40 cursor-not-allowed bg-slate-50' : 'hover:bg-amber-50 cursor-pointer'
                               }`}
                             >
                               <div className="flex-1 min-w-0">
@@ -1070,10 +1113,15 @@ const ProformaInvoiceEditor: React.FC<ProformaInvoiceEditorProps> = ({
                           );
                         })}
                       </div>
-                      <div className="fixed inset-0 z-10" onClick={() => setShowProductDropdown(false)} />
-                    </>
-                  )}
-                </div>
+
+                      {/* Footer hint */}
+                      <div className="px-4 py-2 border-t border-slate-100 text-[11px] text-slate-400 flex items-center justify-between">
+                        <span>{filteredProducts.length} match{filteredProducts.length !== 1 ? 'es' : ''}</span>
+                        <span>Press Esc to close</span>
+                      </div>
+                    </div>
+                  </div>
+                )}
 
                 {/* Items list — each card renders the visible columns dynamically */}
                 {items.length === 0 ? (
