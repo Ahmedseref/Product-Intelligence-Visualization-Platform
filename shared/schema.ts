@@ -458,6 +458,10 @@ export const proformas = pgTable("proformas", {
   // Column ids whose values are summed and shown to the left of FINAL TOTAL.
   // Useful for physical totals like total weight, total m², quantity, etc.
   summaryColumns: jsonb("summary_columns").default([]),
+  // Optional custom text for the FINAL TOTAL label row. When null the preview
+  // and Excel export auto-generate the label from the delivery terms and
+  // destination fields (e.g. "TOTAL CIF ISTANBUL, TURKEY").
+  finalTotalLabel: text("final_total_label"),
   // Versioning: version number (1 = original, 2+ = revisions). The proformaId
   // encodes the version suffix (e.g. PI-0001-v2) but we store the integer
   // separately for easy sorting and max-version queries.

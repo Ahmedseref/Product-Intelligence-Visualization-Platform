@@ -448,6 +448,8 @@ export interface ProformaData {
   finalTotalOverride?: number | null;
   // Column ids selected for column-sum display in the invoice totals section.
   summaryColumns?: string[] | null;
+  // Custom label text for the FINAL TOTAL row (e.g. "TOTAL CIF ISTANBUL").
+  finalTotalLabel?: string | null;
   // Versioning: version number (1 = original). Versions > 1 have a
   // parentProformaId linking them to the base invoice.
   version?: number | null;

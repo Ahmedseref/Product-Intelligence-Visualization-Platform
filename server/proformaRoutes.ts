@@ -633,7 +633,10 @@ export function registerProformaRoutes(app: Express): void {
         totalLabel = `TOTAL ${effectiveDeliveryTerms}`;
         if (portOfLoading) totalLabel += ` ${portOfLoading}`;
       }
-      totalLabelCell.value = totalLabel.trim();
+      // Honour a user-supplied label override before falling back to the
+      // auto-generated "TOTAL CIF …" string.
+      const customTotalLabel = ((full as any).finalTotalLabel as string | null | undefined)?.trim();
+      totalLabelCell.value = customTotalLabel || totalLabel.trim();
       totalLabelCell.font = { name: FONT_FAMILY, size: 9, bold: true, color: { argb: DARK } };
       totalLabelCell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: BG_HEADER } };
       totalLabelCell.alignment = { vertical: "middle", horizontal: "right" };

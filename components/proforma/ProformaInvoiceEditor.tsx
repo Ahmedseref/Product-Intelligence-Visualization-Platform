@@ -333,8 +333,9 @@ const ProformaInvoiceEditor: React.FC<ProformaInvoiceEditorProps> = ({
   // Quantity formula override. null/'default' → quantity is entered manually
   // per row. When set, each row's quantity is computed from this formula.
   const [quantityFormula, setQuantityFormula] = useState<string | null>(null);
-  // Manual final-total override. null → use the computed calc.finalTotal value.
-  const [finalTotalOverride, setFinalTotalOverride] = useState<number | null>(null);
+  // Custom label for the FINAL TOTAL row. null → auto-generated from delivery
+  // terms and destination (e.g. "TOTAL CIF ISTANBUL, TURKEY").
+  const [finalTotalLabel, setFinalTotalLabel] = useState<string | null>(null);
   // Column ids whose values should be summed in the invoice totals section.
   const [summaryColumns, setSummaryColumns] = useState<string[]>([]);
   // Toggle for the Columns management panel inside the Products section.
@@ -497,10 +498,7 @@ const ProformaInvoiceEditor: React.FC<ProformaInvoiceEditorProps> = ({
     setColumnOrder(Array.isArray(pf.columnOrder) ? (pf.columnOrder as string[]) : []);
     setTotalFormula(pf.totalFormula ?? null);
     setQuantityFormula(pf.quantityFormula ?? null);
-    // finalTotalOverride arrives as a string from the DB (text column) —
-    // parse it to a float; treat empty/null as "no override".
-    const rawFto = (pf as any).finalTotalOverride;
-    setFinalTotalOverride(rawFto != null && rawFto !== '' ? parseFloat(String(rawFto)) : null);
+    setFinalTotalLabel((pf as any).finalTotalLabel ?? null);
     setSummaryColumns(Array.isArray((pf as any).summaryColumns) ? (pf as any).summaryColumns as string[] : []);
 
     // Versioning metadata (read-only)
@@ -703,7 +701,7 @@ const ProformaInvoiceEditor: React.FC<ProformaInvoiceEditorProps> = ({
       columnOrder,
       totalFormula: totalFormula && totalFormula.trim() !== '' ? totalFormula : null,
       quantityFormula: quantityFormula && quantityFormula.trim() !== '' ? quantityFormula : null,
-      finalTotalOverride: finalTotalOverride,
+      finalTotalLabel: finalTotalLabel,
       summaryColumns,
     };
   };
@@ -1561,7 +1559,7 @@ const ProformaInvoiceEditor: React.FC<ProformaInvoiceEditorProps> = ({
                   ))}
                   <div className="flex justify-between pt-1.5 mt-1.5 border-t border-slate-300">
                     <span className="text-xs font-bold text-slate-700">Final Total</span>
-                    <span className="text-sm font-bold text-slate-900">{currency} {fmt(finalTotalOverride ?? calc.finalTotal)}</span>
+                    <span className="text-sm font-bold text-slate-900">{currency} {fmt(calc.finalTotal)}</span>
                   </div>
                 </div>
               </div>
@@ -1632,8 +1630,8 @@ const ProformaInvoiceEditor: React.FC<ProformaInvoiceEditorProps> = ({
                 effectiveQtyFor={effectiveQtyFor}
                 onUpdateItem={updateItem}
                 onUpdateCustomValue={updateItemCustomValue}
-                finalTotalOverride={finalTotalOverride}
-                onSetFinalTotalOverride={setFinalTotalOverride}
+                finalTotalLabel={finalTotalLabel}
+                onSetFinalTotalLabel={setFinalTotalLabel}
                 summaryColumns={summaryColumns}
                 allColumns={allColumns}
               />
@@ -2498,10 +2496,10 @@ interface InvoicePreviewProps {
   // are intentionally NOT editable.
   onUpdateItem: <K extends keyof DraftItem>(id: number, field: K, value: DraftItem[K]) => void;
   onUpdateCustomValue: (id: number, columnId: string, value: string) => void;
-  // Manual override for the FINAL TOTAL value.  null → use computed finalTotal.
-  finalTotalOverride: number | null;
-  // Setter so the preview can write the override inline (clicking the value).
-  onSetFinalTotalOverride: (v: number | null) => void;
+  // Custom label for the FINAL TOTAL row.  null → auto-generated from delivery
+  // terms and destination fields.
+  finalTotalLabel: string | null;
+  onSetFinalTotalLabel: (label: string | null) => void;
   // Ids of columns whose values should be summed in the totals section.
   summaryColumns: string[];
   // Full ordered column list (built-ins + custom) needed to look up label/unit
@@ -2516,7 +2514,7 @@ const InvoicePreview: React.FC<InvoicePreviewProps> = ({
   deliveryTerms, notes, items, subtotal, steps, finalTotal, pdfCapturing,
   visibleColumns, lineTotalFor, evalFormulaCell, hasQuantityFormula, effectiveQtyFor,
   onUpdateItem, onUpdateCustomValue,
-  finalTotalOverride, onSetFinalTotalOverride, summaryColumns, allColumns,
+  finalTotalLabel, onSetFinalTotalLabel, summaryColumns, allColumns,
 }) => {
   // While capturing the PDF we render plain text instead of <input> elements
   // so the exported document is clean (no focus rings / caret artifacts).
@@ -2572,6 +2570,23 @@ const InvoicePreview: React.FC<InvoicePreviewProps> = ({
     n % 1 === 0
       ? n.toLocaleString()
       : n.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 4 });
+
+  // Auto-generate the FINAL TOTAL label from delivery terms + destination,
+  // mirroring the Excel export logic.  The user can override this by typing
+  // directly into the label in the preview (stored as finalTotalLabel).
+  const computedFinalTotalLabel = (() => {
+    const base = `TOTAL ${effectiveDeliveryTerms || ''}`.trim();
+    if (steps.length > 0) {
+      let label = base || 'TOTAL';
+      if (finalPlaceOfDelivery) label += ` ${finalPlaceOfDelivery}`;
+      if (placeOfDestination) label += `, ${placeOfDestination}`;
+      return label.trim();
+    }
+    let label = base;
+    if (portOfLoading) label += ` ${portOfLoading}`;
+    return label.trim() || 'FINAL TOTAL';
+  })();
+  const displayFinalTotalLabel = finalTotalLabel || computedFinalTotalLabel;
 
   const metaRows: [string, string][] = [
     ['DATE', today],
@@ -2885,40 +2900,26 @@ const InvoicePreview: React.FC<InvoicePreviewProps> = ({
               </div>
             ))}
 
-            {/* FINAL TOTAL — click the value to override it.  A small × button
-                resets the override back to the computed value.  In PDF-capture
-                mode the value is rendered as plain text (no input artifacts). */}
-            <div className="flex justify-between items-center pt-2 mt-1 border-t-2 border-slate-800">
-              <span className="text-sm font-bold text-slate-800">FINAL TOTAL</span>
+            {/* FINAL TOTAL — the label text is inline-editable so the user can
+                customize it (e.g. "TOTAL CIF ISTANBUL, TURKEY"). The computed
+                dollar amount is always shown as read-only formatted text.
+                In PDF-capture mode the label renders as plain text. */}
+            <div className="flex justify-between items-center pt-2 mt-1 border-t-2 border-slate-800 gap-2">
               {editable ? (
-                <div className="flex items-center gap-1">
-                  <span className="text-base font-bold text-slate-900">{currency}</span>
-                  <input
-                    type="number"
-                    value={finalTotalOverride !== null ? finalTotalOverride : finalTotal}
-                    onChange={e => {
-                      const v = parseFloat(e.target.value);
-                      onSetFinalTotalOverride(Number.isFinite(v) ? v : null);
-                    }}
-                    className="w-28 text-base font-bold text-slate-900 tabular-nums text-right bg-transparent border border-transparent rounded px-1 hover:border-slate-200 focus:border-blue-400 focus:ring-2 focus:ring-blue-500/20 focus:outline-none transition-colors"
-                    title="Click to manually override the final total; press Save to persist"
-                  />
-                  {finalTotalOverride !== null && (
-                    <button
-                      type="button"
-                      onClick={() => onSetFinalTotalOverride(null)}
-                      title="Reset to computed value"
-                      className="text-slate-400 hover:text-red-500 text-sm leading-none px-0.5 flex-shrink-0"
-                    >
-                      ×
-                    </button>
-                  )}
-                </div>
+                <input
+                  type="text"
+                  value={finalTotalLabel ?? computedFinalTotalLabel}
+                  onChange={e => onSetFinalTotalLabel(e.target.value || null)}
+                  placeholder={computedFinalTotalLabel}
+                  className="text-sm font-bold text-slate-800 bg-transparent border border-transparent rounded px-1 -mx-1 hover:border-slate-200 focus:border-blue-400 focus:ring-2 focus:ring-blue-500/20 focus:outline-none transition-colors flex-1 min-w-0"
+                  title="Click to customize the final total label (e.g. TOTAL CIF ISTANBUL)"
+                />
               ) : (
-                <span className="text-base font-bold text-slate-900 tabular-nums">
-                  {currency} {fmt(finalTotalOverride !== null ? finalTotalOverride : finalTotal)}
-                </span>
+                <span className="text-sm font-bold text-slate-800">{displayFinalTotalLabel}</span>
               )}
+              <span className="text-base font-bold text-slate-900 tabular-nums flex-shrink-0">
+                {currency} {fmt(finalTotal)}
+              </span>
             </div>
           </div>
 
