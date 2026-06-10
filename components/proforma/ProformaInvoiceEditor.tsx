@@ -39,7 +39,7 @@ import {
   ArrowLeft, Save, FileText, FileSpreadsheet, Plus, Trash2, Search, X,
   ChevronDown, ChevronUp, User, Truck, Package, Calculator, StickyNote,
   Anchor, Globe, CreditCard, Percent, DollarSign, GripVertical, AlertCircle,
-  Columns3, ArrowUp, ArrowDown, Eye, EyeOff,
+  Columns3, Eye, EyeOff,
 } from 'lucide-react';
 import { api } from '../../client/api';
 import {
@@ -1971,19 +1971,28 @@ const ColumnsPanel: React.FC<ColumnsPanelProps> = ({
     return out;
   }, [allColumns]);
 
-  // Reorder helper: move column id `id` by `delta` (-1 up, +1 down) within
-  // the allColumns visual order. We materialise the current full order from
-  // `allColumns` (which already respects the persisted columnOrder) and write
-  // the swapped result back.
-  const move = (id: string, delta: number) => {
+  // ── Drag-and-drop state for column reordering ──
+  // The native HTML5 DnD API is sufficient here — no extra library needed.
+  const [draggingId, setDraggingId] = useState<string | null>(null);
+  const [dragOverId, setDragOverId] = useState<string | null>(null);
+
+  // Reorder: splice srcId out of the ordered list and insert it before tgtId.
+  const reorderByDrop = (srcId: string, tgtId: string) => {
+    if (srcId === tgtId) return;
     const order = allColumns.map(c => c.id);
-    const idx = order.indexOf(id);
-    if (idx < 0) return;
-    const target = idx + delta;
-    if (target < 0 || target >= order.length) return;
-    [order[idx], order[target]] = [order[target], order[idx]];
-    onSetColumnOrder(order);
+    const srcIdx = order.indexOf(srcId);
+    const tgtIdx = order.indexOf(tgtId);
+    if (srcIdx < 0 || tgtIdx < 0) return;
+    const newOrder = [...order];
+    newOrder.splice(srcIdx, 1);
+    newOrder.splice(tgtIdx, 0, srcId);
+    onSetColumnOrder(newOrder);
   };
+
+  // ── Which built-in formula editor is currently open ──
+  // 'quantity' | 'total' | null. The ƒ icon beside those column names acts as a
+  // toggle: click to open the inline formula editor, click again to close/clear.
+  const [openBuiltinFormula, setOpenBuiltinFormula] = useState<string | null>(null);
 
   // Toggle hidden state for one column. 'product' / 'quantity' are required
   // and silently ignored.
@@ -2066,31 +2075,81 @@ const ColumnsPanel: React.FC<ColumnsPanelProps> = ({
         </span>
       </div>
 
-      {/* Column list — one row each */}
+      {/* Column list — drag the ≡ handle to reorder; click ƒ on Quantity/Total
+          to attach a custom formula to that built-in column. */}
       <div className="space-y-1">
-        {allColumns.map((col, idx) => {
+        {allColumns.map((col) => {
           const isHidden = hiddenSet.has(col.id);
-          const isFirst = idx === 0;
-          const isLast = idx === allColumns.length - 1;
+
+          // Formula-capable built-in columns whose value can be overridden by a
+          // per-invoice formula (Quantity and Total/row-total).
+          const isQty   = col.id === 'quantity';
+          const isTotal = col.id === 'total';
+          const formulaCapable = isQty || isTotal;
+
+          // Whether this built-in column currently has an *active* formula saved.
+          const formulaActive = (isQty && isCustomQuantity) || (isTotal && isCustomTotal);
+
+          // Show the inline formula editor when a formula is active OR the user
+          // has explicitly opened it via the ƒ toggle (before typing anything).
+          const formulaEditorOpen =
+            formulaActive ||
+            (isQty   && openBuiltinFormula === 'quantity') ||
+            (isTotal && openBuiltinFormula === 'total');
+
           return (
             <div
               key={col.id}
-              className={`flex items-start gap-2 px-2 py-1.5 rounded border ${
-                isHidden ? 'bg-slate-50 border-slate-200 opacity-60' : 'bg-white border-slate-200'
+              draggable
+              onDragStart={e => {
+                e.dataTransfer.setData('text/plain', col.id);
+                setDraggingId(col.id);
+              }}
+              onDragOver={e => {
+                e.preventDefault();
+                if (dragOverId !== col.id) setDragOverId(col.id);
+              }}
+              onDrop={e => {
+                e.preventDefault();
+                const src = e.dataTransfer.getData('text/plain');
+                reorderByDrop(src, col.id);
+                setDragOverId(null);
+              }}
+              onDragEnd={() => { setDraggingId(null); setDragOverId(null); }}
+              className={`flex items-start gap-2 px-2 py-1.5 rounded border transition-colors ${
+                draggingId === col.id
+                  ? 'opacity-40 border-slate-200 bg-white'
+                  : dragOverId === col.id
+                  ? 'border-blue-400 bg-blue-50'
+                  : isHidden
+                  ? 'bg-slate-50 border-slate-200 opacity-60'
+                  : 'bg-white border-slate-200'
               }`}
             >
+              {/* Drag handle — cursor changes on hover/active to hint draggability */}
+              <div
+                className="mt-1 flex-shrink-0 cursor-grab active:cursor-grabbing text-slate-300 hover:text-slate-500"
+                title="Drag to reorder"
+              >
+                <GripVertical className="w-3.5 h-3.5" />
+              </div>
+
+              {/* Visibility (eye) toggle */}
               <button
                 type="button"
                 onClick={() => toggleHidden(col)}
                 disabled={col.required}
                 title={col.required ? 'Required column' : isHidden ? 'Show column' : 'Hide column'}
-                className={`mt-1 ${col.required ? 'text-slate-300 cursor-not-allowed' : 'text-slate-500 hover:text-blue-600'}`}
+                className={`mt-1 flex-shrink-0 ${col.required ? 'text-slate-300 cursor-not-allowed' : 'text-slate-500 hover:text-blue-600'}`}
               >
                 {isHidden ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
               </button>
 
+              {/* Column name + badges + optional inline formula editor */}
               <div className="flex-1 min-w-0 space-y-1">
-                <div className="flex items-center gap-2">
+                <div className="flex items-center gap-2 flex-wrap">
+
+                  {/* Column name — editable for custom, plain text for built-in */}
                   {col.builtIn ? (
                     <span className="text-xs font-medium text-slate-700">{col.label}</span>
                   ) : (
@@ -2098,13 +2157,70 @@ const ColumnsPanel: React.FC<ColumnsPanelProps> = ({
                       type="text"
                       value={col.label}
                       onChange={e => renameCustom(col.id, e.target.value)}
-                      className="flex-1 px-1.5 py-0.5 text-xs font-medium text-slate-700 border border-slate-200 rounded focus:outline-none focus:border-blue-400"
+                      className="flex-1 min-w-[80px] px-1.5 py-0.5 text-xs font-medium text-slate-700 border border-slate-200 rounded focus:outline-none focus:border-blue-400"
                     />
                   )}
+
+                  {/* ƒ icon — shown only on formula-capable built-in columns.
+                      Click to open the inline formula editor; click again
+                      (while open) to close/clear the formula. */}
+                  {formulaCapable && (
+                    <button
+                      type="button"
+                      title={
+                        formulaActive
+                          ? 'Clear formula — switch back to default behaviour'
+                          : formulaEditorOpen
+                          ? 'Close formula editor'
+                          : 'Attach a custom formula to this column'
+                      }
+                      onClick={() => {
+                        if (isQty) {
+                          if (isCustomQuantity) {
+                            // Active formula → clear it and close
+                            onSetQuantityFormula(null);
+                            setOpenBuiltinFormula(null);
+                          } else if (openBuiltinFormula === 'quantity') {
+                            // Editor open but no saved formula → just close
+                            setOpenBuiltinFormula(null);
+                          } else {
+                            // Closed → open
+                            setOpenBuiltinFormula('quantity');
+                          }
+                        } else {
+                          if (isCustomTotal) {
+                            onSetTotalFormula(null);
+                            setOpenBuiltinFormula(null);
+                          } else if (openBuiltinFormula === 'total') {
+                            setOpenBuiltinFormula(null);
+                          } else {
+                            setOpenBuiltinFormula('total');
+                          }
+                        }
+                      }}
+                      className={`text-[11px] leading-none px-1.5 py-0.5 rounded font-mono font-bold border transition-colors ${
+                        formulaEditorOpen
+                          ? 'text-amber-700 bg-amber-100 border-amber-300 hover:bg-amber-200'
+                          : 'text-slate-400 bg-white border-slate-200 hover:text-blue-600 hover:border-blue-300'
+                      }`}
+                    >
+                      ƒ
+                    </button>
+                  )}
+
+                  {/* Type / mode badge */}
                   {col.builtIn ? (
-                    <span className="text-[10px] text-slate-400 uppercase tracking-wide">built-in</span>
+                    // Show a yellow FORMULA badge when formula mode is on for this
+                    // built-in, or the standard BUILT-IN label otherwise.
+                    formulaEditorOpen ? (
+                      <span className="text-[10px] px-1 py-0.5 rounded text-amber-700 bg-amber-50 border border-amber-200 uppercase tracking-wide font-medium">
+                        formula
+                      </span>
+                    ) : (
+                      <span className="text-[10px] text-slate-400 uppercase tracking-wide">built-in</span>
+                    )
                   ) : editingTypeId === col.id ? (
-                    // Inline type editor — opened by double-clicking the badge.
+                    // Inline type dropdown — opened by double-clicking the badge.
                     <select
                       autoFocus
                       value={col.type}
@@ -2123,15 +2239,54 @@ const ColumnsPanel: React.FC<ColumnsPanelProps> = ({
                     <span
                       onDoubleClick={() => setEditingTypeId(col.id)}
                       title="Double-click to change the data type"
-                      className="text-[10px] text-slate-400 uppercase tracking-wide cursor-pointer hover:text-blue-600 hover:underline decoration-dotted"
+                      className={`text-[10px] uppercase tracking-wide cursor-pointer decoration-dotted ${
+                        col.type === 'formula'
+                          ? 'text-amber-700 bg-amber-50 px-1 py-0.5 rounded border border-amber-200 hover:bg-amber-100'
+                          : 'text-slate-400 hover:text-blue-600 hover:underline'
+                      }`}
                     >
                       {col.type}
                     </span>
                   )}
+
                   {col.required && (
                     <span className="text-[10px] text-amber-600 uppercase tracking-wide">required</span>
                   )}
                 </div>
+
+                {/* Inline formula editor — Quantity built-in */}
+                {isQty && formulaEditorOpen && (
+                  <FormulaInput
+                    value={quantityDraft}
+                    onChange={v => {
+                      setQuantityDraft(v);
+                      // Propagate immediately; empty string clears the formula
+                      // (falls back to manual entry) while keeping the editor open.
+                      onSetQuantityFormula(v.trim() !== '' ? v : null);
+                    }}
+                    suggestions={tokenSuggestions}
+                    placeholder="e.g. {Units per Pallet} * {Pallets}"
+                    wrapperClassName="w-full"
+                    className="w-full px-1.5 py-0.5 text-[11px] font-mono border border-amber-200 rounded focus:outline-none focus:border-amber-400 bg-amber-50/40"
+                  />
+                )}
+
+                {/* Inline formula editor — Total (row total) built-in */}
+                {isTotal && formulaEditorOpen && (
+                  <FormulaInput
+                    value={totalDraft}
+                    onChange={v => {
+                      setTotalDraft(v);
+                      onSetTotalFormula(v.trim() !== '' ? v : null);
+                    }}
+                    suggestions={tokenSuggestions}
+                    placeholder="e.g. {qty} * {unit_price} * (1 - {Discount %} / 100)"
+                    wrapperClassName="w-full"
+                    className="w-full px-1.5 py-0.5 text-[11px] font-mono border border-amber-200 rounded focus:outline-none focus:border-amber-400 bg-amber-50/40"
+                  />
+                )}
+
+                {/* Custom column sub-row: unit label + formula input (if formula type) */}
                 {!col.builtIn && (
                   <div className="flex items-center gap-2">
                     <input
@@ -2155,36 +2310,17 @@ const ColumnsPanel: React.FC<ColumnsPanelProps> = ({
                 )}
               </div>
 
-              <div className="flex items-center gap-0.5 flex-shrink-0">
+              {/* Delete button — custom columns only; no up/down arrow buttons */}
+              {!col.builtIn && (
                 <button
                   type="button"
-                  onClick={() => move(col.id, -1)}
-                  disabled={isFirst}
-                  className="p-0.5 text-slate-400 hover:text-blue-600 disabled:opacity-30 disabled:hover:text-slate-400"
-                  title="Move up"
+                  onClick={() => deleteCustom(col.id)}
+                  className="mt-1 p-0.5 flex-shrink-0 text-slate-300 hover:text-red-500"
+                  title="Delete column"
                 >
-                  <ArrowUp className="w-3.5 h-3.5" />
+                  <Trash2 className="w-3.5 h-3.5" />
                 </button>
-                <button
-                  type="button"
-                  onClick={() => move(col.id, 1)}
-                  disabled={isLast}
-                  className="p-0.5 text-slate-400 hover:text-blue-600 disabled:opacity-30 disabled:hover:text-slate-400"
-                  title="Move down"
-                >
-                  <ArrowDown className="w-3.5 h-3.5" />
-                </button>
-                {!col.builtIn && (
-                  <button
-                    type="button"
-                    onClick={() => deleteCustom(col.id)}
-                    className="p-0.5 text-slate-300 hover:text-red-500"
-                    title="Delete column"
-                  >
-                    <Trash2 className="w-3.5 h-3.5" />
-                  </button>
-                )}
-              </div>
+              )}
             </div>
           );
         })}
@@ -2255,81 +2391,6 @@ const ColumnsPanel: React.FC<ColumnsPanelProps> = ({
         </div>
       </div>
 
-      {/* Row total formula override */}
-      <div className="border-t border-blue-200 pt-3 space-y-2">
-        <div className="text-[11px] font-semibold text-slate-600 uppercase tracking-wider">Row Total Formula</div>
-        <div className="flex items-center gap-3 text-xs">
-          <label className="inline-flex items-center gap-1.5 cursor-pointer">
-            <input
-              type="radio"
-              name="totalMode"
-              checked={!isCustomTotal}
-              onChange={() => onSetTotalFormula(null)}
-            />
-            <span>Default (qty × unit_price)</span>
-          </label>
-          <label className="inline-flex items-center gap-1.5 cursor-pointer">
-            <input
-              type="radio"
-              name="totalMode"
-              checked={isCustomTotal}
-              onChange={() => onSetTotalFormula(totalDraft.trim() === '' ? '{qty} * {unit_price}' : totalDraft)}
-            />
-            <span>Custom formula</span>
-          </label>
-        </div>
-        {isCustomTotal && (
-          <FormulaInput
-            value={totalDraft}
-            onChange={v => { setTotalDraft(v); onSetTotalFormula(v); }}
-            suggestions={tokenSuggestions}
-            placeholder="e.g. {qty} * {unit_price} * (1 - {Discount %} / 100)"
-            wrapperClassName="w-full"
-            className="w-full px-2 py-1 text-[11px] font-mono border border-slate-200 rounded focus:outline-none focus:border-blue-400"
-          />
-        )}
-      </div>
-
-      {/* Quantity formula override */}
-      <div className="border-t border-blue-200 pt-3 space-y-2">
-        <div className="text-[11px] font-semibold text-slate-600 uppercase tracking-wider">Quantity</div>
-        <div className="flex items-center gap-3 text-xs">
-          <label className="inline-flex items-center gap-1.5 cursor-pointer">
-            <input
-              type="radio"
-              name="quantityMode"
-              checked={!isCustomQuantity}
-              onChange={() => onSetQuantityFormula(null)}
-            />
-            <span>Manual entry</span>
-          </label>
-          <label className="inline-flex items-center gap-1.5 cursor-pointer">
-            <input
-              type="radio"
-              name="quantityMode"
-              checked={isCustomQuantity}
-              onChange={() => onSetQuantityFormula(quantityDraft.trim() === '' ? '{unit_price}' : quantityDraft)}
-            />
-            <span>Custom formula</span>
-          </label>
-        </div>
-        {isCustomQuantity && (
-          <FormulaInput
-            value={quantityDraft}
-            onChange={v => { setQuantityDraft(v); onSetQuantityFormula(v); }}
-            suggestions={tokenSuggestions}
-            placeholder="e.g. {Units per Pallet} * {Pallets}"
-            wrapperClassName="w-full"
-            className="w-full px-2 py-1 text-[11px] font-mono border border-slate-200 rounded focus:outline-none focus:border-blue-400"
-          />
-        )}
-        {isCustomQuantity && (
-          <p className="text-[10px] text-slate-500">
-            Each row's quantity is computed from this formula and feeds the row total.
-            Leave on "Manual entry" to type quantities yourself.
-          </p>
-        )}
-      </div>
     </div>
   );
 };
