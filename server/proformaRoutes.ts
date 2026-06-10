@@ -200,12 +200,15 @@ export function registerProformaRoutes(app: Express): void {
       // the user's preferred order.
       type CT = 'builtin' | 'text' | 'number' | 'formula';
       interface PCol { id: string; name: string; type: CT; unit?: string; formula?: string; required?: boolean; }
+      // Apply any user-defined label overrides to the built-in column names so
+      // the exported file matches what the user sees in the preview.
+      const _builtinLblOverrides = ((full as any).builtinColumnLabels as Record<string, string> | null | undefined) ?? {};
       const BUILTIN: PCol[] = [
-        { id: 'product',   name: 'Description', type: 'builtin', required: true  },
-        { id: 'unitPrice', name: 'Unit Price',  type: 'builtin' },
-        { id: 'quantity',  name: 'Quantity',    type: 'builtin', required: true  },
-        { id: 'unit',      name: 'Unit',        type: 'builtin' },
-        { id: 'total',     name: 'Total',       type: 'builtin' },
+        { id: 'product',   name: _builtinLblOverrides['product']?.trim()   || 'Description', type: 'builtin', required: true  },
+        { id: 'unitPrice', name: _builtinLblOverrides['unitPrice']?.trim() || 'Unit Price',  type: 'builtin' },
+        { id: 'quantity',  name: _builtinLblOverrides['quantity']?.trim()  || 'Quantity',    type: 'builtin', required: true  },
+        { id: 'unit',      name: _builtinLblOverrides['unit']?.trim()      || 'Unit',        type: 'builtin' },
+        { id: 'total',     name: _builtinLblOverrides['total']?.trim()     || 'Total',       type: 'builtin' },
       ];
       const customCols = Array.isArray((full as any).customColumns) ? ((full as any).customColumns as Array<{ id: string; name: string; type: CT; unit?: string; formula?: string }>) : [];
       const hiddenIds = new Set(Array.isArray((full as any).hiddenColumns) ? ((full as any).hiddenColumns as string[]) : []);

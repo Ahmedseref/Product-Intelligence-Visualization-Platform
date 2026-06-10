@@ -595,6 +595,7 @@ export class DatabaseStorage implements IStorage {
       finalTotalOverride: source.finalTotalOverride,
       summaryColumns: source.summaryColumns,
       finalTotalLabel: source.finalTotalLabel,
+      builtinColumnLabels: source.builtinColumnLabels,
       version: opts?.version ?? 1,
       parentProformaId: opts?.parentProformaId ?? null,
       date: now,

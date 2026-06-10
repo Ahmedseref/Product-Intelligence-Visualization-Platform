@@ -450,6 +450,8 @@ export interface ProformaData {
   summaryColumns?: string[] | null;
   // Custom label text for the FINAL TOTAL row (e.g. "TOTAL CIF ISTANBUL").
   finalTotalLabel?: string | null;
+  // Label overrides for built-in columns (keyed by col id).
+  builtinColumnLabels?: Record<string, string> | null;
   // Versioning: version number (1 = original). Versions > 1 have a
   // parentProformaId linking them to the base invoice.
   version?: number | null;

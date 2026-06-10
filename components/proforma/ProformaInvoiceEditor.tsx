@@ -144,9 +144,15 @@ const BUILTIN_COLUMNS: DisplayColumn[] = [
 function buildColumnList(
   customCols: ProformaCustomColumn[],
   columnOrder: string[],
+  labelOverrides: Record<string, string> = {},
 ): DisplayColumn[] {
   const all: DisplayColumn[] = [
-    ...BUILTIN_COLUMNS,
+    // Apply any user-defined label overrides to the built-in columns so
+    // the panel, preview, and export all show the same customized names.
+    ...BUILTIN_COLUMNS.map(c => ({
+      ...c,
+      label: labelOverrides[c.id]?.trim() || c.label,
+    })),
     ...customCols.map<DisplayColumn>(c => ({
       id: c.id,
       label: c.name,
@@ -336,6 +342,9 @@ const ProformaInvoiceEditor: React.FC<ProformaInvoiceEditorProps> = ({
   // Custom label for the FINAL TOTAL row. null → auto-generated from delivery
   // terms and destination (e.g. "TOTAL CIF ISTANBUL, TURKEY").
   const [finalTotalLabel, setFinalTotalLabel] = useState<string | null>(null);
+  // User-defined label overrides for built-in columns, keyed by column id.
+  // e.g. { product: "Product Name", unitPrice: "Price" }
+  const [builtinColumnLabels, setBuiltinColumnLabels] = useState<Record<string, string>>({});
   // Column ids whose values should be summed in the invoice totals section.
   const [summaryColumns, setSummaryColumns] = useState<string[]>([]);
   // Toggle for the Columns management panel inside the Products section.
@@ -499,6 +508,7 @@ const ProformaInvoiceEditor: React.FC<ProformaInvoiceEditorProps> = ({
     setTotalFormula(pf.totalFormula ?? null);
     setQuantityFormula(pf.quantityFormula ?? null);
     setFinalTotalLabel((pf as any).finalTotalLabel ?? null);
+    setBuiltinColumnLabels((pf as any).builtinColumnLabels ?? {});
     setSummaryColumns(Array.isArray((pf as any).summaryColumns) ? (pf as any).summaryColumns as string[] : []);
 
     // Versioning metadata (read-only)
@@ -519,8 +529,8 @@ const ProformaInvoiceEditor: React.FC<ProformaInvoiceEditorProps> = ({
   // (required columns + non-hidden). Visible columns drive both the
   // editor's items-table rendering and the printed preview.
   const allColumns = useMemo(
-    () => buildColumnList(customColumns, columnOrder),
-    [customColumns, columnOrder],
+    () => buildColumnList(customColumns, columnOrder, builtinColumnLabels),
+    [customColumns, columnOrder, builtinColumnLabels],
   );
   const hiddenSet = useMemo(() => new Set(hiddenColumns), [hiddenColumns]);
   const visibleColumns = useMemo(
@@ -702,6 +712,7 @@ const ProformaInvoiceEditor: React.FC<ProformaInvoiceEditorProps> = ({
       totalFormula: totalFormula && totalFormula.trim() !== '' ? totalFormula : null,
       quantityFormula: quantityFormula && quantityFormula.trim() !== '' ? quantityFormula : null,
       finalTotalLabel: finalTotalLabel,
+      builtinColumnLabels: Object.keys(builtinColumnLabels).length > 0 ? builtinColumnLabels : null,
       summaryColumns,
     };
   };
@@ -1117,6 +1128,14 @@ const ProformaInvoiceEditor: React.FC<ProformaInvoiceEditorProps> = ({
                     onSetColumnOrder={setColumnOrder}
                     onSetTotalFormula={setTotalFormula}
                     onSetQuantityFormula={setQuantityFormula}
+                    onRenameBuiltin={(id, label) => {
+                      setBuiltinColumnLabels(prev => {
+                        const next = { ...prev };
+                        if (label.trim()) next[id] = label;
+                        else delete next[id];
+                        return next;
+                      });
+                    }}
                     summaryColumns={summaryColumns}
                     onSetSummaryColumns={setSummaryColumns}
                   />
@@ -1931,6 +1950,8 @@ interface ColumnsPanelProps {
   onSetColumnOrder: (ids: string[]) => void;
   onSetTotalFormula: (f: string | null) => void;
   onSetQuantityFormula: (f: string | null) => void;
+  // Rename a built-in column.  Empty string resets to the canonical default.
+  onRenameBuiltin: (id: string, label: string) => void;
   summaryColumns: string[];
   onSetSummaryColumns: (ids: string[]) => void;
 }
@@ -1938,7 +1959,7 @@ interface ColumnsPanelProps {
 const ColumnsPanel: React.FC<ColumnsPanelProps> = ({
   allColumns, customColumns, hiddenSet, columnOrder, totalFormula, quantityFormula,
   onSetCustomColumns, onSetHiddenColumns, onSetColumnOrder, onSetTotalFormula,
-  onSetQuantityFormula, summaryColumns, onSetSummaryColumns,
+  onSetQuantityFormula, onRenameBuiltin, summaryColumns, onSetSummaryColumns,
 }) => {
   // ── Local form state for the "Add Column" sub-form ──
   const [draftName, setDraftName] = useState('');
@@ -2174,17 +2195,24 @@ const ColumnsPanel: React.FC<ColumnsPanelProps> = ({
               <div className="flex-1 min-w-0 space-y-1">
                 <div className="flex items-center gap-2 flex-wrap">
 
-                  {/* Column name — editable for custom, plain text for built-in */}
-                  {col.builtIn ? (
-                    <span className="text-xs font-medium text-slate-700">{col.label}</span>
-                  ) : (
-                    <input
-                      type="text"
-                      value={col.label}
-                      onChange={e => renameCustom(col.id, e.target.value)}
-                      className="flex-1 min-w-[80px] px-1.5 py-0.5 text-xs font-medium text-slate-700 border border-slate-200 rounded focus:outline-none focus:border-blue-400"
-                    />
-                  )}
+                  {/* Column name — editable for both built-in and custom columns.
+                      For built-ins the placeholder shows the canonical default
+                      so clearing the field resets it to the original name. */}
+                  <input
+                    type="text"
+                    value={col.label}
+                    onChange={e =>
+                      col.builtIn
+                        ? onRenameBuiltin(col.id, e.target.value)
+                        : renameCustom(col.id, e.target.value)
+                    }
+                    placeholder={
+                      col.builtIn
+                        ? (BUILTIN_COLUMNS.find(c => c.id === col.id)?.label ?? col.id)
+                        : undefined
+                    }
+                    className="flex-1 min-w-[80px] px-1.5 py-0.5 text-xs font-medium text-slate-700 border border-slate-200 rounded focus:outline-none focus:border-blue-400"
+                  />
 
                   {/* ƒ icon — shown only on formula-capable built-in columns.
                       Click to open the inline formula editor; click again

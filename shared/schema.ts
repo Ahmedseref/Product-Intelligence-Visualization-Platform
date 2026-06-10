@@ -462,6 +462,9 @@ export const proformas = pgTable("proformas", {
   // and Excel export auto-generate the label from the delivery terms and
   // destination fields (e.g. "TOTAL CIF ISTANBUL, TURKEY").
   finalTotalLabel: text("final_total_label"),
+  // User-defined label overrides for built-in columns, keyed by column id
+  // (e.g. { "product": "Product Name", "unitPrice": "Price" }).
+  builtinColumnLabels: jsonb("builtin_column_labels"),
   // Versioning: version number (1 = original, 2+ = revisions). The proformaId
   // encodes the version suffix (e.g. PI-0001-v2) but we store the integer
   // separately for easy sorting and max-version queries.
