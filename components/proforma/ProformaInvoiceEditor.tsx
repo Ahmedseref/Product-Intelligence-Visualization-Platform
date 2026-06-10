@@ -333,6 +333,10 @@ const ProformaInvoiceEditor: React.FC<ProformaInvoiceEditorProps> = ({
   // Quantity formula override. null/'default' → quantity is entered manually
   // per row. When set, each row's quantity is computed from this formula.
   const [quantityFormula, setQuantityFormula] = useState<string | null>(null);
+  // Manual final-total override. null → use the computed calc.finalTotal value.
+  const [finalTotalOverride, setFinalTotalOverride] = useState<number | null>(null);
+  // Column ids whose values should be summed in the invoice totals section.
+  const [summaryColumns, setSummaryColumns] = useState<string[]>([]);
   // Toggle for the Columns management panel inside the Products section.
   const [showColumnsPanel, setShowColumnsPanel] = useState(false);
 
@@ -493,6 +497,11 @@ const ProformaInvoiceEditor: React.FC<ProformaInvoiceEditorProps> = ({
     setColumnOrder(Array.isArray(pf.columnOrder) ? (pf.columnOrder as string[]) : []);
     setTotalFormula(pf.totalFormula ?? null);
     setQuantityFormula(pf.quantityFormula ?? null);
+    // finalTotalOverride arrives as a string from the DB (text column) —
+    // parse it to a float; treat empty/null as "no override".
+    const rawFto = (pf as any).finalTotalOverride;
+    setFinalTotalOverride(rawFto != null && rawFto !== '' ? parseFloat(String(rawFto)) : null);
+    setSummaryColumns(Array.isArray((pf as any).summaryColumns) ? (pf as any).summaryColumns as string[] : []);
 
     // Versioning metadata (read-only)
     setVersionNum(pf.version ?? 1);
@@ -694,6 +703,8 @@ const ProformaInvoiceEditor: React.FC<ProformaInvoiceEditorProps> = ({
       columnOrder,
       totalFormula: totalFormula && totalFormula.trim() !== '' ? totalFormula : null,
       quantityFormula: quantityFormula && quantityFormula.trim() !== '' ? quantityFormula : null,
+      finalTotalOverride: finalTotalOverride,
+      summaryColumns,
     };
   };
 
@@ -1108,6 +1119,8 @@ const ProformaInvoiceEditor: React.FC<ProformaInvoiceEditorProps> = ({
                     onSetColumnOrder={setColumnOrder}
                     onSetTotalFormula={setTotalFormula}
                     onSetQuantityFormula={setQuantityFormula}
+                    summaryColumns={summaryColumns}
+                    onSetSummaryColumns={setSummaryColumns}
                   />
                 )}
                 {/* Product picker — the bar is a trigger that opens a
@@ -1548,7 +1561,7 @@ const ProformaInvoiceEditor: React.FC<ProformaInvoiceEditorProps> = ({
                   ))}
                   <div className="flex justify-between pt-1.5 mt-1.5 border-t border-slate-300">
                     <span className="text-xs font-bold text-slate-700">Final Total</span>
-                    <span className="text-sm font-bold text-slate-900">{currency} {fmt(calc.finalTotal)}</span>
+                    <span className="text-sm font-bold text-slate-900">{currency} {fmt(finalTotalOverride ?? calc.finalTotal)}</span>
                   </div>
                 </div>
               </div>
@@ -1619,6 +1632,10 @@ const ProformaInvoiceEditor: React.FC<ProformaInvoiceEditorProps> = ({
                 effectiveQtyFor={effectiveQtyFor}
                 onUpdateItem={updateItem}
                 onUpdateCustomValue={updateItemCustomValue}
+                finalTotalOverride={finalTotalOverride}
+                onSetFinalTotalOverride={setFinalTotalOverride}
+                summaryColumns={summaryColumns}
+                allColumns={allColumns}
               />
             </div>
           </div>
@@ -1916,12 +1933,14 @@ interface ColumnsPanelProps {
   onSetColumnOrder: (ids: string[]) => void;
   onSetTotalFormula: (f: string | null) => void;
   onSetQuantityFormula: (f: string | null) => void;
+  summaryColumns: string[];
+  onSetSummaryColumns: (ids: string[]) => void;
 }
 
 const ColumnsPanel: React.FC<ColumnsPanelProps> = ({
   allColumns, customColumns, hiddenSet, columnOrder, totalFormula, quantityFormula,
   onSetCustomColumns, onSetHiddenColumns, onSetColumnOrder, onSetTotalFormula,
-  onSetQuantityFormula,
+  onSetQuantityFormula, summaryColumns, onSetSummaryColumns,
 }) => {
   // ── Local form state for the "Add Column" sub-form ──
   const [draftName, setDraftName] = useState('');
@@ -2097,6 +2116,14 @@ const ColumnsPanel: React.FC<ColumnsPanelProps> = ({
             (isQty   && openBuiltinFormula === 'quantity') ||
             (isTotal && openBuiltinFormula === 'total');
 
+          // Whether this column can be summed (Σ button). We allow:
+          //   — Built-in Quantity (meaningful physical/unit total)
+          //   — Custom columns of type 'number' or 'formula'
+          // We intentionally exclude built-in Total (same as subtotal) and
+          // Unit Price (summing prices is rarely meaningful).
+          const summable = isQty || (!col.builtIn && (col.type === 'number' || col.type === 'formula'));
+          const isSummed = summaryColumns.includes(col.id);
+
           return (
             <div
               key={col.id}
@@ -2205,6 +2232,34 @@ const ColumnsPanel: React.FC<ColumnsPanelProps> = ({
                       }`}
                     >
                       ƒ
+                    </button>
+                  )}
+
+                  {/* Σ sum toggle — adds/removes this column from the summaryColumns
+                      list. Active columns are summed and shown in the invoice
+                      preview to the left of the financial totals block. */}
+                  {summable && (
+                    <button
+                      type="button"
+                      title={
+                        isSummed
+                          ? 'Remove from invoice totals column sums'
+                          : 'Sum this column in the invoice totals section'
+                      }
+                      onClick={() => {
+                        if (isSummed) {
+                          onSetSummaryColumns(summaryColumns.filter(id => id !== col.id));
+                        } else {
+                          onSetSummaryColumns([...summaryColumns, col.id]);
+                        }
+                      }}
+                      className={`text-[11px] leading-none px-1.5 py-0.5 rounded font-bold border transition-colors ${
+                        isSummed
+                          ? 'text-emerald-700 bg-emerald-100 border-emerald-300 hover:bg-emerald-200'
+                          : 'text-slate-400 bg-white border-slate-200 hover:text-emerald-600 hover:border-emerald-300'
+                      }`}
+                    >
+                      Σ
                     </button>
                   )}
 
@@ -2443,6 +2498,15 @@ interface InvoicePreviewProps {
   // are intentionally NOT editable.
   onUpdateItem: <K extends keyof DraftItem>(id: number, field: K, value: DraftItem[K]) => void;
   onUpdateCustomValue: (id: number, columnId: string, value: string) => void;
+  // Manual override for the FINAL TOTAL value.  null → use computed finalTotal.
+  finalTotalOverride: number | null;
+  // Setter so the preview can write the override inline (clicking the value).
+  onSetFinalTotalOverride: (v: number | null) => void;
+  // Ids of columns whose values should be summed in the totals section.
+  summaryColumns: string[];
+  // Full ordered column list (built-ins + custom) needed to look up label/unit
+  // for summary columns that might not appear in visibleColumns.
+  allColumns: DisplayColumn[];
 }
 
 const InvoicePreview: React.FC<InvoicePreviewProps> = ({
@@ -2452,6 +2516,7 @@ const InvoicePreview: React.FC<InvoicePreviewProps> = ({
   deliveryTerms, notes, items, subtotal, steps, finalTotal, pdfCapturing,
   visibleColumns, lineTotalFor, evalFormulaCell, hasQuantityFormula, effectiveQtyFor,
   onUpdateItem, onUpdateCustomValue,
+  finalTotalOverride, onSetFinalTotalOverride, summaryColumns, allColumns,
 }) => {
   // While capturing the PDF we render plain text instead of <input> elements
   // so the exported document is clean (no focus rings / caret artifacts).
@@ -2465,6 +2530,48 @@ const InvoicePreview: React.FC<InvoicePreviewProps> = ({
   const effectivePaymentTerms = paymentTerms || settings.paymentTerms || '';
   const effectiveDeliveryTerms = deliveryTerms || settings.deliveryTerms || '';
   const effectiveNotes = notes || settings.notes || '';
+
+  // ── Column sums ──────────────────────────────────────────────────────────
+  // For each column id in summaryColumns, compute the sum of that column's
+  // values across all line items.  Built-in Quantity uses effectiveQtyFor so
+  // formula-driven quantities are picked up correctly.  Custom formula columns
+  // use evalFormulaCell; custom number columns parse the stored string value.
+  const colSums = useMemo(() => {
+    return (summaryColumns ?? []).map(id => {
+      const col = allColumns.find(c => c.id === id);
+      if (!col) return null;
+      let sum = 0;
+      if (id === 'quantity') {
+        sum = items.reduce((acc, it) => acc + effectiveQtyFor(it), 0);
+      } else if (id === 'total') {
+        sum = items.reduce((acc, it) => acc + lineTotalFor(it), 0);
+      } else if (col.type === 'formula') {
+        sum = items.reduce((acc, it) => {
+          const v = evalFormulaCell(it, col);
+          return acc + (Number.isFinite(v) ? v : 0);
+        }, 0);
+      } else if (col.type === 'number') {
+        sum = items.reduce((acc, it) => {
+          const v = parseFloat((it.customValues ?? {})[id] ?? '');
+          return acc + (Number.isFinite(v) ? v : 0);
+        }, 0);
+      }
+      return {
+        id,
+        label: col.label,
+        sum,
+        unit: (col as any).unit as string | undefined,
+      };
+    }).filter(Boolean) as Array<{ id: string; label: string; sum: number; unit?: string }>;
+  }, [summaryColumns, allColumns, items, effectiveQtyFor, lineTotalFor, evalFormulaCell]);
+  const hasSummary = colSums.length > 0;
+
+  // Compact number formatter for column sums — no currency prefix; integer
+  // when the value has no fractional part, otherwise 2–4 decimal places.
+  const fmtNum = (n: number) =>
+    n % 1 === 0
+      ? n.toLocaleString()
+      : n.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 4 });
 
   const metaRows: [string, string][] = [
     ['DATE', today],
@@ -2741,27 +2848,80 @@ const InvoicePreview: React.FC<InvoicePreviewProps> = ({
       </table>
 
       {/* ─── TOTALS ─────────────────────────────────────────────── */}
+      {/* When the user has selected Σ columns the section splits into two halves:
+          column sums on the left, financial totals on the right.  Without any
+          summary columns the classic centred/right-aligned layout is preserved. */}
       <div className="border-t border-slate-300 bg-slate-50/40">
-        <div className="ml-auto max-w-[55%] p-4 space-y-1">
-          <div className="flex justify-between text-xs">
-            <span className="text-slate-600">Subtotal</span>
-            <span className="font-semibold text-slate-800 tabular-nums">{currency} {fmt(subtotal)}</span>
-          </div>
-          {steps.map(s => (
-            <div key={s.id} className="flex justify-between text-xs">
-              <span className="text-slate-500">
-                {s.type === 'subtract' ? '−' : '+'} {s.name}
-                {s.valueType === 'percentage' && <span className="ml-1 text-slate-400">({s.value}%)</span>}
-              </span>
-              <span className={`tabular-nums font-medium ${s.computedAmount < 0 ? 'text-red-600' : 'text-green-600'}`}>
-                {s.computedAmount < 0 ? '−' : '+'} {currency} {fmt(Math.abs(s.computedAmount))}
-              </span>
+        <div className={`flex p-4 gap-8 ${hasSummary ? 'justify-between items-end' : 'justify-end'}`}>
+
+          {/* LEFT — column sums (only rendered when at least one Σ column is active) */}
+          {hasSummary && (
+            <div className="space-y-1.5 pb-1">
+              {colSums.map(entry => (
+                <div key={entry.id} className="flex items-baseline gap-3 text-xs">
+                  <span className="text-slate-500 font-medium">{entry.label}</span>
+                  <span className="tabular-nums font-semibold text-slate-800">{fmtNum(entry.sum)}</span>
+                  {entry.unit && <span className="text-slate-400 text-[11px]">{entry.unit}</span>}
+                </div>
+              ))}
             </div>
-          ))}
-          <div className="flex justify-between pt-2 mt-1 border-t-2 border-slate-800">
-            <span className="text-sm font-bold text-slate-800">FINAL TOTAL</span>
-            <span className="text-base font-bold text-slate-900 tabular-nums">{currency} {fmt(finalTotal)}</span>
+          )}
+
+          {/* RIGHT — financial totals: subtotal → steps → final total */}
+          <div className="space-y-1 flex-shrink-0" style={{ minWidth: 240 }}>
+            <div className="flex justify-between text-xs">
+              <span className="text-slate-600">Subtotal</span>
+              <span className="font-semibold text-slate-800 tabular-nums">{currency} {fmt(subtotal)}</span>
+            </div>
+            {steps.map(s => (
+              <div key={s.id} className="flex justify-between text-xs">
+                <span className="text-slate-500">
+                  {s.type === 'subtract' ? '−' : '+'} {s.name}
+                  {s.valueType === 'percentage' && <span className="ml-1 text-slate-400">({s.value}%)</span>}
+                </span>
+                <span className={`tabular-nums font-medium ${s.computedAmount < 0 ? 'text-red-600' : 'text-green-600'}`}>
+                  {s.computedAmount < 0 ? '−' : '+'} {currency} {fmt(Math.abs(s.computedAmount))}
+                </span>
+              </div>
+            ))}
+
+            {/* FINAL TOTAL — click the value to override it.  A small × button
+                resets the override back to the computed value.  In PDF-capture
+                mode the value is rendered as plain text (no input artifacts). */}
+            <div className="flex justify-between items-center pt-2 mt-1 border-t-2 border-slate-800">
+              <span className="text-sm font-bold text-slate-800">FINAL TOTAL</span>
+              {editable ? (
+                <div className="flex items-center gap-1">
+                  <span className="text-base font-bold text-slate-900">{currency}</span>
+                  <input
+                    type="number"
+                    value={finalTotalOverride !== null ? finalTotalOverride : finalTotal}
+                    onChange={e => {
+                      const v = parseFloat(e.target.value);
+                      onSetFinalTotalOverride(Number.isFinite(v) ? v : null);
+                    }}
+                    className="w-28 text-base font-bold text-slate-900 tabular-nums text-right bg-transparent border border-transparent rounded px-1 hover:border-slate-200 focus:border-blue-400 focus:ring-2 focus:ring-blue-500/20 focus:outline-none transition-colors"
+                    title="Click to manually override the final total; press Save to persist"
+                  />
+                  {finalTotalOverride !== null && (
+                    <button
+                      type="button"
+                      onClick={() => onSetFinalTotalOverride(null)}
+                      title="Reset to computed value"
+                      className="text-slate-400 hover:text-red-500 text-sm leading-none px-0.5 flex-shrink-0"
+                    >
+                      ×
+                    </button>
+                  )}
+                </div>
+              ) : (
+                <span className="text-base font-bold text-slate-900 tabular-nums">
+                  {currency} {fmt(finalTotalOverride !== null ? finalTotalOverride : finalTotal)}
+                </span>
+              )}
+            </div>
           </div>
+
         </div>
       </div>
 

@@ -255,6 +255,11 @@ export function registerProformaRoutes(app: Express): void {
       // any totalFormula override the user configured.
       const subtotal = computeSubtotal(items.map(toFRow), formulaCols, totalFormulaCfg ?? null);
       const { steps, finalTotal } = computeFinancials(subtotal, financials);
+      // If the user manually overrode the final total in the editor, honour it
+      // in the export. Otherwise fall back to the computed value.
+      const rawFto = (full as any).finalTotalOverride;
+      const effectiveFinalTotal: number =
+        rawFto != null && rawFto !== '' ? parseFloat(String(rawFto)) : finalTotal;
       const invoiceDate = full.date ? new Date(full.date).toLocaleDateString("en-GB", { day: "2-digit", month: "2-digit", year: "numeric" }) : new Date().toLocaleDateString("en-GB", { day: "2-digit", month: "2-digit", year: "numeric" });
       const invoicedTo = (full as any).shipTo?.trim() || "SAME AS CONSIGNEE";
       const fmt = (n: number) => n.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
@@ -561,6 +566,59 @@ export function registerProformaRoutes(app: Express): void {
         r++;
       }
 
+      // ─── COLUMN SUMMARY ROWS (optional) ───
+      // For each column the user toggled as "sum" (Σ button in the columns panel),
+      // compute the column total and render a lightweight row to the left of the
+      // financial totals — mirrors the client-side preview.
+      const summaryColIds: string[] = Array.isArray((full as any).summaryColumns)
+        ? (full as any).summaryColumns : [];
+      const computedFRows = items.map(toFRow);
+      const fmtN = (n: number) =>
+        n % 1 === 0
+          ? n.toLocaleString()
+          : n.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+      for (const colId of summaryColIds) {
+        let sumVal = 0;
+        let sumLabel = colId;
+        let sumUnit = '';
+        if (colId === 'quantity') {
+          sumLabel = 'Total Quantity';
+          sumVal = computedFRows.reduce((acc, fr) => acc + (Number.isFinite(fr.qty) ? fr.qty : 0), 0);
+        } else {
+          const colDef = (customCols as any[]).find(c => c.id === colId);
+          if (colDef) {
+            sumLabel = colDef.name || colId;
+            sumUnit = colDef.unit || '';
+            if (colDef.type === 'formula' && colDef.formula) {
+              sumVal = computedFRows.reduce((acc, fr) => {
+                const v = evaluateFormula(colDef.formula, fr, formulaCols, totalFormulaCfg ?? null, 0);
+                return acc + (Number.isFinite(v) ? v : 0);
+              }, 0);
+            } else {
+              sumVal = computedFRows.reduce((acc, fr) => {
+                const v = parseFloat(((fr.customValues ?? {}) as Record<string, string>)[colId] ?? '');
+                return acc + (Number.isFinite(v) ? v : 0);
+              }, 0);
+            }
+          }
+        }
+        const sumRow = ws.getRow(r);
+        sumRow.height = 18;
+        ws.mergeCells(r, 1, r, LABEL_END);
+        const sumLabelCell = ws.getCell(r, 1);
+        sumLabelCell.value = sumLabel;
+        sumLabelCell.font = { name: FONT_FAMILY, size: 8, color: { argb: MED } };
+        sumLabelCell.alignment = { vertical: 'middle', horizontal: 'right' };
+        sumLabelCell.border = { left: BORDER_DARK, top: BORDER_DASHED };
+        for (let c = 2; c <= LABEL_END; c++) ws.getCell(r, c).border = { top: BORDER_DASHED };
+        const sumValCell = ws.getCell(r, LAST_COL);
+        sumValCell.value = sumUnit ? `${fmtN(sumVal)} ${sumUnit}` : fmtN(sumVal);
+        sumValCell.font = { name: FONT_FAMILY, size: 8, color: { argb: DARK } };
+        sumValCell.alignment = { vertical: 'middle', horizontal: 'right' };
+        sumValCell.border = { right: BORDER_DARK, top: BORDER_DASHED };
+        r++;
+      }
+
       // ─── FINAL TOTAL ROW ───
       const totalRow = ws.getRow(r);
       totalRow.height = 24;
@@ -585,7 +643,7 @@ export function registerProformaRoutes(app: Express): void {
         ws.getCell(r, c).fill = { type: "pattern", pattern: "solid", fgColor: { argb: BG_HEADER } };
       }
       const grandTotalCell = ws.getCell(r, LAST_COL);
-      grandTotalCell.value = `${currency} ${fmt(finalTotal)}`;
+      grandTotalCell.value = `${currency} ${fmt(effectiveFinalTotal)}`;
       grandTotalCell.font = { name: FONT_FAMILY, size: 10, bold: true, color: { argb: DARK } };
       grandTotalCell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: BG_HEADER } };
       grandTotalCell.alignment = { vertical: "middle", horizontal: "right" };

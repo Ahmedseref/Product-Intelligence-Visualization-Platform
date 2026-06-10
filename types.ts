@@ -444,6 +444,10 @@ export interface ProformaData {
   // is entered manually. When set, the per-row quantity is computed from this
   // formula and feeds the row total / subtotal. See shared/proformaFormula.ts.
   quantityFormula?: string | null;
+  // Optional manual override for the computed final total.
+  finalTotalOverride?: number | null;
+  // Column ids selected for column-sum display in the invoice totals section.
+  summaryColumns?: string[] | null;
   // Versioning: version number (1 = original). Versions > 1 have a
   // parentProformaId linking them to the base invoice.
   version?: number | null;

@@ -451,6 +451,13 @@ export const proformas = pgTable("proformas", {
   // Name}) the per-row quantity is computed by evaluating it for each row, and
   // that computed quantity feeds the row total and subtotal.
   quantityFormula: text("quantity_formula"),
+  // Optional manual override for the computed final total. When set, the
+  // displayed and exported FINAL TOTAL uses this value instead of the
+  // result of subtotal ± financial steps.
+  finalTotalOverride: text("final_total_override"),
+  // Column ids whose values are summed and shown to the left of FINAL TOTAL.
+  // Useful for physical totals like total weight, total m², quantity, etc.
+  summaryColumns: jsonb("summary_columns").default([]),
   // Versioning: version number (1 = original, 2+ = revisions). The proformaId
   // encodes the version suffix (e.g. PI-0001-v2) but we store the integer
   // separately for easy sorting and max-version queries.
