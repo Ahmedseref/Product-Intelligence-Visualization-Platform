@@ -477,7 +477,7 @@ const ProductList: React.FC<ProductListProps> = ({
   const getAllCustomFieldKeys = (productsToExport: Product[]) => {
     const keys = new Set<string>();
     productsToExport.forEach(p => {
-      if (p.customFields) {
+      if (Array.isArray(p.customFields)) {
         p.customFields.forEach(cf => {
           const fieldDef = customFields.find(f => f.id === cf.fieldId);
           if (fieldDef) keys.add(fieldDef.name);
@@ -784,7 +784,7 @@ const ProductList: React.FC<ProductListProps> = ({
       const customFieldData = customFieldKeys.map(key => {
         const fieldDef = customFields.find(f => f.name === key);
         if (!fieldDef) return '';
-        const cf = p.customFields?.find(f => f.fieldId === fieldDef.id);
+        const cf = Array.isArray(p.customFields) ? p.customFields.find(f => f.fieldId === fieldDef.id) : undefined;
         return cf ? escapeCSV(cf.value) : '';
       });
       
@@ -816,7 +816,7 @@ const ProductList: React.FC<ProductListProps> = ({
       }
       
       const customFieldsObject: Record<string, string> = {};
-      if (p.customFields) {
+      if (Array.isArray(p.customFields)) {
         p.customFields.forEach(cf => {
           const fieldDef = customFields.find(f => f.id === cf.fieldId);
           if (fieldDef) customFieldsObject[fieldDef.name] = cf.value;
