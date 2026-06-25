@@ -797,7 +797,9 @@ const ProductList: React.FC<ProductListProps> = ({
     const a = document.createElement('a');
     a.href = url;
     a.download = `products_export_${new Date().toISOString().split('T')[0]}.csv`;
+    document.body.appendChild(a);
     a.click();
+    document.body.removeChild(a);
     URL.revokeObjectURL(url);
     setShowExportMenu(false);
   };
@@ -863,7 +865,9 @@ const ProductList: React.FC<ProductListProps> = ({
     const a = document.createElement('a');
     a.href = url;
     a.download = `products_export_${new Date().toISOString().split('T')[0]}.json`;
+    document.body.appendChild(a);
     a.click();
+    document.body.removeChild(a);
     URL.revokeObjectURL(url);
     setShowExportMenu(false);
   };
