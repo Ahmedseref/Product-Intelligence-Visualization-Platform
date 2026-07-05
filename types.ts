@@ -52,6 +52,26 @@ export interface Supplier {
   leadSource?: string;
   sourceQuality?: string;
   industryMainActivities?: string;
+  // Remaining Notion "Contact Connector" properties (full-fidelity mapping).
+  recordId?: string;
+  action?: string;
+  priority?: string;
+  paymentTerms?: string;
+  mobile2?: string;
+  pendingPayment?: string;
+  paidAmount?: number;
+  invoiceValue?: number;
+  reminder?: string;
+  updates?: string;
+  brand?: string[];
+  product?: string[];
+  result?: string[];
+  filesMedia?: { name: string; url: string }[];
+  tasksRelation?: string[];
+  dailyTasksConnector?: string[];
+  relatedDocs?: string[];
+  docsRelation?: string[];
+  notionRawProperties?: Record<string, any>;
   notionPageId?: string;
   notionLastEditedTime?: string;
   appLastEditedTime?: string;

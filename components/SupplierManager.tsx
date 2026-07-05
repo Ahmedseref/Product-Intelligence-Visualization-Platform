@@ -69,6 +69,10 @@ const SupplierManager: React.FC<SupplierManagerProps> = ({
     leadSource: '',
     sourceQuality: '',
     industryMainActivities: '',
+    mobile2: '',
+    action: '',
+    priority: '',
+    paymentTerms: '',
   });
 
   const filteredSuppliers = suppliers.filter(s =>
@@ -103,6 +107,10 @@ const SupplierManager: React.FC<SupplierManagerProps> = ({
         leadSource: formData.leadSource || undefined,
         sourceQuality: formData.sourceQuality || undefined,
         industryMainActivities: formData.industryMainActivities || undefined,
+        mobile2: formData.mobile2 || undefined,
+        action: formData.action || undefined,
+        priority: formData.priority || undefined,
+        paymentTerms: formData.paymentTerms || undefined,
       });
       setEditingSupplier(null);
     } else {
@@ -121,6 +129,10 @@ const SupplierManager: React.FC<SupplierManagerProps> = ({
         leadSource: formData.leadSource || undefined,
         sourceQuality: formData.sourceQuality || undefined,
         industryMainActivities: formData.industryMainActivities || undefined,
+        mobile2: formData.mobile2 || undefined,
+        action: formData.action || undefined,
+        priority: formData.priority || undefined,
+        paymentTerms: formData.paymentTerms || undefined,
         isActive: true,
       });
     }
@@ -139,6 +151,10 @@ const SupplierManager: React.FC<SupplierManagerProps> = ({
       leadSource: '',
       sourceQuality: '',
       industryMainActivities: '',
+      mobile2: '',
+      action: '',
+      priority: '',
+      paymentTerms: '',
     });
     setShowAddModal(false);
   };
@@ -159,6 +175,10 @@ const SupplierManager: React.FC<SupplierManagerProps> = ({
       leadSource: supplier.leadSource || '',
       sourceQuality: supplier.sourceQuality || '',
       industryMainActivities: supplier.industryMainActivities || '',
+      mobile2: supplier.mobile2 || '',
+      action: supplier.action || '',
+      priority: supplier.priority || '',
+      paymentTerms: supplier.paymentTerms || '',
     });
     setShowAddModal(true);
   };
@@ -186,6 +206,10 @@ const SupplierManager: React.FC<SupplierManagerProps> = ({
       leadSource: '',
       sourceQuality: '',
       industryMainActivities: '',
+      mobile2: '',
+      action: '',
+      priority: '',
+      paymentTerms: '',
     });
   };
 
@@ -340,6 +364,12 @@ const SupplierManager: React.FC<SupplierManagerProps> = ({
                       <span className="ml-1 px-2 py-1 inline-flex text-xs leading-5 font-semibold rounded-full bg-blue-50 text-blue-700" title="Synced with Notion">
                         Notion
                       </span>
+                    )}
+                    {supplier.action && (
+                      <div className="text-xs text-gray-500 mt-1">Action: {supplier.action}</div>
+                    )}
+                    {supplier.priority && (
+                      <div className="text-xs text-gray-500">Priority: {supplier.priority}</div>
                     )}
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
@@ -516,6 +546,70 @@ const SupplierManager: React.FC<SupplierManagerProps> = ({
                   className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                 />
               </div>
+
+              <div className="pt-2 border-t">
+                <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">Notion Details</p>
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Mobile 2</label>
+                    <input
+                      type="tel"
+                      value={formData.mobile2}
+                      onChange={(e) => setFormData({ ...formData, mobile2: e.target.value })}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Action</label>
+                    <input
+                      type="text"
+                      value={formData.action}
+                      onChange={(e) => setFormData({ ...formData, action: e.target.value })}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                    />
+                  </div>
+                </div>
+                <div className="grid grid-cols-2 gap-4 mt-4">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Priority</label>
+                    <input
+                      type="text"
+                      value={formData.priority}
+                      onChange={(e) => setFormData({ ...formData, priority: e.target.value })}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Payment Terms</label>
+                    <input
+                      type="text"
+                      value={formData.paymentTerms}
+                      onChange={(e) => setFormData({ ...formData, paymentTerms: e.target.value })}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                    />
+                  </div>
+                </div>
+                {editingSupplier && (editingSupplier.paidAmount != null || editingSupplier.invoiceValue != null || editingSupplier.pendingPayment) && (
+                  <div className="mt-4 grid grid-cols-3 gap-4 text-sm text-gray-600 bg-gray-50 rounded-lg p-3">
+                    <div>
+                      <span className="block text-xs text-gray-400">Invoice Value</span>
+                      {editingSupplier.invoiceValue ?? '-'}
+                    </div>
+                    <div>
+                      <span className="block text-xs text-gray-400">Paid Amount</span>
+                      {editingSupplier.paidAmount ?? '-'}
+                    </div>
+                    <div>
+                      <span className="block text-xs text-gray-400">Pending Payment</span>
+                      {editingSupplier.pendingPayment ?? '-'}
+                    </div>
+                  </div>
+                )}
+                <p className="text-xs text-gray-400 mt-2">
+                  Read-only fields synced from Notion (e.g. relations, files, formulas) are preserved automatically and not editable here.
+                </p>
+              </div>
+
               <div className="flex justify-end gap-3 pt-4 border-t">
                 <button type="button" onClick={closeModal} className="px-4 py-2 text-gray-700 bg-gray-100 rounded-lg hover:bg-gray-200">
                   Cancel

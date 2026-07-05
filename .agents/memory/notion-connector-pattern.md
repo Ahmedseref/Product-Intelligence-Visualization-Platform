@@ -14,3 +14,7 @@ When integrating with a user's Notion workspace via the Replit Notion connector 
 **Why:** the Notion connector is a fresh, less-documented integration path in this codebase (first connector-based server module), and the token-caching and per-database-sharing gotchas are easy to miss and cause silent auth failures.
 
 **How to apply:** any time you add server-side sync against a user's Notion workspace through the Replit connector.
+
+- When adding newly-mapped columns to an already-synced table (e.g. expanding field coverage after the initial sync shipped), a normal `pullFromNotion()` run will skip already-synced pages because the conflict check compares `notionLastEditedTime` to the locally stored value, which hasn't changed — so the new columns stay empty for existing rows. Run a one-off backfill (temporarily export the internal page-fetch + mapping functions, iterate all existing linked rows, and `UPDATE` just the new columns directly) instead of relying on the regular sync loop to populate them.
+
+**How to apply (backfill):** any time you extend field mapping on an already-populated Notion (or similar) sync integration and need existing rows to pick up the new columns immediately rather than waiting for their next real edit in the source system.

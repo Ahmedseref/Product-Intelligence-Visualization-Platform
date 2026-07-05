@@ -36,16 +36,39 @@ async function notionProxy(path: string, init: RequestInit = {}): Promise<Respon
 
 // ---- Notion <-> suppliers field mapping ----
 //
-// Notion property name -> suppliers column
-//   Lead Name (rich_text)                        -> contactName
-//   Company Name (rich_text)                      -> name
-//   Lead Position (rich_text)                      -> leadPosition
-//   Email (email)                                   -> contactEmail
-//   Mobile (phone_number)                           -> contactPhone
-//   Lead Source (select)                            -> leadSource
-//   Source Quality (select)                         -> sourceQuality
-//   Country (select)                                -> country
-//   Industry Connector (Main Activities) (multi_select) -> industryMainActivities
+// Notion property name -> suppliers column (every property in the
+// "Contact Connector" database is mapped for full fidelity; see
+// notionRawProperties for a verbatim copy of everything as a safety net).
+//   Record Id (title)                                    -> recordId
+//   Lead Name (rich_text)                                -> contactName
+//   Company Name (rich_text)                              -> name
+//   Lead Position (rich_text)                              -> leadPosition
+//   Email (email)                                           -> contactEmail
+//   Mobile (phone_number)                                   -> contactPhone
+//   Mobile 2 (rich_text)                                    -> mobile2
+//   Lead Source (select)                                    -> leadSource
+//   Source Quality (select)                                 -> sourceQuality
+//   Country (select)                                        -> country
+//   Industry Connector (Main Activities) (multi_select)     -> industryMainActivities
+//   Action (select)                                         -> action
+//   Priority (select)                                       -> priority
+//   Payment Terms (select)                                  -> paymentTerms
+//   Pending Payment (formula)                               -> pendingPayment
+//   Paid amount (number)                                    -> paidAmount
+//   Invoice Value (number)                                  -> invoiceValue
+//   Reminder (date)                                         -> reminder
+//   Notes (rich_text)                                       -> notes
+//   Updates (rich_text)                                     -> updates
+//   Website (url)                                           -> website
+//   Brand (multi_select)                                    -> brand
+//   Product (multi_select)                                  -> product
+//   Result (multi_select)                                   -> result
+//   Files & media (files)                                   -> filesMedia
+//   Tasks (relation)                                        -> tasksRelation
+//   Daily Tasks Connector (relation)                        -> dailyTasksConnector
+//   Related to Docs (🤩 Leads_2024_02_09) (relation)        -> relatedDocs
+//   Docs (relation)                                         -> docsRelation
+//   Date (last_edited_time) — Notion's own metadata, not separately stored (redundant with notionLastEditedTime)
 
 function getRichText(prop: any): string | undefined {
   const arr = prop?.rich_text || prop?.title;
@@ -57,10 +80,15 @@ function getSelect(prop: any): string | undefined {
   return prop?.select?.name || undefined;
 }
 
-function getMultiSelect(prop: any): string | undefined {
+function getMultiSelectArray(prop: any): string[] {
   const arr = prop?.multi_select;
-  if (!Array.isArray(arr) || arr.length === 0) return undefined;
-  return arr.map((o: any) => o.name).join(", ");
+  if (!Array.isArray(arr)) return [];
+  return arr.map((o: any) => o.name);
+}
+
+function getMultiSelect(prop: any): string | undefined {
+  const names = getMultiSelectArray(prop);
+  return names.length > 0 ? names.join(", ") : undefined;
 }
 
 function getEmail(prop: any): string | undefined {
@@ -71,26 +99,93 @@ function getPhone(prop: any): string | undefined {
   return prop?.phone_number || undefined;
 }
 
-// Maps a Notion page's properties into a partial supplier row.
+function getUrl(prop: any): string | undefined {
+  return prop?.url || undefined;
+}
+
+function getNumber(prop: any): number | undefined {
+  return typeof prop?.number === "number" ? prop.number : undefined;
+}
+
+function getDate(prop: any): Date | undefined {
+  const start = prop?.date?.start;
+  return start ? new Date(start) : undefined;
+}
+
+function getFormulaText(prop: any): string | undefined {
+  const f = prop?.formula;
+  if (!f) return undefined;
+  if (f.type === "string") return f.string ?? undefined;
+  if (f.type === "number") return f.number != null ? String(f.number) : undefined;
+  if (f.type === "boolean") return f.boolean != null ? String(f.boolean) : undefined;
+  if (f.type === "date") return f.date?.start ?? undefined;
+  return undefined;
+}
+
+function getRelationIds(prop: any): string[] {
+  const arr = prop?.relation;
+  if (!Array.isArray(arr)) return [];
+  return arr.map((r: any) => r.id);
+}
+
+function getFiles(prop: any): { name: string; url: string }[] {
+  const arr = prop?.files;
+  if (!Array.isArray(arr)) return [];
+  return arr.map((f: any) => ({
+    name: f.name || "",
+    url: f.file?.url || f.external?.url || "",
+  }));
+}
+
+// Exported for one-off backfills/tooling (e.g. populating newly-added
+// mapped columns for suppliers that were already synced before those
+// columns existed, without re-triggering conflict resolution).
+export { queryAllPages, notionPageToSupplier };
+
+// Maps a Notion page's properties into a partial supplier row. Every
+// property in the source database is captured — either into a dedicated
+// typed column, or (always) into notionRawProperties as a verbatim copy.
 function notionPageToSupplier(page: NotionPage): Partial<InsertSupplier> {
   const props = page.properties;
   return {
+    recordId: getRichText(props["Record Id"]),
     contactName: getRichText(props["Lead Name"]),
     name: getRichText(props["Company Name"]) || getRichText(props["Lead Name"]) || "Unnamed Contact",
     leadPosition: getRichText(props["Lead Position"]),
     contactEmail: getEmail(props["Email"]),
     contactPhone: getPhone(props["Mobile"]),
+    mobile2: getRichText(props["Mobile 2"]),
     leadSource: getSelect(props["Lead Source"]),
     sourceQuality: getSelect(props["Source Quality"]),
     country: getSelect(props["Country"]),
     industryMainActivities: getMultiSelect(props["Industry Connector (Main Activities)"]),
+    action: getSelect(props["Action"]),
+    priority: getSelect(props["Priority"]),
+    paymentTerms: getSelect(props["Payment Terms"]),
+    pendingPayment: getFormulaText(props["Pending Payment"]),
+    paidAmount: getNumber(props["Paid amount"]),
+    invoiceValue: getNumber(props["Invoice Value"]),
+    reminder: getDate(props["Reminder"]),
+    notes: getRichText(props["Notes"]),
+    updates: getRichText(props["Updates"]),
+    website: getUrl(props["Website"]),
+    brand: getMultiSelectArray(props["Brand"]),
+    product: getMultiSelectArray(props["Product"]),
+    result: getMultiSelectArray(props["Result"]),
+    filesMedia: getFiles(props["Files & media"]),
+    tasksRelation: getRelationIds(props["Tasks"]),
+    dailyTasksConnector: getRelationIds(props["Daily Tasks Connector"]),
+    relatedDocs: getRelationIds(props["Related to Docs (🤩 Leads_2024_02_09)"]),
+    docsRelation: getRelationIds(props["Docs"]),
+    notionRawProperties: props,
     notionPageId: page.id,
     notionLastEditedTime: new Date(page.last_edited_time),
   };
 }
 
 // Maps a supplier row into Notion property-update payload (only the
-// columns we own — never touches Notion-only fields like Action/Tasks/etc).
+// columns we own — leaves relation/formula-derived Notion-only properties
+// untouched since those are computed/linked on Notion's side).
 function supplierToNotionProperties(supplier: Supplier): Record<string, any> {
   const props: Record<string, any> = {};
   if (supplier.contactName !== null && supplier.contactName !== undefined) {
@@ -108,6 +203,9 @@ function supplierToNotionProperties(supplier: Supplier): Record<string, any> {
   if (supplier.contactPhone !== null && supplier.contactPhone !== undefined) {
     props["Mobile"] = { phone_number: supplier.contactPhone || null };
   }
+  if (supplier.mobile2 !== null && supplier.mobile2 !== undefined) {
+    props["Mobile 2"] = { rich_text: [{ text: { content: supplier.mobile2 } }] };
+  }
   if (supplier.leadSource !== null && supplier.leadSource !== undefined) {
     props["Lead Source"] = supplier.leadSource ? { select: { name: supplier.leadSource } } : { select: null };
   }
@@ -124,6 +222,45 @@ function supplierToNotionProperties(supplier: Supplier): Record<string, any> {
       .filter(Boolean);
     props["Industry Connector (Main Activities)"] = { multi_select: names.map((name) => ({ name })) };
   }
+  if (supplier.action !== null && supplier.action !== undefined) {
+    props["Action"] = supplier.action ? { select: { name: supplier.action } } : { select: null };
+  }
+  if (supplier.priority !== null && supplier.priority !== undefined) {
+    props["Priority"] = supplier.priority ? { select: { name: supplier.priority } } : { select: null };
+  }
+  if (supplier.paymentTerms !== null && supplier.paymentTerms !== undefined) {
+    props["Payment Terms"] = supplier.paymentTerms ? { select: { name: supplier.paymentTerms } } : { select: null };
+  }
+  if (supplier.paidAmount !== null && supplier.paidAmount !== undefined) {
+    props["Paid amount"] = { number: supplier.paidAmount };
+  }
+  if (supplier.invoiceValue !== null && supplier.invoiceValue !== undefined) {
+    props["Invoice Value"] = { number: supplier.invoiceValue };
+  }
+  if (supplier.reminder) {
+    props["Reminder"] = { date: { start: new Date(supplier.reminder).toISOString() } };
+  }
+  if (supplier.notes !== null && supplier.notes !== undefined) {
+    props["Notes"] = { rich_text: [{ text: { content: supplier.notes } }] };
+  }
+  if (supplier.updates !== null && supplier.updates !== undefined) {
+    props["Updates"] = { rich_text: [{ text: { content: supplier.updates } }] };
+  }
+  if (supplier.website !== null && supplier.website !== undefined) {
+    props["Website"] = { url: supplier.website || null };
+  }
+  if (Array.isArray(supplier.brand)) {
+    props["Brand"] = { multi_select: supplier.brand.map((name) => ({ name })) };
+  }
+  if (Array.isArray(supplier.product)) {
+    props["Product"] = { multi_select: supplier.product.map((name) => ({ name })) };
+  }
+  if (Array.isArray(supplier.result)) {
+    props["Result"] = { multi_select: supplier.result.map((name) => ({ name })) };
+  }
+  // Pending Payment (formula), Tasks/Daily Tasks Connector/Related to
+  // Docs/Docs (relations) and Files & media are read-only from the app's
+  // side — Notion computes/links these, so we never write them back.
   return props;
 }
 
@@ -194,10 +331,31 @@ export async function pullFromNotion(): Promise<{ count: number }> {
           leadPosition: mapped.leadPosition,
           contactEmail: mapped.contactEmail,
           contactPhone: mapped.contactPhone,
+          mobile2: mapped.mobile2,
           leadSource: mapped.leadSource,
           sourceQuality: mapped.sourceQuality,
           country: mapped.country,
           industryMainActivities: mapped.industryMainActivities,
+          recordId: mapped.recordId,
+          action: mapped.action,
+          priority: mapped.priority,
+          paymentTerms: mapped.paymentTerms,
+          pendingPayment: mapped.pendingPayment,
+          paidAmount: mapped.paidAmount,
+          invoiceValue: mapped.invoiceValue,
+          reminder: mapped.reminder,
+          notes: mapped.notes,
+          updates: mapped.updates,
+          website: mapped.website,
+          brand: mapped.brand,
+          product: mapped.product,
+          result: mapped.result,
+          filesMedia: mapped.filesMedia,
+          tasksRelation: mapped.tasksRelation,
+          dailyTasksConnector: mapped.dailyTasksConnector,
+          relatedDocs: mapped.relatedDocs,
+          docsRelation: mapped.docsRelation,
+          notionRawProperties: mapped.notionRawProperties,
           notionPageId: mapped.notionPageId,
           notionLastEditedTime: mapped.notionLastEditedTime,
           appLastEditedTime: mapped.notionLastEditedTime,
@@ -230,10 +388,31 @@ export async function pullFromNotion(): Promise<{ count: number }> {
           leadPosition: mapped.leadPosition,
           contactEmail: mapped.contactEmail,
           contactPhone: mapped.contactPhone,
+          mobile2: mapped.mobile2,
           leadSource: mapped.leadSource,
           sourceQuality: mapped.sourceQuality,
           country: mapped.country,
           industryMainActivities: mapped.industryMainActivities,
+          recordId: mapped.recordId,
+          action: mapped.action,
+          priority: mapped.priority,
+          paymentTerms: mapped.paymentTerms,
+          pendingPayment: mapped.pendingPayment,
+          paidAmount: mapped.paidAmount,
+          invoiceValue: mapped.invoiceValue,
+          reminder: mapped.reminder,
+          notes: mapped.notes,
+          updates: mapped.updates,
+          website: mapped.website,
+          brand: mapped.brand,
+          product: mapped.product,
+          result: mapped.result,
+          filesMedia: mapped.filesMedia,
+          tasksRelation: mapped.tasksRelation,
+          dailyTasksConnector: mapped.dailyTasksConnector,
+          relatedDocs: mapped.relatedDocs,
+          docsRelation: mapped.docsRelation,
+          notionRawProperties: mapped.notionRawProperties,
           notionLastEditedTime: mapped.notionLastEditedTime,
           appLastEditedTime: mapped.notionLastEditedTime,
           updatedAt: new Date(),
