@@ -78,8 +78,25 @@ export interface SupplierData {
   website?: string;
   notes?: string;
   isActive?: boolean;
+  leadPosition?: string;
+  leadSource?: string;
+  sourceQuality?: string;
+  industryMainActivities?: string;
+  notionPageId?: string;
+  notionLastEditedTime?: string;
+  appLastEditedTime?: string;
   createdAt?: string;
   updatedAt?: string;
+}
+
+export interface NotionSyncStatus {
+  lastPullAt: string | null;
+  lastPushAt: string | null;
+  pullInProgress: boolean;
+  pushInProgress: boolean;
+  lastPullCount: number | null;
+  lastPushCount: number | null;
+  lastError: string | null;
 }
 
 export interface SupplierProductData {
@@ -251,6 +268,24 @@ export const api = {
       method: 'DELETE',
     });
     if (!res.ok) throw new Error('Failed to delete supplier');
+  },
+
+  async notionPull(): Promise<{ success: boolean; count: number }> {
+    const res = await authFetch(`${API_BASE}/notion/sync/pull`, { method: 'POST' });
+    if (!res.ok) throw new Error('Failed to pull from Notion');
+    return res.json();
+  },
+
+  async notionPush(): Promise<{ success: boolean; count: number }> {
+    const res = await authFetch(`${API_BASE}/notion/sync/push`, { method: 'POST' });
+    if (!res.ok) throw new Error('Failed to push to Notion');
+    return res.json();
+  },
+
+  async getNotionSyncStatus(): Promise<NotionSyncStatus> {
+    const res = await authFetch(`${API_BASE}/notion/sync/status`);
+    if (!res.ok) throw new Error('Failed to fetch Notion sync status');
+    return res.json();
   },
 
   async getSupplierProducts(): Promise<SupplierProductData[]> {

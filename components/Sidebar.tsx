@@ -25,7 +25,7 @@ const Sidebar: React.FC<SidebarProps> = ({ currentView, setView, user }) => {
   const menuItems: { id: ViewMode; label: string; icon: React.ReactNode }[] = [
     { id: 'technical-intelligence', label: 'Intelligence Hub', icon: ICONS.TechIntelligence },
     { id: 'taxonomy-manager', label: 'Taxonomy Builder', icon: ICONS.Tree },
-    { id: 'suppliers', label: 'Suppliers', icon: ICONS.Users },
+    { id: 'suppliers', label: 'Contact Network', icon: ICONS.Users },
     { id: 'inventory', label: 'Product Inventory', icon: ICONS.Inventory },
     { id: 'system-builder', label: 'System Builder', icon: ICONS.SystemBuilder },
     { id: 'document-memory', label: 'Document Memory', icon: ICONS.DocumentMemory },

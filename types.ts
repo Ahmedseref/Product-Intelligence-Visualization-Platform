@@ -46,6 +46,15 @@ export interface Supplier {
   website?: string;
   notes?: string;
   isActive: boolean;
+  // Notion "Contact Connector" sync fields — populated for contacts
+  // sourced from (or pushed to) the linked Notion database.
+  leadPosition?: string;
+  leadSource?: string;
+  sourceQuality?: string;
+  industryMainActivities?: string;
+  notionPageId?: string;
+  notionLastEditedTime?: string;
+  appLastEditedTime?: string;
   createdAt: string;
   updatedAt: string;
 }

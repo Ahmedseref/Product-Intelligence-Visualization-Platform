@@ -8,6 +8,7 @@ import * as backupService from "./backupService";
 import * as stockCodeService from "./stockCodeService";
 import { authMiddleware, requirePasswordChange } from "./authRoutes";
 import { refreshState } from "./refreshState";
+import { pullFromNotion, pushToNotion, notionSyncStatus } from "./notionSync";
 
 // Walk tree_nodes from a leaf nodeId up to the root, returning the names AND
 // branch codes encountered. The qualification engine matches against either,
@@ -37,6 +38,7 @@ export function registerRoutes(app: Express): void {
   app.use("/api/tree-nodes", authMiddleware, requirePasswordChange);
   app.use("/api/products", authMiddleware, requirePasswordChange);
   app.use("/api/suppliers", authMiddleware, requirePasswordChange);
+  app.use("/api/notion", authMiddleware, requirePasswordChange);
   app.use("/api/custom-fields", authMiddleware, requirePasswordChange);
   app.use("/api/usage-areas", authMiddleware, requirePasswordChange);
   app.use("/api/seed", authMiddleware, requirePasswordChange);
@@ -571,6 +573,32 @@ export function registerRoutes(app: Express): void {
       console.error("Error deleting supplier:", error);
       res.status(500).json({ error: "Failed to delete supplier" });
     }
+  });
+
+  app.post("/api/notion/sync/pull", async (req, res) => {
+    try {
+      const result = await pullFromNotion();
+      refreshState.trigger();
+      res.json({ success: true, count: result.count });
+    } catch (error: any) {
+      console.error("Error pulling from Notion:", error);
+      res.status(500).json({ success: false, error: error.message || "Failed to pull from Notion" });
+    }
+  });
+
+  app.post("/api/notion/sync/push", async (req, res) => {
+    try {
+      const result = await pushToNotion();
+      refreshState.trigger();
+      res.json({ success: true, count: result.count });
+    } catch (error: any) {
+      console.error("Error pushing to Notion:", error);
+      res.status(500).json({ success: false, error: error.message || "Failed to push to Notion" });
+    }
+  });
+
+  app.get("/api/notion/sync/status", async (req, res) => {
+    res.json(notionSyncStatus);
   });
 
   app.get("/api/supplier-products", async (req, res) => {

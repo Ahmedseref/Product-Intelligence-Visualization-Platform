@@ -266,6 +266,13 @@ const App: React.FC = () => {
         website: s.website || undefined,
         notes: s.notes || undefined,
         isActive: s.isActive ?? true,
+        leadPosition: s.leadPosition || undefined,
+        leadSource: s.leadSource || undefined,
+        sourceQuality: s.sourceQuality || undefined,
+        industryMainActivities: s.industryMainActivities || undefined,
+        notionPageId: s.notionPageId || undefined,
+        notionLastEditedTime: s.notionLastEditedTime || undefined,
+        appLastEditedTime: s.appLastEditedTime || undefined,
         createdAt: s.createdAt || new Date().toISOString(),
         updatedAt: s.updatedAt || new Date().toISOString(),
       })));
@@ -549,6 +556,10 @@ const App: React.FC = () => {
         website: newSupplier.website,
         notes: newSupplier.notes,
         isActive: newSupplier.isActive,
+        leadPosition: newSupplier.leadPosition,
+        leadSource: newSupplier.leadSource,
+        sourceQuality: newSupplier.sourceQuality,
+        industryMainActivities: newSupplier.industryMainActivities,
       });
       setSuppliers(prev => [...prev, newSupplier]);
     } catch (err) {
@@ -570,6 +581,10 @@ const App: React.FC = () => {
         website: updates.website,
         notes: updates.notes,
         isActive: updates.isActive,
+        leadPosition: updates.leadPosition,
+        leadSource: updates.leadSource,
+        sourceQuality: updates.sourceQuality,
+        industryMainActivities: updates.industryMainActivities,
       });
       setSuppliers(prev => prev.map(s => s.id === id ? { ...s, ...updates, updatedAt: new Date().toISOString() } : s));
     } catch (err) {

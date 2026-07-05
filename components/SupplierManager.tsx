@@ -1,7 +1,7 @@
-import React, { useState, useCallback } from 'react';
-import { Plus, Pencil, Trash2, Building2, Globe, Mail, Phone, X, Check, Search, Tag, Sparkles } from 'lucide-react';
+import React, { useState, useCallback, useEffect } from 'react';
+import { Plus, Pencil, Trash2, Building2, Globe, Mail, Phone, X, Check, Search, Tag, Sparkles, RefreshCw, UploadCloud } from 'lucide-react';
 import { Supplier } from '../types';
-import { api } from '../client/api';
+import { api, NotionSyncStatus } from '../client/api';
 import { useEscapeKey } from '../hooks/useEscapeKey';
 
 interface SupplierManagerProps {
@@ -20,6 +20,35 @@ const SupplierManager: React.FC<SupplierManagerProps> = ({
   const [showAddModal, setShowAddModal] = useState(false);
   const [editingSupplier, setEditingSupplier] = useState<Supplier | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
+  const [syncStatus, setSyncStatus] = useState<NotionSyncStatus | null>(null);
+  const [isPushing, setIsPushing] = useState(false);
+
+  const refreshSyncStatus = useCallback(async () => {
+    try {
+      const status = await api.getNotionSyncStatus();
+      setSyncStatus(status);
+    } catch (e) {
+      // Non-fatal — sync status bar simply stays hidden/stale
+    }
+  }, []);
+
+  useEffect(() => {
+    refreshSyncStatus();
+    const interval = setInterval(refreshSyncStatus, 15000);
+    return () => clearInterval(interval);
+  }, [refreshSyncStatus]);
+
+  const handlePushToNotion = async () => {
+    setIsPushing(true);
+    try {
+      await api.notionPush();
+    } catch (e) {
+      console.error('Failed to push to Notion:', e);
+    } finally {
+      setIsPushing(false);
+      refreshSyncStatus();
+    }
+  };
 
   const escCloseModal = useCallback(() => {
     setShowAddModal(false);
@@ -36,6 +65,10 @@ const SupplierManager: React.FC<SupplierManagerProps> = ({
     address: '',
     website: '',
     notes: '',
+    leadPosition: '',
+    leadSource: '',
+    sourceQuality: '',
+    industryMainActivities: '',
   });
 
   const filteredSuppliers = suppliers.filter(s =>
@@ -66,6 +99,10 @@ const SupplierManager: React.FC<SupplierManagerProps> = ({
         address: formData.address || undefined,
         website: formData.website || undefined,
         notes: formData.notes || undefined,
+        leadPosition: formData.leadPosition || undefined,
+        leadSource: formData.leadSource || undefined,
+        sourceQuality: formData.sourceQuality || undefined,
+        industryMainActivities: formData.industryMainActivities || undefined,
       });
       setEditingSupplier(null);
     } else {
@@ -80,6 +117,10 @@ const SupplierManager: React.FC<SupplierManagerProps> = ({
         address: formData.address || undefined,
         website: formData.website || undefined,
         notes: formData.notes || undefined,
+        leadPosition: formData.leadPosition || undefined,
+        leadSource: formData.leadSource || undefined,
+        sourceQuality: formData.sourceQuality || undefined,
+        industryMainActivities: formData.industryMainActivities || undefined,
         isActive: true,
       });
     }
@@ -94,6 +135,10 @@ const SupplierManager: React.FC<SupplierManagerProps> = ({
       address: '',
       website: '',
       notes: '',
+      leadPosition: '',
+      leadSource: '',
+      sourceQuality: '',
+      industryMainActivities: '',
     });
     setShowAddModal(false);
   };
@@ -110,12 +155,16 @@ const SupplierManager: React.FC<SupplierManagerProps> = ({
       address: supplier.address || '',
       website: supplier.website || '',
       notes: supplier.notes || '',
+      leadPosition: supplier.leadPosition || '',
+      leadSource: supplier.leadSource || '',
+      sourceQuality: supplier.sourceQuality || '',
+      industryMainActivities: supplier.industryMainActivities || '',
     });
     setShowAddModal(true);
   };
 
   const handleDelete = (id: string) => {
-    if (confirm('Are you sure you want to delete this supplier?')) {
+    if (confirm('Are you sure you want to delete this contact?')) {
       onDeleteSupplier(id);
     }
   };
@@ -133,6 +182,10 @@ const SupplierManager: React.FC<SupplierManagerProps> = ({
       address: '',
       website: '',
       notes: '',
+      leadPosition: '',
+      leadSource: '',
+      sourceQuality: '',
+      industryMainActivities: '',
     });
   };
 
@@ -150,16 +203,41 @@ const SupplierManager: React.FC<SupplierManagerProps> = ({
     <div className="p-6">
       <div className="flex justify-between items-center mb-6">
         <div>
-          <h1 className="text-2xl font-bold text-gray-800">Supplier Management</h1>
-          <p className="text-gray-600 mt-1">Manage your supplier database</p>
+          <h1 className="text-2xl font-bold text-gray-800">Contact Network</h1>
+          <p className="text-gray-600 mt-1">Manage your contacts, synced with Notion</p>
         </div>
-        <button
-          onClick={() => setShowAddModal(true)}
-          className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
-        >
-          <Plus size={20} />
-          Add Supplier
-        </button>
+        <div className="flex items-center gap-2">
+          <button
+            onClick={handlePushToNotion}
+            disabled={isPushing}
+            className="flex items-center gap-2 px-4 py-2 bg-slate-700 text-white rounded-lg hover:bg-slate-800 transition-colors disabled:opacity-60"
+            title="Push local changes to Notion"
+          >
+            <UploadCloud size={18} className={isPushing ? 'animate-pulse' : ''} />
+            {isPushing ? 'Pushing...' : 'Push to Notion'}
+          </button>
+          <button
+            onClick={() => setShowAddModal(true)}
+            className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
+          >
+            <Plus size={20} />
+            Add Contact
+          </button>
+        </div>
+      </div>
+
+      <div className="mb-4 flex items-center gap-2 text-xs text-gray-500 bg-gray-50 border border-gray-200 rounded-lg px-3 py-2">
+        <RefreshCw size={14} className={(syncStatus?.pullInProgress || syncStatus?.pushInProgress) ? 'animate-spin text-blue-500' : 'text-gray-400'} />
+        {syncStatus ? (
+          <span>
+            {(syncStatus.pullInProgress || syncStatus.pushInProgress) ? 'Syncing with Notion…' : 'Notion sync'}
+            {syncStatus.lastPullAt && ` · Last pull: ${new Date(syncStatus.lastPullAt).toLocaleString()}${syncStatus.lastPullCount != null ? ` (${syncStatus.lastPullCount} updated)` : ''}`}
+            {syncStatus.lastPushAt && ` · Last push: ${new Date(syncStatus.lastPushAt).toLocaleString()}${syncStatus.lastPushCount != null ? ` (${syncStatus.lastPushCount} pushed)` : ''}`}
+            {syncStatus.lastError && <span className="text-red-500"> · Error: {syncStatus.lastError}</span>}
+          </span>
+        ) : (
+          <span>Notion sync status unavailable</span>
+        )}
       </div>
 
       <div className="mb-4">
@@ -167,7 +245,7 @@ const SupplierManager: React.FC<SupplierManagerProps> = ({
           <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" size={20} />
           <input
             type="text"
-            placeholder="Search suppliers..."
+            placeholder="Search contacts..."
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
             className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
@@ -180,10 +258,12 @@ const SupplierManager: React.FC<SupplierManagerProps> = ({
           <thead className="bg-gray-50">
             <tr>
               <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">ID</th>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Supplier Name</th>
+              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Company Name</th>
               <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Code</th>
               <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Country</th>
               <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Contact</th>
+              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Lead Info</th>
+              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Industry</th>
               <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
               <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
             </tr>
@@ -191,10 +271,10 @@ const SupplierManager: React.FC<SupplierManagerProps> = ({
           <tbody className="bg-white divide-y divide-gray-200">
             {filteredSuppliers.length === 0 ? (
               <tr>
-                <td colSpan={7} className="px-6 py-12 text-center text-gray-500">
+                <td colSpan={9} className="px-6 py-12 text-center text-gray-500">
                   <Building2 size={48} className="mx-auto mb-4 text-gray-300" />
-                  <p className="text-lg font-medium">No suppliers found</p>
-                  <p className="text-sm">Add your first supplier to get started</p>
+                  <p className="text-lg font-medium">No contacts found</p>
+                  <p className="text-sm">Add your first contact to get started</p>
                 </td>
               </tr>
             ) : (
@@ -241,9 +321,26 @@ const SupplierManager: React.FC<SupplierManagerProps> = ({
                     )}
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap">
+                    <div className="text-xs text-gray-700">{supplier.leadPosition || '-'}</div>
+                    {supplier.leadSource && (
+                      <div className="text-xs text-gray-500">Source: {supplier.leadSource}</div>
+                    )}
+                    {supplier.sourceQuality && (
+                      <div className="text-xs text-gray-500">Quality: {supplier.sourceQuality}</div>
+                    )}
+                  </td>
+                  <td className="px-6 py-4 whitespace-nowrap text-xs text-gray-600 max-w-[160px] truncate" title={supplier.industryMainActivities || ''}>
+                    {supplier.industryMainActivities || '-'}
+                  </td>
+                  <td className="px-6 py-4 whitespace-nowrap">
                     <span className={`px-2 py-1 inline-flex text-xs leading-5 font-semibold rounded-full ${supplier.isActive ? 'bg-green-100 text-green-800' : 'bg-gray-100 text-gray-800'}`}>
                       {supplier.isActive ? 'Active' : 'Inactive'}
                     </span>
+                    {supplier.notionPageId && (
+                      <span className="ml-1 px-2 py-1 inline-flex text-xs leading-5 font-semibold rounded-full bg-blue-50 text-blue-700" title="Synced with Notion">
+                        Notion
+                      </span>
+                    )}
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
                     <button onClick={() => handleEdit(supplier)} className="text-blue-600 hover:text-blue-900 mr-3">
@@ -261,21 +358,21 @@ const SupplierManager: React.FC<SupplierManagerProps> = ({
       </div>
 
       <div className="mt-4 text-sm text-gray-500">
-        Total: {filteredSuppliers.length} supplier{filteredSuppliers.length !== 1 ? 's' : ''}
+        Total: {filteredSuppliers.length} contact{filteredSuppliers.length !== 1 ? 's' : ''}
       </div>
 
       {showAddModal && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
           <div className="bg-white rounded-lg shadow-xl w-full max-w-lg mx-4">
             <div className="flex justify-between items-center p-4 border-b">
-              <h2 className="text-lg font-semibold">{editingSupplier ? 'Edit Supplier' : 'Add New Supplier'}</h2>
+              <h2 className="text-lg font-semibold">{editingSupplier ? 'Edit Contact' : 'Add New Contact'}</h2>
               <button onClick={closeModal} className="text-gray-500 hover:text-gray-700">
                 <X size={20} />
               </button>
             </div>
             <form onSubmit={handleSubmit} className="p-4 space-y-4">
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Supplier Name *</label>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Company Name *</label>
                 <input
                   type="text"
                   value={formData.name}
@@ -285,7 +382,7 @@ const SupplierManager: React.FC<SupplierManagerProps> = ({
                 />
               </div>
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Supplier Code</label>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Company Code</label>
                 <div className="flex gap-2">
                   <input
                     type="text"
@@ -342,6 +439,47 @@ const SupplierManager: React.FC<SupplierManagerProps> = ({
               </div>
               <div className="grid grid-cols-2 gap-4">
                 <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Lead Position</label>
+                  <input
+                    type="text"
+                    value={formData.leadPosition}
+                    onChange={(e) => setFormData({ ...formData, leadPosition: e.target.value })}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Lead Source</label>
+                  <input
+                    type="text"
+                    value={formData.leadSource}
+                    onChange={(e) => setFormData({ ...formData, leadSource: e.target.value })}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  />
+                </div>
+              </div>
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Source Quality</label>
+                  <input
+                    type="text"
+                    value={formData.sourceQuality}
+                    onChange={(e) => setFormData({ ...formData, sourceQuality: e.target.value })}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Industry (Main Activities)</label>
+                  <input
+                    type="text"
+                    value={formData.industryMainActivities}
+                    onChange={(e) => setFormData({ ...formData, industryMainActivities: e.target.value })}
+                    placeholder="Comma-separated"
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  />
+                </div>
+              </div>
+              <div className="grid grid-cols-2 gap-4">
+                <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">Email</label>
                   <input
                     type="email"
@@ -384,7 +522,7 @@ const SupplierManager: React.FC<SupplierManagerProps> = ({
                 </button>
                 <button type="submit" className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 flex items-center gap-2">
                   <Check size={16} />
-                  {editingSupplier ? 'Update Supplier' : 'Add Supplier'}
+                  {editingSupplier ? 'Update Contact' : 'Add Contact'}
                 </button>
               </div>
             </form>

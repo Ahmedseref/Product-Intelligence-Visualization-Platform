@@ -1,0 +1,1 @@
+- [Notion connector integration pattern](notion-connector-pattern.md) — always construct a fresh ReplitConnectors() client per call; use connectors.proxy("notion", path, ...) for raw Notion REST calls.

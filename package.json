@@ -31,6 +31,8 @@
     "@nivo/sunburst": "^0.99.0",
     "@nivo/tooltip": "^0.99.0",
     "@nivo/treemap": "^0.99.0",
+    "@notionhq/client": "^5.22.0",
+    "@replit/connectors-sdk": "^0.4.1",
     "@types/bcrypt": "^6.0.0",
     "@types/bcryptjs": "^2.4.6",
     "@types/cors": "^2.8.19",

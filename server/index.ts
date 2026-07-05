@@ -18,6 +18,7 @@ import { registerPrimerLibraryRoutes } from "./primerLibraryRoutes";
 import { registerCatalogExportRoutes } from "./catalogExportRoutes";
 import { registerAiSystemFillRoutes } from "./aiSystemFillRoutes";
 import { registerSelectorGuideRoutes } from "./selectorGuideRoutes";
+import { startNotionSyncScheduler } from "./notionSync";
 
 const rootDir = process.cwd();
 
@@ -114,6 +115,8 @@ app.listen(PORT, "0.0.0.0", () => {
       startScheduledBackups();
       // Seed qualification vocabularies (no-op if already seeded)
       await seedQualificationVocabularies();
+      // Start periodic Notion "Contact Connector" pull (every 5 minutes)
+      startNotionSyncScheduler();
     } catch (error) {
       console.error("[Startup] Background initialization error:", error);
     }

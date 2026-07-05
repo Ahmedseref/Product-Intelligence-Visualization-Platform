@@ -24,6 +24,15 @@ export const suppliers = pgTable("suppliers", {
   website: varchar("website", { length: 255 }),
   notes: text("notes"),
   isActive: boolean("is_active").default(true),
+  // Notion "Contact Connector" sync fields (additive, nullable — records not
+  // sourced from Notion simply leave these empty).
+  leadPosition: varchar("lead_position", { length: 255 }),
+  leadSource: varchar("lead_source", { length: 255 }),
+  sourceQuality: varchar("source_quality", { length: 255 }),
+  industryMainActivities: text("industry_main_activities"),
+  notionPageId: varchar("notion_page_id", { length: 255 }).unique(),
+  notionLastEditedTime: timestamp("notion_last_edited_time"),
+  appLastEditedTime: timestamp("app_last_edited_time").defaultNow(),
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow(),
 });
