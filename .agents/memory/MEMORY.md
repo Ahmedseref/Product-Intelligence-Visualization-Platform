@@ -1,1 +1,2 @@
 - [Notion connector integration pattern](notion-connector-pattern.md) — always construct a fresh ReplitConnectors() client per call; use connectors.proxy("notion", path, ...) for raw Notion REST calls.
+- [Notion sync is a fixed field mapping](notion-fixed-field-mapping.md) — new Notion properties never auto-appear in the app; a developer must add a mapping for each one.

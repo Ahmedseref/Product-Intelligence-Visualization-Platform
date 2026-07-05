@@ -13,7 +13,25 @@ interface SortConfig {
   direction: SortDirection;
 }
 
-const COLUMN_DEFS: { key: string; label: string; defaultWidth: number; getValue: (s: Supplier) => string }[] = [
+// formats a Notion/ISO date string for display in the table & filters. This
+// "Last Updated" column mirrors Notion's own "Date" property 1:1 (both are
+// the page's last-edited timestamp), so no separate schema column is needed.
+const formatDate = (value?: string | null): string => {
+  if (!value) return '';
+  const d = new Date(value);
+  if (isNaN(d.getTime())) return '';
+  return d.toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' });
+};
+
+interface ColumnDef {
+  key: string;
+  label: string;
+  defaultWidth: number;
+  getValue: (s: Supplier) => string;
+  sortValue?: (s: Supplier) => number | string;
+}
+
+const COLUMN_DEFS: ColumnDef[] = [
   { key: 'id', label: 'ID', defaultWidth: 90, getValue: (s) => s.id },
   { key: 'name', label: 'Company Name', defaultWidth: 220, getValue: (s) => s.name || '' },
   { key: 'supplierCode', label: 'Code', defaultWidth: 100, getValue: (s) => s.supplierCode || '' },
@@ -22,15 +40,37 @@ const COLUMN_DEFS: { key: string; label: string; defaultWidth: number; getValue:
   { key: 'leadInfo', label: 'Lead Info', defaultWidth: 180, getValue: (s) => s.leadPosition || '' },
   { key: 'industry', label: 'Industry', defaultWidth: 180, getValue: (s) => s.industryMainActivities || '' },
   { key: 'status', label: 'Status', defaultWidth: 150, getValue: (s) => s.isActive ? 'Active' : 'Inactive' },
+  {
+    key: 'lastUpdated',
+    label: 'Date',
+    defaultWidth: 140,
+    getValue: (s) => formatDate(s.notionLastEditedTime) || formatDate(s.updatedAt),
+    sortValue: (s) => new Date(s.notionLastEditedTime || s.updatedAt || 0).getTime(),
+  },
 ];
 
-const FILTERABLE_COLUMNS: { key: string; label: string; getValue: (s: Supplier) => string | undefined }[] = [
-  { key: 'country', label: 'Country', getValue: (s) => s.country },
-  { key: 'leadSource', label: 'Lead Source', getValue: (s) => s.leadSource },
-  { key: 'sourceQuality', label: 'Source Quality', getValue: (s) => s.sourceQuality },
-  { key: 'action', label: 'Action', getValue: (s) => s.action },
-  { key: 'priority', label: 'Priority', getValue: (s) => s.priority },
-  { key: 'status', label: 'Status', getValue: (s) => s.isActive ? 'Active' : 'Inactive' },
+type FilterType = 'select' | 'multi';
+
+interface FilterDef {
+  key: string;
+  label: string;
+  type: FilterType;
+  getValue?: (s: Supplier) => string | undefined;
+  getValues?: (s: Supplier) => string[] | undefined;
+}
+
+const FILTERABLE_COLUMNS: FilterDef[] = [
+  { key: 'country', label: 'Country', type: 'select', getValue: (s) => s.country },
+  { key: 'leadSource', label: 'Lead Source', type: 'select', getValue: (s) => s.leadSource },
+  { key: 'sourceQuality', label: 'Source Quality', type: 'select', getValue: (s) => s.sourceQuality },
+  { key: 'action', label: 'Action', type: 'select', getValue: (s) => s.action },
+  { key: 'priority', label: 'Priority', type: 'select', getValue: (s) => s.priority },
+  { key: 'paymentTerms', label: 'Payment Terms', type: 'select', getValue: (s) => s.paymentTerms },
+  { key: 'industryMainActivities', label: 'Industry', type: 'select', getValue: (s) => s.industryMainActivities },
+  { key: 'brand', label: 'Brand', type: 'multi', getValues: (s) => s.brand },
+  { key: 'product', label: 'Product', type: 'multi', getValues: (s) => s.product },
+  { key: 'result', label: 'Result', type: 'multi', getValues: (s) => s.result },
+  { key: 'status', label: 'Status', type: 'select', getValue: (s) => s.isActive ? 'Active' : 'Inactive' },
 ];
 
 const MIN_COLUMN_WIDTH = 80;
@@ -123,8 +163,12 @@ const SupplierManager: React.FC<SupplierManagerProps> = ({
     FILTERABLE_COLUMNS.forEach((col) => {
       const values = new Set<string>();
       suppliers.forEach((s) => {
-        const v = col.getValue(s);
-        if (v) values.add(v);
+        if (col.type === 'multi') {
+          (col.getValues?.(s) || []).forEach((v) => v && values.add(v));
+        } else {
+          const v = col.getValue?.(s);
+          if (v) values.add(v);
+        }
       });
       options[col.key] = Array.from(values).sort((a, b) => a.localeCompare(b));
     });
@@ -132,15 +176,26 @@ const SupplierManager: React.FC<SupplierManagerProps> = ({
   }, [suppliers]);
 
   const filteredSuppliers = useMemo(() => {
+    const q = searchQuery.toLowerCase();
     let result = suppliers.filter(s =>
-      s.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      (s.country && s.country.toLowerCase().includes(searchQuery.toLowerCase()))
+      !q ||
+      s.name.toLowerCase().includes(q) ||
+      (s.country && s.country.toLowerCase().includes(q)) ||
+      (s.contactName && s.contactName.toLowerCase().includes(q)) ||
+      (s.contactEmail && s.contactEmail.toLowerCase().includes(q)) ||
+      (s.contactPhone && s.contactPhone.toLowerCase().includes(q)) ||
+      (s.leadSource && s.leadSource.toLowerCase().includes(q)) ||
+      (s.notes && s.notes.toLowerCase().includes(q)) ||
+      (s.updates && s.updates.toLowerCase().includes(q))
     );
 
     FILTERABLE_COLUMNS.forEach((col) => {
       const selected = activeFilters[col.key];
-      if (selected) {
-        result = result.filter((s) => col.getValue(s) === selected);
+      if (!selected) return;
+      if (col.type === 'multi') {
+        result = result.filter((s) => (col.getValues?.(s) || []).includes(selected));
+      } else {
+        result = result.filter((s) => col.getValue?.(s) === selected);
       }
     });
 
@@ -148,9 +203,9 @@ const SupplierManager: React.FC<SupplierManagerProps> = ({
       const colDef = COLUMN_DEFS.find((c) => c.key === sortConfig.key);
       if (colDef) {
         result = [...result].sort((a, b) => {
-          const aVal = colDef.getValue(a).toLowerCase();
-          const bVal = colDef.getValue(b).toLowerCase();
-          const cmp = aVal.localeCompare(bVal);
+          const aVal = colDef.sortValue ? colDef.sortValue(a) : colDef.getValue(a).toLowerCase();
+          const bVal = colDef.sortValue ? colDef.sortValue(b) : colDef.getValue(b).toLowerCase();
+          const cmp = aVal < bVal ? -1 : aVal > bVal ? 1 : 0;
           return sortConfig.direction === 'asc' ? cmp : -cmp;
         });
       }
@@ -421,21 +476,25 @@ const SupplierManager: React.FC<SupplierManagerProps> = ({
                 )}
               </div>
               <div className="space-y-3 max-h-80 overflow-y-auto">
-                {FILTERABLE_COLUMNS.map((col) => (
-                  <div key={col.key}>
-                    <label className="block text-xs font-medium text-gray-500 mb-1">{col.label}</label>
-                    <select
-                      value={activeFilters[col.key] || ''}
-                      onChange={(e) => handleFilterChange(col.key, e.target.value)}
-                      className="w-full px-2 py-1.5 border border-gray-300 rounded text-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                    >
-                      <option value="">All</option>
-                      {(filterOptions[col.key] || []).map((val) => (
-                        <option key={val} value={val}>{val}</option>
-                      ))}
-                    </select>
-                  </div>
-                ))}
+                {FILTERABLE_COLUMNS.map((col) => {
+                  const options = filterOptions[col.key] || [];
+                  if (options.length === 0) return null;
+                  return (
+                    <div key={col.key}>
+                      <label className="block text-xs font-medium text-gray-500 mb-1">{col.label}</label>
+                      <select
+                        value={activeFilters[col.key] || ''}
+                        onChange={(e) => handleFilterChange(col.key, e.target.value)}
+                        className="w-full px-2 py-1.5 border border-gray-300 rounded text-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                      >
+                        <option value="">All</option>
+                        {options.map((val) => (
+                          <option key={val} value={val}>{val}</option>
+                        ))}
+                      </select>
+                    </div>
+                  );
+                })}
               </div>
             </div>
           )}
@@ -567,6 +626,9 @@ const SupplierManager: React.FC<SupplierManagerProps> = ({
                     {supplier.priority && (
                       <div className="text-xs text-gray-500 truncate">Priority: {supplier.priority}</div>
                     )}
+                  </td>
+                  <td className="px-6 py-4 whitespace-nowrap text-xs text-gray-500 truncate">
+                    {formatDate(supplier.notionLastEditedTime) || formatDate(supplier.updatedAt) || '-'}
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
                     <button onClick={(e) => { e.stopPropagation(); setPeekSupplier(supplier); }} className="text-gray-500 hover:text-gray-700 mr-3" title="Open details">
@@ -929,6 +991,7 @@ const SupplierPeekModal: React.FC<SupplierPeekModalProps> = ({ supplier, onClose
             />
             <PeekRow label="Address" value={supplier.address} />
             <PeekRow label="Industry / Main Activities" value={supplier.industryMainActivities} />
+            <PeekRow label="Date (Last Updated)" value={formatDate(supplier.notionLastEditedTime) || formatDate(supplier.updatedAt)} />
           </div>
 
           <div>
