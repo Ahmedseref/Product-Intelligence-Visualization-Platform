@@ -80,6 +80,7 @@ interface SupplierManagerProps {
   onAddSupplier: (supplier: Omit<Supplier, 'id' | 'createdAt' | 'updatedAt'>) => void;
   onUpdateSupplier: (id: string, updates: Partial<Supplier>) => void;
   onDeleteSupplier: (id: string) => void;
+  onRefresh?: () => void | Promise<void>;
 }
 
 const SupplierManager: React.FC<SupplierManagerProps> = ({
@@ -87,12 +88,14 @@ const SupplierManager: React.FC<SupplierManagerProps> = ({
   onAddSupplier,
   onUpdateSupplier,
   onDeleteSupplier,
+  onRefresh,
 }) => {
   const [showAddModal, setShowAddModal] = useState(false);
   const [editingSupplier, setEditingSupplier] = useState<Supplier | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
   const [syncStatus, setSyncStatus] = useState<NotionSyncStatus | null>(null);
   const [isPushing, setIsPushing] = useState(false);
+  const [isPulling, setIsPulling] = useState(false);
 
   const [sortConfig, setSortConfig] = useState<SortConfig | null>(null);
   const [columnWidths, setColumnWidths] = useState<Record<string, number>>(() =>
@@ -129,6 +132,19 @@ const SupplierManager: React.FC<SupplierManagerProps> = ({
       console.error('Failed to push to Notion:', e);
     } finally {
       setIsPushing(false);
+      refreshSyncStatus();
+    }
+  };
+
+  const handlePullFromNotion = async () => {
+    setIsPulling(true);
+    try {
+      await api.notionPull();
+      onRefresh?.();
+    } catch (e) {
+      console.error('Failed to pull from Notion:', e);
+    } finally {
+      setIsPulling(false);
       refreshSyncStatus();
     }
   };
@@ -406,6 +422,15 @@ const SupplierManager: React.FC<SupplierManagerProps> = ({
           <p className="text-gray-600 mt-1">Manage your contacts, synced with Notion</p>
         </div>
         <div className="flex items-center gap-2">
+          <button
+            onClick={handlePullFromNotion}
+            disabled={isPulling}
+            className="flex items-center gap-2 px-4 py-2 bg-slate-100 text-slate-700 border border-slate-300 rounded-lg hover:bg-slate-200 transition-colors disabled:opacity-60"
+            title="Pull the latest changes from Notion now"
+          >
+            <RefreshCw size={18} className={isPulling ? 'animate-spin' : ''} />
+            {isPulling ? 'Syncing...' : 'Sync Now'}
+          </button>
           <button
             onClick={handlePushToNotion}
             disabled={isPushing}

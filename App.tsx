@@ -995,6 +995,7 @@ const App: React.FC = () => {
                 onAddSupplier={addSupplier}
                 onUpdateSupplier={updateSupplier}
                 onDeleteSupplier={deleteSupplier}
+                onRefresh={syncWithDatabase}
               />
             )}
             {viewMode === 'system-builder' && (
