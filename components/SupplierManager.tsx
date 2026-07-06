@@ -2,6 +2,7 @@ import React, { useState, useCallback, useEffect, useMemo, useRef } from 'react'
 import {
   Plus, Pencil, Trash2, Building2, Globe, Mail, Phone, X, Check, Search, Tag, Sparkles,
   RefreshCw, UploadCloud, Filter, ArrowUp, ArrowDown, ArrowUpDown, Maximize2, FileText,
+  Columns3, Eye, EyeOff,
 } from 'lucide-react';
 import { Supplier } from '../types';
 import { api, NotionSyncStatus } from '../client/api';
@@ -61,15 +62,33 @@ interface FilterDef {
 
 const FILTERABLE_COLUMNS: FilterDef[] = [
   { key: 'country', label: 'Country', type: 'select', getValue: (s) => s.country },
+  { key: 'contactName', label: 'Contact Name', type: 'select', getValue: (s) => s.contactName },
+  { key: 'contactEmail', label: 'Contact Email', type: 'select', getValue: (s) => s.contactEmail },
+  { key: 'contactPhone', label: 'Contact Phone', type: 'select', getValue: (s) => s.contactPhone },
+  { key: 'address', label: 'Address', type: 'select', getValue: (s) => s.address },
+  { key: 'website', label: 'Website', type: 'select', getValue: (s) => s.website },
+  { key: 'leadPosition', label: 'Lead Info', type: 'select', getValue: (s) => s.leadPosition },
   { key: 'leadSource', label: 'Lead Source', type: 'select', getValue: (s) => s.leadSource },
   { key: 'sourceQuality', label: 'Source Quality', type: 'select', getValue: (s) => s.sourceQuality },
   { key: 'action', label: 'Action', type: 'select', getValue: (s) => s.action },
   { key: 'priority', label: 'Priority', type: 'select', getValue: (s) => s.priority },
   { key: 'paymentTerms', label: 'Payment Terms', type: 'select', getValue: (s) => s.paymentTerms },
+  { key: 'pendingPayment', label: 'Pending Payment', type: 'select', getValue: (s) => s.pendingPayment },
+  { key: 'paidAmount', label: 'Paid Amount', type: 'select', getValue: (s) => s.paidAmount != null ? String(s.paidAmount) : undefined },
+  { key: 'invoiceValue', label: 'Invoice Value', type: 'select', getValue: (s) => s.invoiceValue != null ? String(s.invoiceValue) : undefined },
+  { key: 'mobile2', label: 'Mobile 2', type: 'select', getValue: (s) => s.mobile2 },
+  { key: 'reminder', label: 'Reminder', type: 'select', getValue: (s) => s.reminder },
+  { key: 'notes', label: 'Notes', type: 'select', getValue: (s) => s.notes },
+  { key: 'updates', label: 'Updates', type: 'select', getValue: (s) => s.updates },
+  { key: 'recordId', label: 'Record ID', type: 'select', getValue: (s) => s.recordId },
   { key: 'industryMainActivities', label: 'Industry', type: 'select', getValue: (s) => s.industryMainActivities },
   { key: 'brand', label: 'Brand', type: 'multi', getValues: (s) => s.brand },
   { key: 'product', label: 'Product', type: 'multi', getValues: (s) => s.product },
   { key: 'result', label: 'Result', type: 'multi', getValues: (s) => s.result },
+  { key: 'tasksRelation', label: 'Tasks', type: 'multi', getValues: (s) => s.tasksRelation },
+  { key: 'dailyTasksConnector', label: 'Daily Tasks', type: 'multi', getValues: (s) => s.dailyTasksConnector },
+  { key: 'relatedDocs', label: 'Related Docs', type: 'multi', getValues: (s) => s.relatedDocs },
+  { key: 'docsRelation', label: 'Docs Relation', type: 'multi', getValues: (s) => s.docsRelation },
   { key: 'status', label: 'Status', type: 'select', getValue: (s) => s.isActive ? 'Active' : 'Inactive' },
 ];
 
@@ -106,6 +125,22 @@ const SupplierManager: React.FC<SupplierManagerProps> = ({
   const [showFilterPanel, setShowFilterPanel] = useState(false);
   const [activeFilters, setActiveFilters] = useState<Record<string, string>>({});
   const activeFilterCount = Object.values(activeFilters).filter(Boolean).length;
+
+  const [showColumnsPanel, setShowColumnsPanel] = useState(false);
+  const [hiddenColumns, setHiddenColumns] = useState<Set<string>>(new Set());
+  const visibleColumnDefs = useMemo(
+    () => COLUMN_DEFS.filter((c) => !hiddenColumns.has(c.key)),
+    [hiddenColumns]
+  );
+  const toggleColumnVisibility = (key: string) => {
+    setHiddenColumns((prev) => {
+      const next = new Set(prev);
+      if (next.has(key)) next.delete(key);
+      else next.add(key);
+      return next;
+    });
+  };
+  const resetColumns = () => setHiddenColumns(new Set());
 
   const [peekSupplier, setPeekSupplier] = useState<Supplier | null>(null);
 
@@ -491,7 +526,7 @@ const SupplierManager: React.FC<SupplierManagerProps> = ({
             )}
           </button>
           {showFilterPanel && (
-            <div className="absolute right-0 mt-2 w-72 bg-white border border-gray-200 rounded-lg shadow-lg z-20 p-4">
+            <div className="absolute right-0 mt-2 w-80 bg-white border border-gray-200 rounded-lg shadow-lg z-20 p-4">
               <div className="flex items-center justify-between mb-3">
                 <span className="text-sm font-semibold text-gray-700">Filters</span>
                 {activeFilterCount > 0 && (
@@ -500,7 +535,7 @@ const SupplierManager: React.FC<SupplierManagerProps> = ({
                   </button>
                 )}
               </div>
-              <div className="space-y-3 max-h-80 overflow-y-auto">
+              <div className="space-y-3 max-h-96 overflow-y-auto pr-1">
                 {FILTERABLE_COLUMNS.map((col) => {
                   const options = filterOptions[col.key] || [];
                   if (options.length === 0) return null;
@@ -524,19 +559,67 @@ const SupplierManager: React.FC<SupplierManagerProps> = ({
             </div>
           )}
         </div>
+        <div className="relative">
+          <button
+            onClick={() => setShowColumnsPanel((v) => !v)}
+            className={`flex items-center gap-2 px-4 py-2 border rounded-lg transition-colors ${
+              hiddenColumns.size > 0 ? 'border-blue-400 bg-blue-50 text-blue-700' : 'border-gray-300 text-gray-600 hover:bg-gray-50'
+            }`}
+          >
+            <Columns3 size={16} />
+            Columns
+            {hiddenColumns.size > 0 && (
+              <span className="inline-flex items-center justify-center w-5 h-5 text-xs font-semibold rounded-full bg-blue-600 text-white">
+                {hiddenColumns.size}
+              </span>
+            )}
+          </button>
+          {showColumnsPanel && (
+            <div className="absolute right-0 mt-2 w-64 bg-white border border-gray-200 rounded-lg shadow-lg z-20 p-4">
+              <div className="flex items-center justify-between mb-3">
+                <span className="text-sm font-semibold text-gray-700">Show / Hide Columns</span>
+                {hiddenColumns.size > 0 && (
+                  <button onClick={resetColumns} className="text-xs text-blue-600 hover:underline">
+                    Show all
+                  </button>
+                )}
+              </div>
+              <div className="space-y-1 max-h-80 overflow-y-auto">
+                {COLUMN_DEFS.map((col) => {
+                  const isVisible = !hiddenColumns.has(col.key);
+                  return (
+                    <label
+                      key={col.key}
+                      className="flex items-center gap-2 px-2 py-1.5 rounded hover:bg-gray-50 cursor-pointer text-sm text-gray-700"
+                    >
+                      <input
+                        type="checkbox"
+                        checked={isVisible}
+                        onChange={() => toggleColumnVisibility(col.key)}
+                        className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                      />
+                      {isVisible ? <Eye size={14} className="text-gray-400" /> : <EyeOff size={14} className="text-gray-300" />}
+                      <span className="truncate">{col.label}</span>
+                    </label>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+        </div>
       </div>
 
       <div className="bg-white rounded-lg shadow overflow-x-auto">
         <table className="divide-y divide-gray-200" style={{ tableLayout: 'fixed', width: '100%' }}>
           <colgroup>
-            {COLUMN_DEFS.map((col) => (
+            {visibleColumnDefs.map((col) => (
               <col key={col.key} style={{ width: columnWidths[col.key] }} />
             ))}
             <col style={{ width: 90 }} />
           </colgroup>
           <thead className="bg-gray-50">
             <tr>
-              {COLUMN_DEFS.map((col) => {
+              {visibleColumnDefs.map((col) => {
                 const isSorted = sortConfig?.key === col.key;
                 return (
                   <th
@@ -568,7 +651,7 @@ const SupplierManager: React.FC<SupplierManagerProps> = ({
           <tbody className="bg-white divide-y divide-gray-200">
             {filteredSuppliers.length === 0 ? (
               <tr>
-                <td colSpan={COLUMN_DEFS.length + 1} className="px-6 py-12 text-center text-gray-500">
+                <td colSpan={visibleColumnDefs.length + 1} className="px-6 py-12 text-center text-gray-500">
                   <Building2 size={48} className="mx-auto mb-4 text-gray-300" />
                   <p className="text-lg font-medium">No contacts found</p>
                   <p className="text-sm">Add your first contact to get started</p>
@@ -577,84 +660,102 @@ const SupplierManager: React.FC<SupplierManagerProps> = ({
             ) : (
               filteredSuppliers.map((supplier) => (
                 <tr key={supplier.id} className="group hover:bg-gray-50 cursor-pointer" onClick={() => setPeekSupplier(supplier)}>
-                  <td className="px-6 py-4 whitespace-nowrap text-sm font-mono text-gray-600 relative">
-                    <div className="flex items-center gap-2">
-                      <span className="truncate">{supplier.id}</span>
-                      <span className="hidden group-hover:inline-flex items-center gap-1 px-1.5 py-0.5 bg-yellow-200 text-yellow-900 text-[10px] font-semibold rounded">
-                        <Maximize2 size={10} /> OPEN
+                  {!hiddenColumns.has('id') && (
+                    <td className="px-6 py-4 whitespace-nowrap text-sm font-mono text-gray-600 relative">
+                      <div className="flex items-center gap-2">
+                        <span className="truncate">{supplier.id}</span>
+                        <span className="hidden group-hover:inline-flex items-center gap-1 px-1.5 py-0.5 bg-yellow-200 text-yellow-900 text-[10px] font-semibold rounded">
+                          <Maximize2 size={10} /> OPEN
+                        </span>
+                      </div>
+                    </td>
+                  )}
+                  {!hiddenColumns.has('name') && (
+                    <td className="px-6 py-4 whitespace-nowrap overflow-hidden">
+                      <div className="flex items-center">
+                        <div className="w-10 h-10 bg-blue-100 rounded-full flex items-center justify-center mr-3 flex-shrink-0">
+                          <Building2 size={20} className="text-blue-600" />
+                        </div>
+                        <div className="min-w-0">
+                          <div className="text-sm font-medium text-gray-900 truncate">{supplier.name}</div>
+                          {supplier.website && (
+                            <a href={supplier.website} target="_blank" rel="noopener noreferrer" onClick={(e) => e.stopPropagation()} className="text-xs text-blue-500 hover:underline flex items-center gap-1">
+                              <Globe size={12} /> Website
+                            </a>
+                          )}
+                        </div>
+                      </div>
+                    </td>
+                  )}
+                  {!hiddenColumns.has('supplierCode') && (
+                    <td className="px-6 py-4 whitespace-nowrap">
+                      {supplier.supplierCode ? (
+                        <span className="inline-flex items-center gap-1 px-2 py-1 bg-emerald-50 text-emerald-700 rounded font-mono text-xs font-bold">
+                          <Tag size={12} />
+                          {supplier.supplierCode}
+                        </span>
+                      ) : (
+                        <span className="text-xs text-gray-400">-</span>
+                      )}
+                    </td>
+                  )}
+                  {!hiddenColumns.has('country') && (
+                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500 truncate">{supplier.country || '-'}</td>
+                  )}
+                  {!hiddenColumns.has('contact') && (
+                    <td className="px-6 py-4 whitespace-nowrap overflow-hidden">
+                      <div className="text-sm text-gray-900 truncate">{supplier.contactName || '-'}</div>
+                      {supplier.contactEmail && (
+                        <div className="text-xs text-gray-500 flex items-center gap-1 truncate">
+                          <Mail size={12} className="flex-shrink-0" /> <span className="truncate">{supplier.contactEmail}</span>
+                        </div>
+                      )}
+                      {supplier.contactPhone && (
+                        <div className="text-xs text-gray-500 flex items-center gap-1">
+                          <Phone size={12} className="flex-shrink-0" /> {supplier.contactPhone}
+                        </div>
+                      )}
+                    </td>
+                  )}
+                  {!hiddenColumns.has('leadInfo') && (
+                    <td className="px-6 py-4 whitespace-nowrap overflow-hidden">
+                      <div className="text-xs text-gray-700 truncate">{supplier.leadPosition || '-'}</div>
+                      {supplier.leadSource && (
+                        <div className="text-xs text-gray-500 truncate">Source: {supplier.leadSource}</div>
+                      )}
+                      {supplier.sourceQuality && (
+                        <div className="text-xs text-gray-500 truncate">Quality: {supplier.sourceQuality}</div>
+                      )}
+                    </td>
+                  )}
+                  {!hiddenColumns.has('industry') && (
+                    <td className="px-6 py-4 whitespace-nowrap text-xs text-gray-600 truncate" title={supplier.industryMainActivities || ''}>
+                      {supplier.industryMainActivities || '-'}
+                    </td>
+                  )}
+                  {!hiddenColumns.has('status') && (
+                    <td className="px-6 py-4 whitespace-nowrap overflow-hidden">
+                      <span className={`px-2 py-1 inline-flex text-xs leading-5 font-semibold rounded-full ${supplier.isActive ? 'bg-green-100 text-green-800' : 'bg-gray-100 text-gray-800'}`}>
+                        {supplier.isActive ? 'Active' : 'Inactive'}
                       </span>
-                    </div>
-                  </td>
-                  <td className="px-6 py-4 whitespace-nowrap overflow-hidden">
-                    <div className="flex items-center">
-                      <div className="w-10 h-10 bg-blue-100 rounded-full flex items-center justify-center mr-3 flex-shrink-0">
-                        <Building2 size={20} className="text-blue-600" />
-                      </div>
-                      <div className="min-w-0">
-                        <div className="text-sm font-medium text-gray-900 truncate">{supplier.name}</div>
-                        {supplier.website && (
-                          <a href={supplier.website} target="_blank" rel="noopener noreferrer" onClick={(e) => e.stopPropagation()} className="text-xs text-blue-500 hover:underline flex items-center gap-1">
-                            <Globe size={12} /> Website
-                          </a>
-                        )}
-                      </div>
-                    </div>
-                  </td>
-                  <td className="px-6 py-4 whitespace-nowrap">
-                    {supplier.supplierCode ? (
-                      <span className="inline-flex items-center gap-1 px-2 py-1 bg-emerald-50 text-emerald-700 rounded font-mono text-xs font-bold">
-                        <Tag size={12} />
-                        {supplier.supplierCode}
-                      </span>
-                    ) : (
-                      <span className="text-xs text-gray-400">-</span>
-                    )}
-                  </td>
-                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500 truncate">{supplier.country || '-'}</td>
-                  <td className="px-6 py-4 whitespace-nowrap overflow-hidden">
-                    <div className="text-sm text-gray-900 truncate">{supplier.contactName || '-'}</div>
-                    {supplier.contactEmail && (
-                      <div className="text-xs text-gray-500 flex items-center gap-1 truncate">
-                        <Mail size={12} className="flex-shrink-0" /> <span className="truncate">{supplier.contactEmail}</span>
-                      </div>
-                    )}
-                    {supplier.contactPhone && (
-                      <div className="text-xs text-gray-500 flex items-center gap-1">
-                        <Phone size={12} className="flex-shrink-0" /> {supplier.contactPhone}
-                      </div>
-                    )}
-                  </td>
-                  <td className="px-6 py-4 whitespace-nowrap overflow-hidden">
-                    <div className="text-xs text-gray-700 truncate">{supplier.leadPosition || '-'}</div>
-                    {supplier.leadSource && (
-                      <div className="text-xs text-gray-500 truncate">Source: {supplier.leadSource}</div>
-                    )}
-                    {supplier.sourceQuality && (
-                      <div className="text-xs text-gray-500 truncate">Quality: {supplier.sourceQuality}</div>
-                    )}
-                  </td>
-                  <td className="px-6 py-4 whitespace-nowrap text-xs text-gray-600 truncate" title={supplier.industryMainActivities || ''}>
-                    {supplier.industryMainActivities || '-'}
-                  </td>
-                  <td className="px-6 py-4 whitespace-nowrap overflow-hidden">
-                    <span className={`px-2 py-1 inline-flex text-xs leading-5 font-semibold rounded-full ${supplier.isActive ? 'bg-green-100 text-green-800' : 'bg-gray-100 text-gray-800'}`}>
-                      {supplier.isActive ? 'Active' : 'Inactive'}
-                    </span>
-                    {supplier.notionPageId && (
-                      <span className="ml-1 px-2 py-1 inline-flex text-xs leading-5 font-semibold rounded-full bg-blue-50 text-blue-700" title="Synced with Notion">
-                        Notion
-                      </span>
-                    )}
-                    {supplier.action && (
-                      <div className="text-xs text-gray-500 mt-1 truncate">Action: {supplier.action}</div>
-                    )}
-                    {supplier.priority && (
-                      <div className="text-xs text-gray-500 truncate">Priority: {supplier.priority}</div>
-                    )}
-                  </td>
-                  <td className="px-6 py-4 whitespace-nowrap text-xs text-gray-500 truncate">
-                    {formatDate(supplier.notionLastEditedTime) || formatDate(supplier.updatedAt) || '-'}
-                  </td>
+                      {supplier.notionPageId && (
+                        <span className="ml-1 px-2 py-1 inline-flex text-xs leading-5 font-semibold rounded-full bg-blue-50 text-blue-700" title="Synced with Notion">
+                          Notion
+                        </span>
+                      )}
+                      {supplier.action && (
+                        <div className="text-xs text-gray-500 mt-1 truncate">Action: {supplier.action}</div>
+                      )}
+                      {supplier.priority && (
+                        <div className="text-xs text-gray-500 truncate">Priority: {supplier.priority}</div>
+                      )}
+                    </td>
+                  )}
+                  {!hiddenColumns.has('lastUpdated') && (
+                    <td className="px-6 py-4 whitespace-nowrap text-xs text-gray-500 truncate">
+                      {formatDate(supplier.notionLastEditedTime) || formatDate(supplier.updatedAt) || '-'}
+                    </td>
+                  )}
                   <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
                     <button onClick={(e) => { e.stopPropagation(); setPeekSupplier(supplier); }} className="text-gray-500 hover:text-gray-700 mr-3" title="Open details">
                       <Maximize2 size={16} />
