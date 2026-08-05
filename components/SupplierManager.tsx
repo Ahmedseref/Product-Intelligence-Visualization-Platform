@@ -2,7 +2,7 @@ import React, { useState, useCallback, useEffect, useMemo, useRef } from 'react'
 import {
   Plus, Pencil, Trash2, Building2, Globe, Mail, Phone, X, Check, Search, Tag, Sparkles,
   RefreshCw, UploadCloud, Filter, ArrowUp, ArrowDown, ArrowUpDown, Maximize2, FileText,
-  Columns3, Eye, EyeOff,
+  Columns3, Eye, EyeOff, UsersRound, UserRound,
 } from 'lucide-react';
 import { Supplier } from '../types';
 import { api, NotionSyncStatus } from '../client/api';
@@ -40,6 +40,7 @@ const COLUMN_DEFS: ColumnDef[] = [
   { key: 'contact', label: 'Contact', defaultWidth: 220, getValue: (s) => s.contactName || '' },
   { key: 'leadInfo', label: 'Lead Info', defaultWidth: 180, getValue: (s) => s.leadPosition || '' },
   { key: 'industry', label: 'Industry', defaultWidth: 180, getValue: (s) => s.industryMainActivities || '' },
+  { key: 'contactType', label: 'Type', defaultWidth: 130, getValue: (s) => s.contactType || '' },
   { key: 'status', label: 'Status', defaultWidth: 150, getValue: (s) => s.isActive ? 'Active' : 'Inactive' },
   {
     key: 'lastUpdated',
@@ -82,6 +83,7 @@ const FILTERABLE_COLUMNS: FilterDef[] = [
   { key: 'updates', label: 'Updates', type: 'select', getValue: (s) => s.updates },
   { key: 'recordId', label: 'Record ID', type: 'select', getValue: (s) => s.recordId },
   { key: 'industryMainActivities', label: 'Industry', type: 'select', getValue: (s) => s.industryMainActivities },
+  { key: 'contactType', label: 'Supplier / Customer', type: 'select', getValue: (s) => s.contactType },
   { key: 'brand', label: 'Brand', type: 'multi', getValues: (s) => s.brand },
   { key: 'product', label: 'Product', type: 'multi', getValues: (s) => s.product },
   { key: 'result', label: 'Result', type: 'multi', getValues: (s) => s.result },
@@ -125,6 +127,7 @@ const SupplierManager: React.FC<SupplierManagerProps> = ({
   const [showFilterPanel, setShowFilterPanel] = useState(false);
   const [activeFilters, setActiveFilters] = useState<Record<string, string>>({});
   const activeFilterCount = Object.values(activeFilters).filter(Boolean).length;
+  const [contactTypeView, setContactTypeView] = useState<'supplier' | 'customer' | 'both'>('both');
 
   const [showColumnsPanel, setShowColumnsPanel] = useState(false);
   const [hiddenColumns, setHiddenColumns] = useState<Set<string>>(new Set());
@@ -228,17 +231,21 @@ const SupplierManager: React.FC<SupplierManagerProps> = ({
 
   const filteredSuppliers = useMemo(() => {
     const q = searchQuery.toLowerCase();
-    let result = suppliers.filter(s =>
-      !q ||
-      s.name.toLowerCase().includes(q) ||
-      (s.country && s.country.toLowerCase().includes(q)) ||
-      (s.contactName && s.contactName.toLowerCase().includes(q)) ||
-      (s.contactEmail && s.contactEmail.toLowerCase().includes(q)) ||
-      (s.contactPhone && s.contactPhone.toLowerCase().includes(q)) ||
-      (s.leadSource && s.leadSource.toLowerCase().includes(q)) ||
-      (s.notes && s.notes.toLowerCase().includes(q)) ||
-      (s.updates && s.updates.toLowerCase().includes(q))
-    );
+    let result = suppliers.filter(s => {
+      const matchesType = contactTypeView === 'both' ||
+        s.contactType?.toLowerCase() === contactTypeView;
+      const matchesSearch = !q ||
+        s.name.toLowerCase().includes(q) ||
+        (s.country && s.country.toLowerCase().includes(q)) ||
+        (s.contactName && s.contactName.toLowerCase().includes(q)) ||
+        (s.contactEmail && s.contactEmail.toLowerCase().includes(q)) ||
+        (s.contactPhone && s.contactPhone.toLowerCase().includes(q)) ||
+        (s.leadSource && s.leadSource.toLowerCase().includes(q)) ||
+        (s.notes && s.notes.toLowerCase().includes(q)) ||
+        (s.updates && s.updates.toLowerCase().includes(q)) ||
+        (s.contactType && s.contactType.toLowerCase().includes(q));
+      return matchesType && matchesSearch;
+    });
 
     FILTERABLE_COLUMNS.forEach((col) => {
       const selected = activeFilters[col.key];
@@ -263,7 +270,7 @@ const SupplierManager: React.FC<SupplierManagerProps> = ({
     }
 
     return result;
-  }, [suppliers, searchQuery, activeFilters, sortConfig]);
+  }, [suppliers, searchQuery, activeFilters, sortConfig, contactTypeView]);
 
   const handleSort = (key: string) => {
     setSortConfig((prev) => {
@@ -559,6 +566,36 @@ const SupplierManager: React.FC<SupplierManagerProps> = ({
             </div>
           )}
         </div>
+        <div
+          className="flex items-center border border-gray-300 rounded-lg bg-white p-0.5"
+          role="group"
+          aria-label="Contact type view"
+        >
+          {([
+            { key: 'supplier' as const, label: 'Suppliers', icon: Building2 },
+            { key: 'customer' as const, label: 'Customers', icon: UserRound },
+            { key: 'both' as const, label: 'Both', icon: UsersRound },
+          ]).map(({ key, label, icon: Icon }) => {
+            const isActive = contactTypeView === key;
+            return (
+              <button
+                key={key}
+                type="button"
+                onClick={() => setContactTypeView(key)}
+                aria-label={`Show ${label.toLowerCase()}`}
+                aria-pressed={isActive}
+                title={`Show ${label}`}
+                className={`p-2 rounded-md transition-colors ${
+                  isActive
+                    ? 'bg-blue-600 text-white shadow-sm'
+                    : 'text-gray-500 hover:bg-gray-100 hover:text-gray-700'
+                }`}
+              >
+                <Icon size={17} />
+              </button>
+            );
+          })}
+        </div>
         <div className="relative">
           <button
             onClick={() => setShowColumnsPanel((v) => !v)}
@@ -731,6 +768,11 @@ const SupplierManager: React.FC<SupplierManagerProps> = ({
                   {!hiddenColumns.has('industry') && (
                     <td className="px-6 py-4 whitespace-nowrap text-xs text-gray-600 truncate" title={supplier.industryMainActivities || ''}>
                       {supplier.industryMainActivities || '-'}
+                    </td>
+                  )}
+                  {!hiddenColumns.has('contactType') && (
+                    <td className="px-6 py-4 whitespace-nowrap text-xs text-gray-600 truncate">
+                      {supplier.contactType || '-'}
                     </td>
                   )}
                   {!hiddenColumns.has('status') && (
@@ -1117,6 +1159,7 @@ const SupplierPeekModal: React.FC<SupplierPeekModalProps> = ({ supplier, onClose
             />
             <PeekRow label="Address" value={supplier.address} />
             <PeekRow label="Industry / Main Activities" value={supplier.industryMainActivities} />
+            <PeekRow label="Supplier / Customer" value={supplier.contactType} />
             <PeekRow label="Date (Last Updated)" value={formatDate(supplier.notionLastEditedTime) || formatDate(supplier.updatedAt)} />
           </div>
 

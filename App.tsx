@@ -270,6 +270,7 @@ const App: React.FC = () => {
         leadSource: s.leadSource || undefined,
         sourceQuality: s.sourceQuality || undefined,
         industryMainActivities: s.industryMainActivities || undefined,
+        contactType: s.contactType || undefined,
         notionPageId: s.notionPageId || undefined,
         notionLastEditedTime: s.notionLastEditedTime || undefined,
         appLastEditedTime: s.appLastEditedTime || undefined,

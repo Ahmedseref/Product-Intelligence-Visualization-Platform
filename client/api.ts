@@ -82,6 +82,7 @@ export interface SupplierData {
   leadSource?: string;
   sourceQuality?: string;
   industryMainActivities?: string;
+  contactType?: string;
   recordId?: string;
   action?: string;
   priority?: string;

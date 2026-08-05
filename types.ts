@@ -52,6 +52,7 @@ export interface Supplier {
   leadSource?: string;
   sourceQuality?: string;
   industryMainActivities?: string;
+  contactType?: string;
   // Remaining Notion "Contact Connector" properties (full-fidelity mapping).
   recordId?: string;
   action?: string;

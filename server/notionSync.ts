@@ -50,6 +50,7 @@ async function notionProxy(path: string, init: RequestInit = {}): Promise<Respon
 //   Source Quality (select)                                 -> sourceQuality
 //   Country (select)                                        -> country
 //   Industry Connector (Main Activities) (multi_select)     -> industryMainActivities
+//   Supplier/ Customer (select)                             -> contactType
 //   Action (select)                                         -> action
 //   Priority (select)                                       -> priority
 //   Payment Terms (select)                                  -> paymentTerms
@@ -159,6 +160,7 @@ function notionPageToSupplier(page: NotionPage): Partial<InsertSupplier> {
     sourceQuality: getSelect(props["Source Quality"]),
     country: getSelect(props["Country"]),
     industryMainActivities: getMultiSelect(props["Industry Connector (Main Activities)"]),
+    contactType: getSelect(props["Supplier/ Customer"]),
     action: getSelect(props["Action"]),
     priority: getSelect(props["Priority"]),
     paymentTerms: getSelect(props["Payment Terms"]),
@@ -336,6 +338,7 @@ export async function pullFromNotion(): Promise<{ count: number }> {
           sourceQuality: mapped.sourceQuality,
           country: mapped.country,
           industryMainActivities: mapped.industryMainActivities,
+          contactType: mapped.contactType,
           recordId: mapped.recordId,
           action: mapped.action,
           priority: mapped.priority,
@@ -370,8 +373,15 @@ export async function pullFromNotion(): Promise<{ count: number }> {
       const appTime = local.appLastEditedTime ? new Date(local.appLastEditedTime) : new Date(0);
       const localNotionTime = local.notionLastEditedTime ? new Date(local.notionLastEditedTime) : new Date(0);
 
-      // Nothing changed on the Notion side since our last known state — skip.
-      if (notionTime.getTime() <= localNotionTime.getTime()) continue;
+      // A database property can be added or backfilled without changing every
+      // page's last-edited timestamp. Apply a changed mapped value even when
+      // the page timestamp is unchanged so newly-added Notion fields appear
+      // after the next pull.
+      const mappedContactTypeChanged = mapped.contactType !== local.contactType;
+
+      // Nothing changed on the Notion side since our last known state — skip,
+      // unless the newly mapped contact type still needs to be backfilled.
+      if (notionTime.getTime() <= localNotionTime.getTime() && !mappedContactTypeChanged) continue;
 
       // Notion changed, but the app also changed more recently — app wins,
       // leave the local row untouched (a subsequent push will overwrite Notion).
@@ -393,6 +403,7 @@ export async function pullFromNotion(): Promise<{ count: number }> {
           sourceQuality: mapped.sourceQuality,
           country: mapped.country,
           industryMainActivities: mapped.industryMainActivities,
+          contactType: mapped.contactType,
           recordId: mapped.recordId,
           action: mapped.action,
           priority: mapped.priority,

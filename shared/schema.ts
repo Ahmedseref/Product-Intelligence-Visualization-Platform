@@ -30,6 +30,7 @@ export const suppliers = pgTable("suppliers", {
   leadSource: varchar("lead_source", { length: 255 }),
   sourceQuality: varchar("source_quality", { length: 255 }),
   industryMainActivities: text("industry_main_activities"),
+  contactType: varchar("contact_type", { length: 50 }),
   // Remaining Notion "Contact Connector" properties, mapped 1:1 for full
   // fidelity (see server/notionSync.ts for the complete property list).
   recordId: varchar("record_id", { length: 500 }),
