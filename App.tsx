@@ -23,6 +23,7 @@ import { api, authApi, getStoredToken, setAuthToken, initAuthToken, AuthUser } f
 import { LogOut, PanelLeftClose, PanelLeftOpen } from 'lucide-react';
 import { useGlobalRefresh } from './client/hooks/useGlobalRefresh';
 import { RefreshProvider } from './client/contexts/RefreshContext';
+import { HASH_TO_VIEW, VIEW_TO_HASH, parseHashState } from './routingUtils';
 
 const App: React.FC = () => {
   const [authUser, setAuthUser] = useState<AuthUser | null>(null);
@@ -30,30 +31,10 @@ const App: React.FC = () => {
   const [authError, setAuthError] = useState<string | null>(null);
   const [showChangePassword, setShowChangePassword] = useState(false);
 
-  const hashToView: Record<string, ViewMode> = {
-    '#intelligence': 'technical-intelligence',
-    '#inventory': 'inventory',
-    '#add-product': 'add-product',
-    '#taxonomy': 'taxonomy-manager',
-    '#suppliers': 'suppliers',
-    '#industry-analysis': 'industry-analysis',
-    '#system-builder': 'system-builder',
-    '#document-memory': 'document-memory',
-    '#settings': 'settings',
-    '#proforma': 'proforma',
-  };
-  const viewToHash: Record<ViewMode, string> = Object.fromEntries(
-    Object.entries(hashToView).map(([h, v]) => [v, h])
-  ) as Record<ViewMode, string>;
+  const hashToView = HASH_TO_VIEW;
+  const viewToHash = VIEW_TO_HASH;
 
-  const getHashState = (): { view: ViewMode; industry?: string } => {
-    const [hashPath, query] = window.location.hash.split('?');
-    const view = hashToView[hashPath] || 'technical-intelligence';
-    const industry = view === 'suppliers' || view === 'industry-analysis'
-      ? new URLSearchParams(query || '').get('industry') || undefined
-      : undefined;
-    return { view, industry };
-  };
+  const getHashState = () => parseHashState(window.location.hash);
 
   const [viewMode, setViewModeState] = useState<ViewMode>(() => getHashState().view);
   const [initialIndustryTag, setInitialIndustryTag] = useState<string | undefined>(() => getHashState().industry);

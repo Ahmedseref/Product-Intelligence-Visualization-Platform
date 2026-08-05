@@ -15,7 +15,7 @@
     "preview": "vite preview",
     "db:push": "drizzle-kit push",
     "server": "tsx server/index.ts",
-    "test": "node --import tsx --test server/qualificationEngine.test.ts"
+    "test": "node --import tsx --test server/qualificationEngine.test.ts components/industryAnalysis.test.ts"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.97.1",

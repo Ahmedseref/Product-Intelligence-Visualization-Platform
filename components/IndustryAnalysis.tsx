@@ -3,15 +3,20 @@ import {
   ArrowLeft, Building2, Globe2, Mail, MapPin, Search, Users, UserRound,
 } from 'lucide-react';
 import { Supplier } from '../types';
-import { getIndustryTagStyle, getIndustryTags } from './industryUtils';
+import { getIndustryTagStyle } from './industryUtils';
+import {
+  filterByIndustryTag,
+  computeTypeCounts,
+  computeCountryCounts,
+  computeScalars,
+  normalizeTag,
+} from './industryLogic';
 
 interface IndustryAnalysisProps {
   suppliers: Supplier[];
   industryTag?: string;
   onBackToContacts: () => void;
 }
-
-const normalize = (value?: string) => value?.trim().toLowerCase() || '';
 
 const formatNumber = (value: number) => new Intl.NumberFormat().format(value);
 
@@ -52,14 +57,13 @@ const IndustryAnalysis: React.FC<IndustryAnalysisProps> = ({
   const [searchQuery, setSearchQuery] = useState('');
   const selectedTag = industryTag?.trim() || '';
 
-  const matchingSuppliers = useMemo(() => {
-    const selected = normalize(selectedTag);
-    return suppliers.filter((supplier) => getIndustryTags(supplier.industryMainActivities)
-      .some((tag) => normalize(tag) === selected));
-  }, [suppliers, selectedTag]);
+  const matchingSuppliers = useMemo(
+    () => filterByIndustryTag(suppliers, selectedTag),
+    [suppliers, selectedTag],
+  );
 
   const visibleSuppliers = useMemo(() => {
-    const query = normalize(searchQuery);
+    const query = normalizeTag(searchQuery);
     if (!query) return matchingSuppliers;
     return matchingSuppliers.filter((supplier) => [
       supplier.name,
@@ -67,31 +71,17 @@ const IndustryAnalysis: React.FC<IndustryAnalysisProps> = ({
       supplier.contactEmail,
       supplier.country,
       supplier.contactType,
-    ].some((value) => normalize(value).includes(query)));
+    ].some((value) => normalizeTag(value).includes(query)));
   }, [matchingSuppliers, searchQuery]);
 
-  const typeCounts = useMemo(() => {
-    const counts = new Map<string, number>();
-    matchingSuppliers.forEach((supplier) => {
-      const type = supplier.contactType?.trim() || 'Unclassified';
-      counts.set(type, (counts.get(type) || 0) + 1);
-    });
-    return Array.from(counts.entries()).sort((a, b) => b[1] - a[1]);
-  }, [matchingSuppliers]);
+  const typeCounts = useMemo(() => computeTypeCounts(matchingSuppliers), [matchingSuppliers]);
 
-  const countryCounts = useMemo(() => {
-    const counts = new Map<string, number>();
-    matchingSuppliers.forEach((supplier) => {
-      const country = supplier.country?.trim() || 'Unknown country';
-      counts.set(country, (counts.get(country) || 0) + 1);
-    });
-    return Array.from(counts.entries()).sort((a, b) => b[1] - a[1]).slice(0, 8);
-  }, [matchingSuppliers]);
+  const countryCounts = useMemo(() => computeCountryCounts(matchingSuppliers), [matchingSuppliers]);
 
-  const activeCount = matchingSuppliers.filter((supplier) => supplier.isActive).length;
-  const withEmailCount = matchingSuppliers.filter((supplier) => supplier.contactEmail).length;
-  const withWebsiteCount = matchingSuppliers.filter((supplier) => supplier.website).length;
-  const uniqueCountries = new Set(matchingSuppliers.map((supplier) => supplier.country).filter(Boolean)).size;
+  const { activeCount, withEmailCount, withWebsiteCount, uniqueCountries } = useMemo(
+    () => computeScalars(matchingSuppliers),
+    [matchingSuppliers],
+  );
 
   return (
     <div className="min-h-full bg-slate-50 -m-6 p-6">
