@@ -2,7 +2,7 @@ import React, { useState, useCallback, useEffect, useMemo, useRef } from 'react'
 import {
   Plus, Pencil, Trash2, Building2, Globe, Mail, Phone, X, Check, Search, Tag, Sparkles,
   RefreshCw, UploadCloud, Filter, ArrowUp, ArrowDown, ArrowUpDown, Maximize2, FileText,
-  Columns3, Eye, EyeOff, UsersRound, UserRound,
+  Columns3, Eye, EyeOff, UsersRound, UserRound, GripVertical,
 } from 'lucide-react';
 import { Supplier } from '../types';
 import { api, NotionSyncStatus } from '../client/api';
@@ -24,30 +24,175 @@ const formatDate = (value?: string | null): string => {
   return d.toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' });
 };
 
+const getIndustryTags = (value?: string): string[] => {
+  if (!value) return [];
+  return Array.from(new Set(
+    value
+      .split(',')
+      .map((tag) => tag.trim())
+      .filter(Boolean)
+  ));
+};
+
+const IndustryTags: React.FC<{ value?: string; compact?: boolean }> = ({ value, compact = false }) => {
+  const tags = getIndustryTags(value);
+  if (tags.length === 0) return <span className="text-gray-400">-</span>;
+
+  return (
+    <div className="flex flex-wrap gap-1">
+      {tags.map((tag) => (
+        <span
+          key={tag}
+          className={`inline-flex items-center rounded-full bg-violet-50 text-violet-700 font-medium ${
+            compact ? 'px-1.5 py-0.5 text-[10px]' : 'px-2 py-1 text-xs'
+          }`}
+        >
+          {tag}
+        </span>
+      ))}
+    </div>
+  );
+};
+
 interface ColumnDef {
   key: string;
   label: string;
   defaultWidth: number;
   getValue: (s: Supplier) => string;
   sortValue?: (s: Supplier) => number | string;
+  render: (s: Supplier) => React.ReactNode;
 }
 
 const COLUMN_DEFS: ColumnDef[] = [
-  { key: 'id', label: 'ID', defaultWidth: 90, getValue: (s) => s.id },
-  { key: 'name', label: 'Company Name', defaultWidth: 220, getValue: (s) => s.name || '' },
-  { key: 'supplierCode', label: 'Code', defaultWidth: 100, getValue: (s) => s.supplierCode || '' },
-  { key: 'country', label: 'Country', defaultWidth: 130, getValue: (s) => s.country || '' },
-  { key: 'contact', label: 'Contact', defaultWidth: 220, getValue: (s) => s.contactName || '' },
-  { key: 'leadInfo', label: 'Lead Info', defaultWidth: 180, getValue: (s) => s.leadPosition || '' },
-  { key: 'industry', label: 'Industry', defaultWidth: 180, getValue: (s) => s.industryMainActivities || '' },
-  { key: 'contactType', label: 'Type', defaultWidth: 130, getValue: (s) => s.contactType || '' },
-  { key: 'status', label: 'Status', defaultWidth: 150, getValue: (s) => s.isActive ? 'Active' : 'Inactive' },
+  {
+    key: 'id',
+    label: 'ID',
+    defaultWidth: 90,
+    getValue: (s) => s.id,
+    render: (s) => (
+      <div className="flex items-center gap-2">
+        <span className="truncate">{s.id}</span>
+        <span className="hidden group-hover:inline-flex items-center gap-1 px-1.5 py-0.5 bg-yellow-200 text-yellow-900 text-[10px] font-semibold rounded">
+          <Maximize2 size={10} /> OPEN
+        </span>
+      </div>
+    ),
+  },
+  {
+    key: 'name',
+    label: 'Company Name',
+    defaultWidth: 220,
+    getValue: (s) => s.name || '',
+    render: (s) => (
+      <div className="flex items-center">
+        <div className="w-10 h-10 bg-blue-100 rounded-full flex items-center justify-center mr-3 flex-shrink-0">
+          <Building2 size={20} className="text-blue-600" />
+        </div>
+        <div className="min-w-0">
+          <div className="text-sm font-medium text-gray-900 truncate">{s.name}</div>
+          {s.website && (
+            <a href={s.website} target="_blank" rel="noopener noreferrer" onClick={(e) => e.stopPropagation()} className="text-xs text-blue-500 hover:underline flex items-center gap-1">
+              <Globe size={12} /> Website
+            </a>
+          )}
+        </div>
+      </div>
+    ),
+  },
+  {
+    key: 'supplierCode',
+    label: 'Code',
+    defaultWidth: 100,
+    getValue: (s) => s.supplierCode || '',
+    render: (s) => s.supplierCode ? (
+      <span className="inline-flex items-center gap-1 px-2 py-1 bg-emerald-50 text-emerald-700 rounded font-mono text-xs font-bold">
+        <Tag size={12} />
+        {s.supplierCode}
+      </span>
+    ) : <span className="text-xs text-gray-400">-</span>,
+  },
+  {
+    key: 'country',
+    label: 'Country',
+    defaultWidth: 130,
+    getValue: (s) => s.country || '',
+    render: (s) => s.country || '-',
+  },
+  {
+    key: 'contact',
+    label: 'Contact',
+    defaultWidth: 220,
+    getValue: (s) => s.contactName || '',
+    render: (s) => (
+      <>
+        <div className="text-sm text-gray-900 truncate">{s.contactName || '-'}</div>
+        {s.contactEmail && (
+          <div className="text-xs text-gray-500 flex items-center gap-1 truncate">
+            <Mail size={12} className="flex-shrink-0" /> <span className="truncate">{s.contactEmail}</span>
+          </div>
+        )}
+        {s.contactPhone && (
+          <div className="text-xs text-gray-500 flex items-center gap-1">
+            <Phone size={12} className="flex-shrink-0" /> {s.contactPhone}
+          </div>
+        )}
+      </>
+    ),
+  },
+  {
+    key: 'leadInfo',
+    label: 'Lead Info',
+    defaultWidth: 180,
+    getValue: (s) => s.leadPosition || '',
+    render: (s) => (
+      <>
+        <div className="text-xs text-gray-700 truncate">{s.leadPosition || '-'}</div>
+        {s.leadSource && <div className="text-xs text-gray-500 truncate">Source: {s.leadSource}</div>}
+        {s.sourceQuality && <div className="text-xs text-gray-500 truncate">Quality: {s.sourceQuality}</div>}
+      </>
+    ),
+  },
+  {
+    key: 'industry',
+    label: 'Industry',
+    defaultWidth: 180,
+    getValue: (s) => s.industryMainActivities || '',
+    render: (s) => <IndustryTags value={s.industryMainActivities} compact />,
+  },
+  {
+    key: 'contactType',
+    label: 'Type',
+    defaultWidth: 130,
+    getValue: (s) => s.contactType || '',
+    render: (s) => s.contactType || '-',
+  },
+  {
+    key: 'status',
+    label: 'Status',
+    defaultWidth: 150,
+    getValue: (s) => s.isActive ? 'Active' : 'Inactive',
+    render: (s) => (
+      <>
+        <span className={`px-2 py-1 inline-flex text-xs leading-5 font-semibold rounded-full ${s.isActive ? 'bg-green-100 text-green-800' : 'bg-gray-100 text-gray-800'}`}>
+          {s.isActive ? 'Active' : 'Inactive'}
+        </span>
+        {s.notionPageId && (
+          <span className="ml-1 px-2 py-1 inline-flex text-xs leading-5 font-semibold rounded-full bg-blue-50 text-blue-700" title="Synced with Notion">
+            Notion
+          </span>
+        )}
+        {s.action && <div className="text-xs text-gray-500 mt-1 truncate">Action: {s.action}</div>}
+        {s.priority && <div className="text-xs text-gray-500 truncate">Priority: {s.priority}</div>}
+      </>
+    ),
+  },
   {
     key: 'lastUpdated',
     label: 'Date',
     defaultWidth: 140,
     getValue: (s) => formatDate(s.notionLastEditedTime) || formatDate(s.updatedAt),
     sortValue: (s) => new Date(s.notionLastEditedTime || s.updatedAt || 0).getTime(),
+    render: (s) => formatDate(s.notionLastEditedTime) || formatDate(s.updatedAt) || '-',
   },
 ];
 
@@ -82,7 +227,7 @@ const FILTERABLE_COLUMNS: FilterDef[] = [
   { key: 'notes', label: 'Notes', type: 'select', getValue: (s) => s.notes },
   { key: 'updates', label: 'Updates', type: 'select', getValue: (s) => s.updates },
   { key: 'recordId', label: 'Record ID', type: 'select', getValue: (s) => s.recordId },
-  { key: 'industryMainActivities', label: 'Industry', type: 'select', getValue: (s) => s.industryMainActivities },
+  { key: 'industryMainActivities', label: 'Industry', type: 'multi', getValues: (s) => getIndustryTags(s.industryMainActivities) },
   { key: 'contactType', label: 'Supplier / Customer', type: 'select', getValue: (s) => s.contactType },
   { key: 'brand', label: 'Brand', type: 'multi', getValues: (s) => s.brand },
   { key: 'product', label: 'Product', type: 'multi', getValues: (s) => s.product },
@@ -122,6 +267,8 @@ const SupplierManager: React.FC<SupplierManagerProps> = ({
   const [columnWidths, setColumnWidths] = useState<Record<string, number>>(() =>
     Object.fromEntries(COLUMN_DEFS.map((c) => [c.key, c.defaultWidth]))
   );
+  const [columnOrder, setColumnOrder] = useState<string[]>(() => COLUMN_DEFS.map((c) => c.key));
+  const [draggedColumnKey, setDraggedColumnKey] = useState<string | null>(null);
   const resizingRef = useRef<{ key: string; startX: number; startWidth: number } | null>(null);
 
   const [showFilterPanel, setShowFilterPanel] = useState(false);
@@ -132,8 +279,10 @@ const SupplierManager: React.FC<SupplierManagerProps> = ({
   const [showColumnsPanel, setShowColumnsPanel] = useState(false);
   const [hiddenColumns, setHiddenColumns] = useState<Set<string>>(new Set());
   const visibleColumnDefs = useMemo(
-    () => COLUMN_DEFS.filter((c) => !hiddenColumns.has(c.key)),
-    [hiddenColumns]
+    () => columnOrder
+      .map((key) => COLUMN_DEFS.find((c) => c.key === key))
+      .filter((c): c is ColumnDef => Boolean(c) && !hiddenColumns.has(c.key)),
+    [columnOrder, hiddenColumns]
   );
   const toggleColumnVisibility = (key: string) => {
     setHiddenColumns((prev) => {
@@ -144,6 +293,18 @@ const SupplierManager: React.FC<SupplierManagerProps> = ({
     });
   };
   const resetColumns = () => setHiddenColumns(new Set());
+  const moveColumn = (sourceKey: string, targetKey: string) => {
+    if (sourceKey === targetKey) return;
+    setColumnOrder((prev) => {
+      const next = [...prev];
+      const sourceIndex = next.indexOf(sourceKey);
+      const targetIndex = next.indexOf(targetKey);
+      if (sourceIndex < 0 || targetIndex < 0) return prev;
+      next.splice(sourceIndex, 1);
+      next.splice(next.indexOf(targetKey), 0, sourceKey);
+      return next;
+    });
+  };
 
   const [peekSupplier, setPeekSupplier] = useState<Supplier | null>(null);
 
@@ -622,13 +783,25 @@ const SupplierManager: React.FC<SupplierManagerProps> = ({
                 )}
               </div>
               <div className="space-y-1 max-h-80 overflow-y-auto">
-                {COLUMN_DEFS.map((col) => {
+                {columnOrder.map((key) => COLUMN_DEFS.find((col) => col.key === key)).filter((col): col is ColumnDef => Boolean(col)).map((col) => {
                   const isVisible = !hiddenColumns.has(col.key);
                   return (
                     <label
                       key={col.key}
-                      className="flex items-center gap-2 px-2 py-1.5 rounded hover:bg-gray-50 cursor-pointer text-sm text-gray-700"
+                      draggable
+                      onDragStart={() => setDraggedColumnKey(col.key)}
+                      onDragEnd={() => setDraggedColumnKey(null)}
+                      onDragOver={(e) => e.preventDefault()}
+                      onDrop={(e) => {
+                        e.preventDefault();
+                        if (draggedColumnKey) moveColumn(draggedColumnKey, col.key);
+                        setDraggedColumnKey(null);
+                      }}
+                      className={`flex items-center gap-2 px-2 py-1.5 rounded hover:bg-gray-50 cursor-grab text-sm text-gray-700 ${
+                        draggedColumnKey === col.key ? 'opacity-50' : ''
+                      }`}
                     >
+                      <GripVertical size={14} className="text-gray-300 flex-shrink-0" />
                       <input
                         type="checkbox"
                         checked={isVisible}
@@ -697,107 +870,11 @@ const SupplierManager: React.FC<SupplierManagerProps> = ({
             ) : (
               filteredSuppliers.map((supplier) => (
                 <tr key={supplier.id} className="group hover:bg-gray-50 cursor-pointer" onClick={() => setPeekSupplier(supplier)}>
-                  {!hiddenColumns.has('id') && (
-                    <td className="px-6 py-4 whitespace-nowrap text-sm font-mono text-gray-600 relative">
-                      <div className="flex items-center gap-2">
-                        <span className="truncate">{supplier.id}</span>
-                        <span className="hidden group-hover:inline-flex items-center gap-1 px-1.5 py-0.5 bg-yellow-200 text-yellow-900 text-[10px] font-semibold rounded">
-                          <Maximize2 size={10} /> OPEN
-                        </span>
-                      </div>
+                  {visibleColumnDefs.map((col) => (
+                    <td key={col.key} className="px-6 py-4 whitespace-nowrap overflow-hidden text-sm text-gray-600">
+                      {col.render(supplier)}
                     </td>
-                  )}
-                  {!hiddenColumns.has('name') && (
-                    <td className="px-6 py-4 whitespace-nowrap overflow-hidden">
-                      <div className="flex items-center">
-                        <div className="w-10 h-10 bg-blue-100 rounded-full flex items-center justify-center mr-3 flex-shrink-0">
-                          <Building2 size={20} className="text-blue-600" />
-                        </div>
-                        <div className="min-w-0">
-                          <div className="text-sm font-medium text-gray-900 truncate">{supplier.name}</div>
-                          {supplier.website && (
-                            <a href={supplier.website} target="_blank" rel="noopener noreferrer" onClick={(e) => e.stopPropagation()} className="text-xs text-blue-500 hover:underline flex items-center gap-1">
-                              <Globe size={12} /> Website
-                            </a>
-                          )}
-                        </div>
-                      </div>
-                    </td>
-                  )}
-                  {!hiddenColumns.has('supplierCode') && (
-                    <td className="px-6 py-4 whitespace-nowrap">
-                      {supplier.supplierCode ? (
-                        <span className="inline-flex items-center gap-1 px-2 py-1 bg-emerald-50 text-emerald-700 rounded font-mono text-xs font-bold">
-                          <Tag size={12} />
-                          {supplier.supplierCode}
-                        </span>
-                      ) : (
-                        <span className="text-xs text-gray-400">-</span>
-                      )}
-                    </td>
-                  )}
-                  {!hiddenColumns.has('country') && (
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500 truncate">{supplier.country || '-'}</td>
-                  )}
-                  {!hiddenColumns.has('contact') && (
-                    <td className="px-6 py-4 whitespace-nowrap overflow-hidden">
-                      <div className="text-sm text-gray-900 truncate">{supplier.contactName || '-'}</div>
-                      {supplier.contactEmail && (
-                        <div className="text-xs text-gray-500 flex items-center gap-1 truncate">
-                          <Mail size={12} className="flex-shrink-0" /> <span className="truncate">{supplier.contactEmail}</span>
-                        </div>
-                      )}
-                      {supplier.contactPhone && (
-                        <div className="text-xs text-gray-500 flex items-center gap-1">
-                          <Phone size={12} className="flex-shrink-0" /> {supplier.contactPhone}
-                        </div>
-                      )}
-                    </td>
-                  )}
-                  {!hiddenColumns.has('leadInfo') && (
-                    <td className="px-6 py-4 whitespace-nowrap overflow-hidden">
-                      <div className="text-xs text-gray-700 truncate">{supplier.leadPosition || '-'}</div>
-                      {supplier.leadSource && (
-                        <div className="text-xs text-gray-500 truncate">Source: {supplier.leadSource}</div>
-                      )}
-                      {supplier.sourceQuality && (
-                        <div className="text-xs text-gray-500 truncate">Quality: {supplier.sourceQuality}</div>
-                      )}
-                    </td>
-                  )}
-                  {!hiddenColumns.has('industry') && (
-                    <td className="px-6 py-4 whitespace-nowrap text-xs text-gray-600 truncate" title={supplier.industryMainActivities || ''}>
-                      {supplier.industryMainActivities || '-'}
-                    </td>
-                  )}
-                  {!hiddenColumns.has('contactType') && (
-                    <td className="px-6 py-4 whitespace-nowrap text-xs text-gray-600 truncate">
-                      {supplier.contactType || '-'}
-                    </td>
-                  )}
-                  {!hiddenColumns.has('status') && (
-                    <td className="px-6 py-4 whitespace-nowrap overflow-hidden">
-                      <span className={`px-2 py-1 inline-flex text-xs leading-5 font-semibold rounded-full ${supplier.isActive ? 'bg-green-100 text-green-800' : 'bg-gray-100 text-gray-800'}`}>
-                        {supplier.isActive ? 'Active' : 'Inactive'}
-                      </span>
-                      {supplier.notionPageId && (
-                        <span className="ml-1 px-2 py-1 inline-flex text-xs leading-5 font-semibold rounded-full bg-blue-50 text-blue-700" title="Synced with Notion">
-                          Notion
-                        </span>
-                      )}
-                      {supplier.action && (
-                        <div className="text-xs text-gray-500 mt-1 truncate">Action: {supplier.action}</div>
-                      )}
-                      {supplier.priority && (
-                        <div className="text-xs text-gray-500 truncate">Priority: {supplier.priority}</div>
-                      )}
-                    </td>
-                  )}
-                  {!hiddenColumns.has('lastUpdated') && (
-                    <td className="px-6 py-4 whitespace-nowrap text-xs text-gray-500 truncate">
-                      {formatDate(supplier.notionLastEditedTime) || formatDate(supplier.updatedAt) || '-'}
-                    </td>
-                  )}
+                  ))}
                   <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
                     <button onClick={(e) => { e.stopPropagation(); setPeekSupplier(supplier); }} className="text-gray-500 hover:text-gray-700 mr-3" title="Open details">
                       <Maximize2 size={16} />
@@ -1158,7 +1235,7 @@ const SupplierPeekModal: React.FC<SupplierPeekModalProps> = ({ supplier, onClose
               ) : undefined}
             />
             <PeekRow label="Address" value={supplier.address} />
-            <PeekRow label="Industry / Main Activities" value={supplier.industryMainActivities} />
+            <PeekRow label="Industry / Main Activities" value={<IndustryTags value={supplier.industryMainActivities} />} />
             <PeekRow label="Supplier / Customer" value={supplier.contactType} />
             <PeekRow label="Date (Last Updated)" value={formatDate(supplier.notionLastEditedTime) || formatDate(supplier.updatedAt)} />
           </div>
