@@ -34,6 +34,33 @@ const getIndustryTags = (value?: string): string[] => {
   ));
 };
 
+const INDUSTRY_TAG_OVERRIDES: Record<string, { backgroundColor: string; color: string; borderColor: string }> = {
+  'raw material supplier': {
+    backgroundColor: '#dcfce7',
+    color: '#166534',
+    borderColor: '#bbf7d0',
+  },
+};
+
+const getIndustryTagStyle = (tag: string): React.CSSProperties => {
+  const normalizedTag = tag.trim().toLowerCase();
+  const override = INDUSTRY_TAG_OVERRIDES[normalizedTag];
+  if (override) return override;
+
+  // A deterministic hue keeps the same industry color everywhere while
+  // producing a different color for different industry names.
+  let hash = 0;
+  for (let index = 0; index < normalizedTag.length; index += 1) {
+    hash = (hash * 31 + normalizedTag.charCodeAt(index)) % 360;
+  }
+  const hue = hash;
+  return {
+    backgroundColor: `hsl(${hue} 85% 94%)`,
+    color: `hsl(${hue} 65% 35%)`,
+    borderColor: `hsl(${hue} 70% 84%)`,
+  };
+};
+
 const IndustryTags: React.FC<{ value?: string; compact?: boolean }> = ({ value, compact = false }) => {
   const tags = getIndustryTags(value);
   if (tags.length === 0) return <span className="text-gray-400">-</span>;
@@ -43,7 +70,8 @@ const IndustryTags: React.FC<{ value?: string; compact?: boolean }> = ({ value, 
       {tags.map((tag) => (
         <span
           key={tag}
-          className={`inline-flex items-center rounded-full bg-violet-50 text-violet-700 font-medium ${
+          style={getIndustryTagStyle(tag)}
+          className={`inline-flex items-center rounded-full border font-medium ${
             compact ? 'px-1.5 py-0.5 text-[10px]' : 'px-2 py-1 text-xs'
           }`}
         >
