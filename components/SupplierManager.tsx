@@ -27,7 +27,9 @@ const formatDate = (value?: string | null): string => {
 
 const openIndustryAnalysisTab = (tag: string) => {
   const analysisUrl = `${window.location.origin}${window.location.pathname}#industry-analysis?industry=${encodeURIComponent(tag)}`;
-  window.open(analysisUrl, '_blank', 'noopener,noreferrer');
+  // Keep the opener relationship so the new tab can receive the current
+  // authenticated session without asking the user to sign in again.
+  window.open(analysisUrl, '_blank');
 };
 
 const IndustryTags: React.FC<{

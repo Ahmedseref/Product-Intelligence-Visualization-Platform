@@ -19,7 +19,7 @@ import TechnicalIntelligenceDashboard from './components/technicalIntelligence/T
 import DocumentMemory from './components/DocumentMemory';
 import ProformaInvoice from './components/ProformaInvoice';
 import IndustryAnalysis from './components/IndustryAnalysis';
-import { api, authApi, setAuthToken, initAuthToken, AuthUser } from './client/api';
+import { api, authApi, getStoredToken, setAuthToken, initAuthToken, AuthUser } from './client/api';
 import { LogOut, PanelLeftClose, PanelLeftOpen } from 'lucide-react';
 import { useGlobalRefresh } from './client/hooks/useGlobalRefresh';
 import { RefreshProvider } from './client/contexts/RefreshContext';
@@ -124,8 +124,74 @@ const App: React.FC = () => {
   const resizeStartRef = React.useRef<{ startX: number; startWidth: number } | null>(null);
 
   useEffect(() => {
-    initAuthToken();
-    authApi.getCurrentUser().then(user => {
+    const handleAuthHandoffRequest = (event: MessageEvent) => {
+      if (
+        event.origin !== window.location.origin
+        || event.data?.type !== 'industry-analysis-auth-request'
+        || !event.source
+      ) {
+        return;
+      }
+
+      const token = getStoredToken();
+      if (token) {
+        (event.source as Window).postMessage(
+          { type: 'industry-analysis-auth-response', token },
+          event.origin,
+        );
+      }
+    };
+
+    window.addEventListener('message', handleAuthHandoffRequest);
+    return () => window.removeEventListener('message', handleAuthHandoffRequest);
+  }, []);
+
+  useEffect(() => {
+    const requestAuthHandoff = (): Promise<string | null> => new Promise((resolve) => {
+      if (!window.opener) {
+        resolve(null);
+        return;
+      }
+
+      let settled = false;
+      const finish = (token: string | null) => {
+        if (settled) return;
+        settled = true;
+        window.clearTimeout(timeoutId);
+        window.removeEventListener('message', handleAuthHandoffResponse);
+        resolve(token);
+      };
+      const handleAuthHandoffResponse = (event: MessageEvent) => {
+        if (
+          event.origin === window.location.origin
+          && event.source === window.opener
+          && event.data?.type === 'industry-analysis-auth-response'
+          && typeof event.data.token === 'string'
+        ) {
+          finish(event.data.token);
+        }
+      };
+      const timeoutId = window.setTimeout(() => finish(null), 1000);
+
+      window.addEventListener('message', handleAuthHandoffResponse);
+      window.opener.postMessage(
+        { type: 'industry-analysis-auth-request' },
+        window.location.origin,
+      );
+    });
+
+    const initializeAuth = async () => {
+      initAuthToken();
+
+      // A newly opened analysis tab has a separate in-memory app instance.
+      // Ask the already-authenticated opener for its token before showing
+      // the login screen. The token is transferred only in memory.
+      if (getHashState().view === 'industry-analysis') {
+        const handedOffToken = await requestAuthHandoff();
+        if (handedOffToken) setAuthToken(handedOffToken);
+      }
+
+      const user = await authApi.getCurrentUser();
       if (user) {
         setAuthUser(user);
         setCurrentUser({ id: user.id, name: user.username, role: user.role });
@@ -134,7 +200,9 @@ const App: React.FC = () => {
         }
       }
       setIsAuthLoading(false);
-    });
+    };
+
+    initializeAuth();
   }, []);
 
   const handleLogin = async (username: string, password: string) => {
@@ -758,6 +826,29 @@ const App: React.FC = () => {
     return (
       <div className="min-h-screen bg-slate-900 flex items-center justify-center">
         <div className="animate-spin w-8 h-8 border-4 border-blue-500 border-t-transparent rounded-full"></div>
+      </div>
+    );
+  }
+
+  // Industry analysis tabs are only opened by an authenticated Contact
+  // Network page. If a browser blocks the short-lived handoff, avoid
+  // presenting a second sign-in form in that tab.
+  if (!authUser && viewMode === 'industry-analysis' && window.opener) {
+    return (
+      <div className="min-h-screen bg-slate-50 flex items-center justify-center p-6">
+        <div className="max-w-md rounded-xl border border-slate-200 bg-white p-6 text-center shadow-sm">
+          <h1 className="text-lg font-semibold text-slate-900">Unable to open industry analysis</h1>
+          <p className="mt-2 text-sm text-slate-600">
+            Return to Contact Network and open the industry tag again.
+          </p>
+          <button
+            type="button"
+            onClick={() => window.close()}
+            className="mt-5 rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700"
+          >
+            Close this tab
+          </button>
+        </div>
       </div>
     );
   }
