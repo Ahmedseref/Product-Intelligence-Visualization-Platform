@@ -7,6 +7,7 @@ import {
 import { Supplier } from '../types';
 import { api, NotionSyncStatus } from '../client/api';
 import { useEscapeKey } from '../hooks/useEscapeKey';
+import { getIndustryTagStyle, getIndustryTags } from './industryUtils';
 
 type SortDirection = 'asc' | 'desc';
 interface SortConfig {
@@ -24,45 +25,8 @@ const formatDate = (value?: string | null): string => {
   return d.toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' });
 };
 
-const getIndustryTags = (value?: string): string[] => {
-  if (!value) return [];
-  return Array.from(new Set(
-    value
-      .split(',')
-      .map((tag) => tag.trim())
-      .filter(Boolean)
-  ));
-};
-
-const INDUSTRY_TAG_OVERRIDES: Record<string, { backgroundColor: string; color: string; borderColor: string }> = {
-  'raw material supplier': {
-    backgroundColor: '#dcfce7',
-    color: '#166534',
-    borderColor: '#bbf7d0',
-  },
-};
-
-const getIndustryTagStyle = (tag: string): React.CSSProperties => {
-  const normalizedTag = tag.trim().toLowerCase();
-  const override = INDUSTRY_TAG_OVERRIDES[normalizedTag];
-  if (override) return override;
-
-  // A deterministic hue keeps the same industry color everywhere while
-  // producing a different color for different industry names.
-  let hash = 0;
-  for (let index = 0; index < normalizedTag.length; index += 1) {
-    hash = (hash * 31 + normalizedTag.charCodeAt(index)) % 360;
-  }
-  const hue = hash;
-  return {
-    backgroundColor: `hsl(${hue} 85% 94%)`,
-    color: `hsl(${hue} 65% 35%)`,
-    borderColor: `hsl(${hue} 70% 84%)`,
-  };
-};
-
 const openIndustryAnalysisTab = (tag: string) => {
-  const analysisUrl = `${window.location.origin}${window.location.pathname}#suppliers?industry=${encodeURIComponent(tag)}`;
+  const analysisUrl = `${window.location.origin}${window.location.pathname}#industry-analysis?industry=${encodeURIComponent(tag)}`;
   window.open(analysisUrl, '_blank', 'noopener,noreferrer');
 };
 

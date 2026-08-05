@@ -15,6 +15,7 @@ const viewToHash: Record<ViewMode, string> = {
   'add-product': '#add-product',
   'taxonomy-manager': '#taxonomy',
   'suppliers': '#suppliers',
+  'industry-analysis': '#industry-analysis',
   'system-builder': '#system-builder',
   'document-memory': '#document-memory',
   'settings': '#settings',

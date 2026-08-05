@@ -18,6 +18,7 @@ import SystemBuilder from './components/systemBuilder/SystemBuilder';
 import TechnicalIntelligenceDashboard from './components/technicalIntelligence/TechnicalIntelligenceDashboard';
 import DocumentMemory from './components/DocumentMemory';
 import ProformaInvoice from './components/ProformaInvoice';
+import IndustryAnalysis from './components/IndustryAnalysis';
 import { api, authApi, setAuthToken, initAuthToken, AuthUser } from './client/api';
 import { LogOut, PanelLeftClose, PanelLeftOpen } from 'lucide-react';
 import { useGlobalRefresh } from './client/hooks/useGlobalRefresh';
@@ -35,6 +36,7 @@ const App: React.FC = () => {
     '#add-product': 'add-product',
     '#taxonomy': 'taxonomy-manager',
     '#suppliers': 'suppliers',
+    '#industry-analysis': 'industry-analysis',
     '#system-builder': 'system-builder',
     '#document-memory': 'document-memory',
     '#settings': 'settings',
@@ -47,7 +49,7 @@ const App: React.FC = () => {
   const getHashState = (): { view: ViewMode; industry?: string } => {
     const [hashPath, query] = window.location.hash.split('?');
     const view = hashToView[hashPath] || 'technical-intelligence';
-    const industry = view === 'suppliers'
+    const industry = view === 'suppliers' || view === 'industry-analysis'
       ? new URLSearchParams(query || '').get('industry') || undefined
       : undefined;
     return { view, industry };
@@ -1004,6 +1006,13 @@ const App: React.FC = () => {
                 onDeleteSupplier={deleteSupplier}
                 onRefresh={syncWithDatabase}
                 initialIndustryTag={initialIndustryTag}
+              />
+            )}
+            {viewMode === 'industry-analysis' && (
+              <IndustryAnalysis
+                suppliers={suppliers}
+                industryTag={initialIndustryTag}
+                onBackToContacts={() => setViewMode('suppliers')}
               />
             )}
             {viewMode === 'system-builder' && (

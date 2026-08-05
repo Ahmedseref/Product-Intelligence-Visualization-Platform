@@ -337,7 +337,7 @@ export interface DocumentRecord {
   updatedAt: string;
 }
 
-export type ViewMode = 'technical-intelligence' | 'inventory' | 'add-product' | 'taxonomy-manager' | 'suppliers' | 'settings' | 'system-builder' | 'document-memory' | 'proforma';
+export type ViewMode = 'technical-intelligence' | 'inventory' | 'add-product' | 'taxonomy-manager' | 'suppliers' | 'industry-analysis' | 'settings' | 'system-builder' | 'document-memory' | 'proforma';
 
 export interface ProformaSettingsData {
   id?: number;
