@@ -44,12 +44,17 @@ const App: React.FC = () => {
     Object.entries(hashToView).map(([h, v]) => [v, h])
   ) as Record<ViewMode, string>;
 
-  const getViewFromHash = (): ViewMode => {
-    const hash = window.location.hash;
-    return hashToView[hash] || 'technical-intelligence';
+  const getHashState = (): { view: ViewMode; industry?: string } => {
+    const [hashPath, query] = window.location.hash.split('?');
+    const view = hashToView[hashPath] || 'technical-intelligence';
+    const industry = view === 'suppliers'
+      ? new URLSearchParams(query || '').get('industry') || undefined
+      : undefined;
+    return { view, industry };
   };
 
-  const [viewMode, setViewModeState] = useState<ViewMode>(getViewFromHash);
+  const [viewMode, setViewModeState] = useState<ViewMode>(() => getHashState().view);
+  const [initialIndustryTag, setInitialIndustryTag] = useState<string | undefined>(() => getHashState().industry);
   const [pendingEditProductId, setPendingEditProductId] = useState<string | null>(null);
   // Remembers which view the user was on when they triggered an external
   // "edit product" action, so we can return them there once the editor closes.
@@ -83,8 +88,9 @@ const App: React.FC = () => {
 
   useEffect(() => {
     const onHashChange = () => {
-      const view = getViewFromHash();
+      const { view, industry } = getHashState();
       setViewModeState(view);
+      setInitialIndustryTag(industry);
     };
     window.addEventListener('hashchange', onHashChange);
     if (!window.location.hash) {
@@ -997,6 +1003,7 @@ const App: React.FC = () => {
                 onUpdateSupplier={updateSupplier}
                 onDeleteSupplier={deleteSupplier}
                 onRefresh={syncWithDatabase}
+                initialIndustryTag={initialIndustryTag}
               />
             )}
             {viewMode === 'system-builder' && (

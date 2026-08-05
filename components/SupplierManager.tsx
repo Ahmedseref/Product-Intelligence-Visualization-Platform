@@ -61,22 +61,37 @@ const getIndustryTagStyle = (tag: string): React.CSSProperties => {
   };
 };
 
-const IndustryTags: React.FC<{ value?: string; compact?: boolean }> = ({ value, compact = false }) => {
+const openIndustryAnalysisTab = (tag: string) => {
+  const analysisUrl = `${window.location.origin}${window.location.pathname}#suppliers?industry=${encodeURIComponent(tag)}`;
+  window.open(analysisUrl, '_blank', 'noopener,noreferrer');
+};
+
+const IndustryTags: React.FC<{
+  value?: string;
+  compact?: boolean;
+  onTagClick?: (tag: string) => void;
+}> = ({ value, compact = false, onTagClick }) => {
   const tags = getIndustryTags(value);
   if (tags.length === 0) return <span className="text-gray-400">-</span>;
 
   return (
     <div className="flex flex-wrap gap-1">
       {tags.map((tag) => (
-        <span
+        <button
+          type="button"
           key={tag}
+          onClick={(event) => {
+            event.stopPropagation();
+            (onTagClick || openIndustryAnalysisTab)(tag);
+          }}
           style={getIndustryTagStyle(tag)}
-          className={`inline-flex items-center rounded-full border font-medium ${
+          className={`inline-flex items-center rounded-full border font-medium cursor-pointer transition-all hover:shadow-sm hover:-translate-y-px focus:outline-none focus:ring-2 focus:ring-blue-400 ${
             compact ? 'px-1.5 py-0.5 text-[10px]' : 'px-2 py-1 text-xs'
           }`}
+          title={`Open analysis for ${tag}`}
         >
           {tag}
-        </span>
+        </button>
       ))}
     </div>
   );
@@ -275,6 +290,7 @@ interface SupplierManagerProps {
   onUpdateSupplier: (id: string, updates: Partial<Supplier>) => void;
   onDeleteSupplier: (id: string) => void;
   onRefresh?: () => void | Promise<void>;
+  initialIndustryTag?: string;
 }
 
 const SupplierManager: React.FC<SupplierManagerProps> = ({
@@ -283,6 +299,7 @@ const SupplierManager: React.FC<SupplierManagerProps> = ({
   onUpdateSupplier,
   onDeleteSupplier,
   onRefresh,
+  initialIndustryTag,
 }) => {
   const [showAddModal, setShowAddModal] = useState(false);
   const [editingSupplier, setEditingSupplier] = useState<Supplier | null>(null);
@@ -300,7 +317,9 @@ const SupplierManager: React.FC<SupplierManagerProps> = ({
   const resizingRef = useRef<{ key: string; startX: number; startWidth: number } | null>(null);
 
   const [showFilterPanel, setShowFilterPanel] = useState(false);
-  const [activeFilters, setActiveFilters] = useState<Record<string, string>>({});
+  const [activeFilters, setActiveFilters] = useState<Record<string, string>>(() =>
+    initialIndustryTag ? { industryMainActivities: initialIndustryTag } : {}
+  );
   const activeFilterCount = Object.values(activeFilters).filter(Boolean).length;
   const [contactTypeView, setContactTypeView] = useState<'supplier' | 'customer' | 'both'>('both');
 
@@ -480,6 +499,15 @@ const SupplierManager: React.FC<SupplierManagerProps> = ({
 
   const clearFilters = () => setActiveFilters({});
 
+  useEffect(() => {
+    setActiveFilters((prev) => {
+      const next = { ...prev };
+      if (initialIndustryTag) next.industryMainActivities = initialIndustryTag;
+      else delete next.industryMainActivities;
+      return next;
+    });
+  }, [initialIndustryTag]);
+
   const handleResizeStart = (e: React.MouseEvent, key: string) => {
     e.preventDefault();
     e.stopPropagation();
@@ -647,6 +675,26 @@ const SupplierManager: React.FC<SupplierManagerProps> = ({
 
   return (
     <div className="p-6">
+      {initialIndustryTag && (
+        <div className="flex items-center justify-between gap-3 rounded-lg border border-blue-200 bg-blue-50 px-4 py-3 mb-4">
+          <div className="min-w-0">
+            <p className="text-xs font-semibold uppercase tracking-wider text-blue-500">Industry analysis</p>
+            <p className="mt-0.5 text-sm text-blue-900">
+              Showing all contacts tagged <span className="font-semibold">{initialIndustryTag}</span>
+            </p>
+          </div>
+          <button
+            type="button"
+            onClick={() => {
+              setActiveFilters({});
+              window.location.hash = '#suppliers';
+            }}
+            className="flex-shrink-0 rounded-md px-2.5 py-1.5 text-xs font-medium text-blue-700 hover:bg-blue-100"
+          >
+            Clear analysis
+          </button>
+        </div>
+      )}
       <div className="flex justify-between items-center mb-6">
         <div>
           <h1 className="text-2xl font-bold text-gray-800">Contact Network</h1>
@@ -1263,7 +1311,10 @@ const SupplierPeekModal: React.FC<SupplierPeekModalProps> = ({ supplier, onClose
               ) : undefined}
             />
             <PeekRow label="Address" value={supplier.address} />
-            <PeekRow label="Industry / Main Activities" value={<IndustryTags value={supplier.industryMainActivities} />} />
+            <PeekRow
+              label="Industry / Main Activities"
+              value={<IndustryTags value={supplier.industryMainActivities} />}
+            />
             <PeekRow label="Supplier / Customer" value={supplier.contactType} />
             <PeekRow label="Date (Last Updated)" value={formatDate(supplier.notionLastEditedTime) || formatDate(supplier.updatedAt)} />
           </div>
