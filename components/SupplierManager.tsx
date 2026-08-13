@@ -2,7 +2,7 @@ import React, { useState, useCallback, useEffect, useMemo, useRef } from 'react'
 import {
   Plus, Pencil, Trash2, Building2, Globe, Mail, Phone, X, Check, Search, Tag, Sparkles,
   RefreshCw, UploadCloud, Filter, ArrowUp, ArrowDown, ArrowUpDown, Maximize2, FileText,
-  Columns3, Eye, EyeOff, UsersRound, UserRound, GripVertical,
+  Columns3, Eye, EyeOff, UsersRound, UserRound, GripVertical, Bookmark, BookmarkCheck,
 } from 'lucide-react';
 import { Supplier } from '../types';
 import { api, NotionSyncStatus } from '../client/api';
@@ -249,6 +249,42 @@ const FILTERABLE_COLUMNS: FilterDef[] = [
 ];
 
 const MIN_COLUMN_WIDTH = 80;
+const SAVED_VIEW_KEY = 'supplierManager_savedView';
+
+interface SavedView {
+  searchQuery: string;
+  activeFilters: Record<string, string>;
+  contactTypeView: 'supplier' | 'customer' | 'both';
+  sortConfig: SortConfig | null;
+  columnOrder: string[];
+  hiddenColumns: string[];
+  columnWidths: Record<string, number>;
+  savedAt: string;
+}
+
+function loadSavedView(): SavedView | null {
+  try {
+    const raw = localStorage.getItem(SAVED_VIEW_KEY);
+    if (!raw) return null;
+    return JSON.parse(raw) as SavedView;
+  } catch {
+    return null;
+  }
+}
+
+function persistView(view: SavedView) {
+  try {
+    localStorage.setItem(SAVED_VIEW_KEY, JSON.stringify(view));
+  } catch {
+    // storage unavailable — fail silently
+  }
+}
+
+function clearPersistedView() {
+  try {
+    localStorage.removeItem(SAVED_VIEW_KEY);
+  } catch {}
+}
 
 interface SupplierManagerProps {
   suppliers: Supplier[];
@@ -269,28 +305,48 @@ const SupplierManager: React.FC<SupplierManagerProps> = ({
 }) => {
   const [showAddModal, setShowAddModal] = useState(false);
   const [editingSupplier, setEditingSupplier] = useState<Supplier | null>(null);
-  const [searchQuery, setSearchQuery] = useState('');
   const [syncStatus, setSyncStatus] = useState<NotionSyncStatus | null>(null);
   const [isPushing, setIsPushing] = useState(false);
   const [isPulling, setIsPulling] = useState(false);
 
-  const [sortConfig, setSortConfig] = useState<SortConfig | null>(null);
-  const [columnWidths, setColumnWidths] = useState<Record<string, number>>(() =>
-    Object.fromEntries(COLUMN_DEFS.map((c) => [c.key, c.defaultWidth]))
-  );
-  const [columnOrder, setColumnOrder] = useState<string[]>(() => COLUMN_DEFS.map((c) => c.key));
+  // ── Saved-view state ──────────────────────────────────────────────────────
+  const [savedView, setSavedView] = useState<SavedView | null>(() => loadSavedView());
+  const [saveFlash, setSaveFlash] = useState(false); // brief "Saved!" feedback
+
+  // ── View state — initialised from localStorage if a saved view exists ─────
+  const _saved = savedView; // alias for initialiser closures
+  const [searchQuery, setSearchQuery] = useState<string>(() => _saved?.searchQuery ?? '');
+  const [sortConfig, setSortConfig] = useState<SortConfig | null>(() => _saved?.sortConfig ?? null);
+  const [columnWidths, setColumnWidths] = useState<Record<string, number>>(() => {
+    const defaults = Object.fromEntries(COLUMN_DEFS.map((c) => [c.key, c.defaultWidth]));
+    return _saved?.columnWidths ? { ...defaults, ..._saved.columnWidths } : defaults;
+  });
+  const [columnOrder, setColumnOrder] = useState<string[]>(() => {
+    if (_saved?.columnOrder) {
+      // Merge: keep saved order, append any new columns at end
+      const saved = _saved.columnOrder.filter((k) => COLUMN_DEFS.some((c) => c.key === k));
+      const remaining = COLUMN_DEFS.map((c) => c.key).filter((k) => !saved.includes(k));
+      return [...saved, ...remaining];
+    }
+    return COLUMN_DEFS.map((c) => c.key);
+  });
   const [draggedColumnKey, setDraggedColumnKey] = useState<string | null>(null);
   const resizingRef = useRef<{ key: string; startX: number; startWidth: number } | null>(null);
 
   const [showFilterPanel, setShowFilterPanel] = useState(false);
-  const [activeFilters, setActiveFilters] = useState<Record<string, string>>(() =>
-    initialIndustryTag ? { industryMainActivities: initialIndustryTag } : {}
-  );
+  const [activeFilters, setActiveFilters] = useState<Record<string, string>>(() => {
+    if (initialIndustryTag) return { industryMainActivities: initialIndustryTag };
+    return _saved?.activeFilters ?? {};
+  });
   const activeFilterCount = Object.values(activeFilters).filter(Boolean).length;
-  const [contactTypeView, setContactTypeView] = useState<'supplier' | 'customer' | 'both'>('both');
+  const [contactTypeView, setContactTypeView] = useState<'supplier' | 'customer' | 'both'>(
+    () => _saved?.contactTypeView ?? 'both'
+  );
 
   const [showColumnsPanel, setShowColumnsPanel] = useState(false);
-  const [hiddenColumns, setHiddenColumns] = useState<Set<string>>(new Set());
+  const [hiddenColumns, setHiddenColumns] = useState<Set<string>>(
+    () => new Set(_saved?.hiddenColumns ?? [])
+  );
   const visibleColumnDefs = useMemo(
     () => columnOrder
       .map((key) => COLUMN_DEFS.find((c) => c.key === key))
@@ -618,6 +674,29 @@ const SupplierManager: React.FC<SupplierManagerProps> = ({
     }
   };
 
+  // ── Save / clear view ────────────────────────────────────────────────────
+  const handleSaveView = useCallback(() => {
+    const view: SavedView = {
+      searchQuery,
+      activeFilters,
+      contactTypeView,
+      sortConfig,
+      columnOrder,
+      hiddenColumns: Array.from(hiddenColumns),
+      columnWidths,
+      savedAt: new Date().toISOString(),
+    };
+    persistView(view);
+    setSavedView(view);
+    setSaveFlash(true);
+    setTimeout(() => setSaveFlash(false), 2000);
+  }, [searchQuery, activeFilters, contactTypeView, sortConfig, columnOrder, hiddenColumns, columnWidths]);
+
+  const handleClearSavedView = useCallback(() => {
+    clearPersistedView();
+    setSavedView(null);
+  }, []);
+
   const closeModal = () => {
     setShowAddModal(false);
     setEditingSupplier(null);
@@ -870,6 +949,51 @@ const SupplierManager: React.FC<SupplierManagerProps> = ({
                 })}
               </div>
             </div>
+          )}
+        </div>
+
+        {/* ── Save View button ──────────────────────────────────────────── */}
+        <div className="relative">
+          <button
+            type="button"
+            onClick={handleSaveView}
+            title={savedView ? `Saved view active · click to update · saved ${new Date(savedView.savedAt).toLocaleString()}` : 'Save current filters, search & layout'}
+            aria-label="Save current view"
+            className={`flex items-center gap-2 px-4 py-2 border rounded-lg transition-all ${
+              saveFlash
+                ? 'border-emerald-400 bg-emerald-50 text-emerald-700'
+                : savedView
+                ? 'border-amber-400 bg-amber-50 text-amber-700 hover:bg-amber-100'
+                : 'border-gray-300 text-gray-600 hover:bg-gray-50'
+            }`}
+          >
+            {saveFlash ? (
+              <>
+                <BookmarkCheck size={16} />
+                <span className="text-xs font-medium">Saved!</span>
+              </>
+            ) : savedView ? (
+              <>
+                <BookmarkCheck size={16} />
+                <span className="text-xs font-medium">View saved</span>
+              </>
+            ) : (
+              <>
+                <Bookmark size={16} />
+                <span className="text-xs font-medium">Save view</span>
+              </>
+            )}
+          </button>
+          {savedView && !saveFlash && (
+            <button
+              type="button"
+              onClick={handleClearSavedView}
+              title="Clear saved view"
+              aria-label="Clear saved view"
+              className="absolute -top-1.5 -right-1.5 w-4 h-4 rounded-full bg-amber-500 hover:bg-red-500 text-white flex items-center justify-center transition-colors"
+            >
+              <X size={9} strokeWidth={3} />
+            </button>
           )}
         </div>
       </div>
