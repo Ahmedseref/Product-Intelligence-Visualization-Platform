@@ -565,7 +565,12 @@ const ProductForm: React.FC<ProductFormProps> = ({ onSubmit, onCancel, currentUs
                       setFormData({
                         ...formData, 
                         supplier: e.target.value,
-                        supplierId: selectedSupplier?.id
+                        supplierId: selectedSupplier?.id,
+                        // Reuse the location already maintained for the
+                        // supplier in Contact Network. Country is the
+                        // primary location; address covers contacts whose
+                        // country field is empty.
+                        manufacturingLocation: selectedSupplier?.country || selectedSupplier?.address || ''
                       });
                     }}
                   >
