@@ -3,7 +3,7 @@ import {
   Plus, Pencil, Trash2, Building2, Globe, Mail, Phone, X, Check, Search, Tag, Sparkles,
   RefreshCw, UploadCloud, Filter, ArrowUp, ArrowDown, ArrowUpDown, Maximize2, FileText,
   Columns3, Eye, EyeOff, UsersRound, UserRound, GripVertical, Bookmark, BookmarkCheck,
-  Copy, AlertTriangle,
+  Copy, AlertTriangle, ChevronDown, ChevronRight,
 } from 'lucide-react';
 import { Supplier } from '../types';
 import { api, NotionSyncStatus } from '../client/api';
@@ -373,6 +373,15 @@ const SupplierManager: React.FC<SupplierManagerProps> = ({
       }))
       .sort((a, b) => a.displayName.localeCompare(b.displayName));
   }, [suppliers]);
+  const [expandedDuplicateGroups, setExpandedDuplicateGroups] = useState<Set<string>>(new Set());
+  const toggleDuplicateGroup = useCallback((normalizedName: string) => {
+    setExpandedDuplicateGroups((previous) => {
+      const next = new Set(previous);
+      if (next.has(normalizedName)) next.delete(normalizedName);
+      else next.add(normalizedName);
+      return next;
+    });
+  }, []);
 
   const [showColumnsPanel, setShowColumnsPanel] = useState(false);
   const [hiddenColumns, setHiddenColumns] = useState<Set<string>>(
@@ -453,6 +462,10 @@ const SupplierManager: React.FC<SupplierManagerProps> = ({
     setEditingSupplier(null);
   }, []);
   const closeDuplicateReview = useCallback(() => setShowDuplicateReview(false), []);
+  const openDuplicateReview = useCallback(() => {
+    setExpandedDuplicateGroups(new Set());
+    setShowDuplicateReview(true);
+  }, []);
   useEscapeKey(showAddModal || editingSupplier ? escCloseModal : null);
   useEscapeKey(showDuplicateReview ? closeDuplicateReview : null);
   const [formData, setFormData] = useState({
@@ -803,7 +816,7 @@ const SupplierManager: React.FC<SupplierManagerProps> = ({
           </button>
           <button
             type="button"
-            onClick={() => setShowDuplicateReview(true)}
+            onClick={openDuplicateReview}
             aria-haspopup="dialog"
             aria-controls="duplicate-contact-review"
             className={`flex items-center gap-2 px-4 py-2 border rounded-lg transition-colors ${
@@ -1192,20 +1205,39 @@ const SupplierManager: React.FC<SupplierManagerProps> = ({
                 <div className="space-y-5">
                   {duplicateGroups.map((group) => (
                     <section key={group.normalizedName} className="rounded-lg border border-gray-200 overflow-hidden">
-                      <div className="flex items-center justify-between gap-3 bg-gray-50 px-4 py-3 border-b border-gray-200">
-                        <div className="min-w-0">
-                          <h3 className="font-semibold text-gray-900 truncate">{group.displayName}</h3>
-                          <p className="text-xs text-gray-500 mt-0.5">
-                            {group.suppliers.length} contacts share this company name
-                          </p>
-                        </div>
-                        <span className="inline-flex items-center gap-1 rounded-full bg-amber-100 px-2.5 py-1 text-xs font-semibold text-amber-800 flex-shrink-0">
-                          <Copy size={12} />
-                          Possible duplicate
-                        </span>
-                      </div>
+                      {(() => {
+                        const isExpanded = expandedDuplicateGroups.has(group.normalizedName);
+                        const groupId = `duplicate-group-${group.normalizedName.replace(/[^a-z0-9]+/g, '-')}`;
+                        return (
+                          <>
+                            <button
+                              type="button"
+                              onClick={() => toggleDuplicateGroup(group.normalizedName)}
+                              aria-expanded={isExpanded}
+                              aria-controls={groupId}
+                              className="w-full flex items-center justify-between gap-3 bg-gray-50 px-4 py-3 text-left hover:bg-gray-100 transition-colors"
+                            >
+                              <span className="flex items-center gap-3 min-w-0">
+                                {isExpanded ? (
+                                  <ChevronDown size={18} className="text-gray-500 flex-shrink-0" />
+                                ) : (
+                                  <ChevronRight size={18} className="text-gray-500 flex-shrink-0" />
+                                )}
+                                <span className="min-w-0">
+                                  <span className="block font-semibold text-gray-900 truncate">{group.displayName}</span>
+                                  <span className="block text-xs text-gray-500 mt-0.5">
+                                    {group.suppliers.length} contacts share this company name
+                                  </span>
+                                </span>
+                              </span>
+                              <span className="inline-flex items-center gap-1 rounded-full bg-amber-100 px-2.5 py-1 text-xs font-semibold text-amber-800 flex-shrink-0">
+                                <Copy size={12} />
+                                Possible duplicate
+                              </span>
+                            </button>
 
-                      <div className="divide-y divide-gray-100">
+                            {isExpanded && (
+                              <div id={groupId} className="divide-y divide-gray-100">
                         {group.suppliers.map((supplier) => (
                           <div key={supplier.id} className="p-4">
                             <div className="flex flex-col lg:flex-row lg:items-start lg:justify-between gap-4">
@@ -1284,7 +1316,11 @@ const SupplierManager: React.FC<SupplierManagerProps> = ({
                             </div>
                           </div>
                         ))}
-                      </div>
+                              </div>
+                            )}
+                          </>
+                        );
+                      })()}
                     </section>
                   ))}
                 </div>
