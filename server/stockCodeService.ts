@@ -1,6 +1,7 @@
 import { db } from "./db";
 import { treeNodes, products, colors, stockCodeHistory, suppliers } from "@shared/schema";
 import { and, eq, sql } from "drizzle-orm";
+import { normalizeCompanyName } from "@shared/companyNormalization";
 
 export function generateBranchCodeFromName(name: string, existingCodes: string[]): string {
   const cleanName = name.trim().toUpperCase().replace(/[^A-Z0-9\s]/g, '');
@@ -58,17 +59,46 @@ export function generateBranchCodeFromName(name: string, existingCodes: string[]
 }
 
 /**
- * Generate a unique supplier code for a new contact, reading all existing
- * codes from the database. This is the canonical server-side entry point
- * for code generation — routes and sync paths should call this, not
- * generateBranchCodeFromName directly.
+ * Generate a fresh supplier code for a new contact, reading all existing
+ * codes from the database. Same-company rows (normalized name match) are
+ * excluded from the collision list — they will share the same code, not
+ * collide with it.
  */
 export async function generateUniqueSupplierCode(name: string): Promise<string> {
-  const allSuppliers = await db.select({ supplierCode: suppliers.supplierCode }).from(suppliers);
+  const normalizedNew = normalizeCompanyName(name);
+  const allSuppliers = await db
+    .select({ supplierCode: suppliers.supplierCode, name: suppliers.name })
+    .from(suppliers);
   const existingCodes = allSuppliers
-    .map(s => s.supplierCode)
-    .filter((c): c is string => !!c);
+    .filter(s => s.supplierCode && normalizeCompanyName(s.name) !== normalizedNew)
+    .map(s => s.supplierCode!);
   return generateBranchCodeFromName(name, existingCodes);
+}
+
+/**
+ * Resolve the supplier code for a contact name:
+ * - If any existing contact has the same normalized company name and a
+ *   non-blank code, return that shared code.
+ * - Otherwise generate a fresh unique code via generateUniqueSupplierCode.
+ *
+ * This is the canonical entry point for all code-assignment paths (create
+ * route, Notion sync, suggest-code endpoint).
+ */
+export async function resolveSupplierCode(name: string): Promise<string> {
+  const normalizedNew = normalizeCompanyName(name);
+  if (!normalizedNew) {
+    return generateUniqueSupplierCode(name);
+  }
+  const allSuppliers = await db
+    .select({ supplierCode: suppliers.supplierCode, name: suppliers.name })
+    .from(suppliers);
+  const match = allSuppliers.find(
+    s => s.supplierCode && normalizeCompanyName(s.name) === normalizedNew,
+  );
+  if (match?.supplierCode) {
+    return match.supplierCode;
+  }
+  return generateUniqueSupplierCode(name);
 }
 
 function isSupplierCodeBlank(code: string | null): boolean {

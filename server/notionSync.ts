@@ -9,7 +9,7 @@ import { db } from "./db";
 import { suppliers, type InsertSupplier, type Supplier } from "@shared/schema";
 import { eq, isNull } from "drizzle-orm";
 import { refreshState } from "./refreshState";
-import { generateUniqueSupplierCode } from "./stockCodeService";
+import { resolveSupplierCode } from "./stockCodeService";
 
 // Fixed database ID for the user's "Contact Connector" Notion database.
 // Resolved once via /v1/search and hardcoded here per the task's
@@ -328,10 +328,15 @@ export async function pullFromNotion(): Promise<{ count: number }> {
       if (!local) {
         const newId = generateSupplierId(bySupplierIdMax);
         bySupplierIdMax.push(newId);
-        // Generate a unique supplier code for every new contact pulled from Notion.
+        // Resolve the supplier code: reuse an existing company's code when the
+        // name matches, or generate a fresh code for a brand-new company name.
         const contactName = mapped.name || "Unnamed Contact";
-        const newSupplierCode = await generateUniqueSupplierCode(contactName);
-        await db.insert(suppliers).values({
+        let newSupplierCode = await resolveSupplierCode(contactName);
+        // Existing rows were read once at loop start; contacts inserted during
+        // this same pull are not in that snapshot. The DB-level exclusion
+        // constraint (23P01) catches any cross-company code collision — on
+        // conflict, re-resolve against the live table and retry.
+        const insertContact = () => db.insert(suppliers).values({
           supplierId: newId,
           name: contactName,
           supplierCode: newSupplierCode,
@@ -370,6 +375,17 @@ export async function pullFromNotion(): Promise<{ count: number }> {
           appLastEditedTime: mapped.notionLastEditedTime,
           isActive: true,
         });
+        try {
+          await insertContact();
+        } catch (error: any) {
+          const pgErr = error?.code ? error : error?.cause;
+          const isCodeRace =
+            pgErr?.code === '23P01' &&
+            String(pgErr?.constraint || '').includes('supplier_code_one_company');
+          if (!isCodeRace) throw error;
+          newSupplierCode = await resolveSupplierCode(contactName);
+          await insertContact();
+        }
         upserts++;
         continue;
       }

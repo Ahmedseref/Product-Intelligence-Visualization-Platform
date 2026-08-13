@@ -26,8 +26,7 @@ const formatDate = (value?: string | null): string => {
   return d.toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' });
 };
 
-const normalizeCompanyName = (name?: string | null): string =>
-  (name || '').normalize('NFKC').trim().replace(/\s+/g, ' ').toLocaleLowerCase();
+import { normalizeCompanyName } from '../shared/companyNormalization';
 
 interface DuplicateGroup {
   normalizedName: string;

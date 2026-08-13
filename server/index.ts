@@ -19,6 +19,7 @@ import { registerCatalogExportRoutes } from "./catalogExportRoutes";
 import { registerAiSystemFillRoutes } from "./aiSystemFillRoutes";
 import { registerSelectorGuideRoutes } from "./selectorGuideRoutes";
 import { startNotionSyncScheduler } from "./notionSync";
+import { runMigrations } from "./migrate";
 
 const rootDir = process.cwd();
 
@@ -104,21 +105,32 @@ if (fs.existsSync(distPath)) {
   });
 }
 
-app.listen(PORT, "0.0.0.0", () => {
-  console.log(`Server running on http://0.0.0.0:${PORT}`);
-  
-  // Initialize services in the background to avoid blocking startup
-  setImmediate(async () => {
-    try {
-      await bootstrapAdminUser();
-      await initializeBackupService();
-      startScheduledBackups();
-      // Seed qualification vocabularies (no-op if already seeded)
-      await seedQualificationVocabularies();
-      // Start periodic Notion "Contact Connector" pull (every 5 minutes)
-      startNotionSyncScheduler();
-    } catch (error) {
-      console.error("[Startup] Background initialization error:", error);
-    }
+async function start() {
+  // Apply any pending SQL migrations BEFORE accepting requests — no route may
+  // ever observe a pre-migration schema. A migration failure aborts startup.
+  await runMigrations();
+
+  app.listen(PORT, "0.0.0.0", () => {
+    console.log(`Server running on http://0.0.0.0:${PORT}`);
+
+    // Initialize remaining services in the background to avoid blocking startup
+    setImmediate(async () => {
+      try {
+        await bootstrapAdminUser();
+        await initializeBackupService();
+        startScheduledBackups();
+        // Seed qualification vocabularies (no-op if already seeded)
+        await seedQualificationVocabularies();
+        // Start periodic Notion "Contact Connector" pull (every 5 minutes)
+        startNotionSyncScheduler();
+      } catch (error) {
+        console.error("[Startup] Background initialization error:", error);
+      }
+    });
   });
+}
+
+start().catch((error) => {
+  console.error("[Startup] Fatal: migrations failed — server not started:", error);
+  process.exit(1);
 });
