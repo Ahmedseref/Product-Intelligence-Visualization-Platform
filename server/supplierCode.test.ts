@@ -17,7 +17,12 @@
 
 import { test, after } from 'node:test';
 import assert from 'node:assert/strict';
-import { generateBranchCodeFromName, validateBranchCode, generateUniqueSupplierCode } from './stockCodeService';
+import {
+  backfillExistingSupplierCodes,
+  generateBranchCodeFromName,
+  validateBranchCode,
+  generateUniqueSupplierCode,
+} from './stockCodeService';
 import { db, pool } from './db';
 import { suppliers } from '@shared/schema';
 import { eq, like } from 'drizzle-orm';
@@ -156,4 +161,40 @@ test('generateUniqueSupplierCode avoids codes already in the database', async ()
   assert.match(code, /^[A-Z0-9]{2,5}$/);
   const validation = validateBranchCode(code);
   assert.equal(validation.valid, true);
+});
+
+test('backfill assigns unique codes only to blank legacy contacts', async () => {
+  await cleanup();
+  await db.insert(suppliers).values([
+    { supplierId: `${TEST_PREFIX}-backfill-a`, name: 'Legacy Alpha' },
+    { supplierId: `${TEST_PREFIX}-backfill-b`, name: 'Legacy Beta' },
+    { supplierId: `${TEST_PREFIX}-backfill-existing`, name: 'Already Coded', supplierCode: 'ZZTQ4' },
+  ]);
+
+  const result = await backfillExistingSupplierCodes({
+    supplierIds: [
+      `${TEST_PREFIX}-backfill-a`,
+      `${TEST_PREFIX}-backfill-b`,
+      `${TEST_PREFIX}-backfill-existing`,
+    ],
+  });
+  assert.equal(result.updated, 2);
+  assert.equal(result.skipped, 0);
+
+  const rows = await db
+    .select({ supplierId: suppliers.supplierId, supplierCode: suppliers.supplierCode })
+    .from(suppliers)
+    .where(like(suppliers.supplierId, `${TEST_PREFIX}-backfill-%`));
+  const codes = rows.map(row => row.supplierCode);
+  assert.equal(new Set(codes).size, 3);
+  assert.match(codes.find(code => code !== 'ZZTQ4')!, /^[A-Z0-9]{2,5}$/);
+
+  const rerun = await backfillExistingSupplierCodes({
+    supplierIds: [
+      `${TEST_PREFIX}-backfill-a`,
+      `${TEST_PREFIX}-backfill-b`,
+      `${TEST_PREFIX}-backfill-existing`,
+    ],
+  });
+  assert.deepEqual(rerun, { updated: 0, skipped: 0 });
 });

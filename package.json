@@ -14,6 +14,7 @@
     "start": "PORT=5000 node dist-server/index.cjs",
     "preview": "vite preview",
     "db:push": "drizzle-kit push",
+    "db:backfill-supplier-codes": "tsx scripts/backfill-supplier-codes.ts",
     "server": "tsx server/index.ts",
     "test": "node --import tsx --test server/qualificationEngine.test.ts components/industryAnalysis.test.ts client/lib/initialLoad.test.ts server/supplierCode.test.ts"
   },

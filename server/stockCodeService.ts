@@ -1,6 +1,6 @@
 import { db } from "./db";
 import { treeNodes, products, colors, stockCodeHistory, suppliers } from "@shared/schema";
-import { eq } from "drizzle-orm";
+import { and, eq, sql } from "drizzle-orm";
 
 export function generateBranchCodeFromName(name: string, existingCodes: string[]): string {
   const cleanName = name.trim().toUpperCase().replace(/[^A-Z0-9\s]/g, '');
@@ -69,6 +69,96 @@ export async function generateUniqueSupplierCode(name: string): Promise<string> 
     .map(s => s.supplierCode)
     .filter((c): c is string => !!c);
   return generateBranchCodeFromName(name, existingCodes);
+}
+
+function isSupplierCodeBlank(code: string | null): boolean {
+  return !code || code.trim().length === 0;
+}
+
+function isUniqueSupplierCodeViolation(error: unknown): boolean {
+  const candidate = error as { code?: string; cause?: { code?: string } } | null;
+  return candidate?.code === '23505' || candidate?.cause?.code === '23505';
+}
+
+/**
+ * Fill codes for legacy contacts that were created before automatic code
+ * generation was added. Existing non-blank codes are never changed.
+ *
+ * The optional supplierIds argument is intended for focused tests and
+ * operationally scoped runs. With no argument, every blank legacy code is
+ * processed. The blank-row predicate is repeated on the UPDATE so a rerun or
+ * concurrent process cannot overwrite a code that was assigned meanwhile.
+ */
+export async function backfillExistingSupplierCodes(options?: {
+  supplierIds?: string[];
+}): Promise<{ updated: number; skipped: number }> {
+  const allSuppliers = await db
+    .select({
+      id: suppliers.id,
+      supplierId: suppliers.supplierId,
+      name: suppliers.name,
+      supplierCode: suppliers.supplierCode,
+    })
+    .from(suppliers)
+    .orderBy(suppliers.id);
+
+  const existingCodes = new Set(
+    allSuppliers
+      .map(supplier => supplier.supplierCode?.trim().toUpperCase())
+      .filter((code): code is string => Boolean(code)),
+  );
+  const requestedIds = options?.supplierIds ? new Set(options.supplierIds) : null;
+  const targets = allSuppliers.filter(supplier =>
+    isSupplierCodeBlank(supplier.supplierCode) &&
+    (!requestedIds || requestedIds.has(supplier.supplierId)),
+  );
+
+  let updated = 0;
+  let skipped = 0;
+
+  for (const supplier of targets) {
+    let assigned = false;
+
+    // A unique constraint race is unlikely during a one-time migration, but
+    // retrying with a fresh code list keeps this operation safe if a contact
+    // is created or edited while the backfill is running.
+    for (let attempt = 0; attempt < 3 && !assigned; attempt++) {
+      const code = generateBranchCodeFromName(supplier.name, [...existingCodes]);
+      try {
+        const [result] = await db
+          .update(suppliers)
+          .set({ supplierCode: code, updatedAt: new Date() })
+          .where(and(
+            eq(suppliers.id, supplier.id),
+            sql`NULLIF(BTRIM(${suppliers.supplierCode}), '') IS NULL`,
+          ))
+          .returning({ id: suppliers.id });
+
+        if (result) {
+          existingCodes.add(code);
+          updated++;
+        } else {
+          skipped++;
+        }
+        assigned = true;
+      } catch (error) {
+        if (!isUniqueSupplierCodeViolation(error) || attempt === 2) {
+          throw error;
+        }
+
+        const currentCodes = await db
+          .select({ supplierCode: suppliers.supplierCode })
+          .from(suppliers);
+        existingCodes.clear();
+        for (const current of currentCodes) {
+          const normalized = current.supplierCode?.trim().toUpperCase();
+          if (normalized) existingCodes.add(normalized);
+        }
+      }
+    }
+  }
+
+  return { updated, skipped };
 }
 
 export function validateBranchCode(code: string): { valid: boolean; error?: string } {
