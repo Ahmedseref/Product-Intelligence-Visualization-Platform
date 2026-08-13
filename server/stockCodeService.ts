@@ -3,11 +3,22 @@ import { treeNodes, products, colors, stockCodeHistory, suppliers } from "@share
 import { eq } from "drizzle-orm";
 
 export function generateBranchCodeFromName(name: string, existingCodes: string[]): string {
-  const cleanName = name.trim().toUpperCase();
+  const cleanName = name.trim().toUpperCase().replace(/[^A-Z0-9\s]/g, '');
   const words = cleanName.split(/\s+/).filter(w => w.length > 0);
-  
+
+  // Need at least two alphanumeric chars to form a valid code
+  const allChars = cleanName.replace(/\s/g, '');
+  if (allChars.length === 0) {
+    // Absolute fallback for names with no usable characters
+    for (let i = 1; i <= 9999; i++) {
+      const candidate = `C${String(i).padStart(4, '0')}`;
+      if (!existingCodes.includes(candidate)) return candidate;
+    }
+    throw new Error('Cannot generate a unique supplier code — code space exhausted');
+  }
+
   const candidates: string[] = [];
-  
+
   if (words.length === 1) {
     const word = words[0];
     candidates.push(word.substring(0, 2));
@@ -24,18 +35,40 @@ export function generateBranchCodeFromName(name: string, existingCodes: string[]
     const consonants = words[0].replace(/[AEIOU]/g, '');
     if (consonants.length >= 2) candidates.push(consonants.substring(0, 2));
   }
-  
+
   for (const c of candidates) {
     if (c.length >= 2 && !existingCodes.includes(c)) return c;
   }
-  
-  const base = candidates[0] || cleanName.substring(0, 2);
+
+  // Numbered suffix variants — guaranteed to fit within 5 chars
+  const base = (candidates[0] || allChars.substring(0, 2)).substring(0, 3);
   for (let i = 1; i <= 99; i++) {
     const candidate = `${base}${i}`;
     if (candidate.length <= 5 && !existingCodes.includes(candidate)) return candidate;
   }
-  
-  return `${base}${Date.now() % 100}`;
+
+  // Two-char base + up to 999
+  const base2 = base.substring(0, 2);
+  for (let i = 100; i <= 999; i++) {
+    const candidate = `${base2}${i}`;
+    if (candidate.length <= 5 && !existingCodes.includes(candidate)) return candidate;
+  }
+
+  throw new Error('Cannot generate a unique supplier code — code space exhausted');
+}
+
+/**
+ * Generate a unique supplier code for a new contact, reading all existing
+ * codes from the database. This is the canonical server-side entry point
+ * for code generation — routes and sync paths should call this, not
+ * generateBranchCodeFromName directly.
+ */
+export async function generateUniqueSupplierCode(name: string): Promise<string> {
+  const allSuppliers = await db.select({ supplierCode: suppliers.supplierCode }).from(suppliers);
+  const existingCodes = allSuppliers
+    .map(s => s.supplierCode)
+    .filter((c): c is string => !!c);
+  return generateBranchCodeFromName(name, existingCodes);
 }
 
 export function validateBranchCode(code: string): { valid: boolean; error?: string } {

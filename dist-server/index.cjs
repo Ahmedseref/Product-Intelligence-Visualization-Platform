@@ -131300,7 +131300,7 @@ var suppliers = pgTable("suppliers", {
   id: serial("id").primaryKey(),
   supplierId: varchar("supplier_id", { length: 100 }).notNull().unique(),
   name: varchar("name", { length: 255 }).notNull(),
-  supplierCode: varchar("supplier_code", { length: 5 }),
+  supplierCode: varchar("supplier_code", { length: 5 }).unique(),
   country: varchar("country", { length: 100 }),
   contactName: varchar("contact_name", { length: 255 }),
   contactEmail: varchar("contact_email", { length: 255 }),
@@ -133294,8 +133294,16 @@ function startScheduledBackups() {
 
 // server/stockCodeService.ts
 function generateBranchCodeFromName(name, existingCodes) {
-  const cleanName = name.trim().toUpperCase();
+  const cleanName = name.trim().toUpperCase().replace(/[^A-Z0-9\s]/g, "");
   const words = cleanName.split(/\s+/).filter((w) => w.length > 0);
+  const allChars = cleanName.replace(/\s/g, "");
+  if (allChars.length === 0) {
+    for (let i = 1; i <= 9999; i++) {
+      const candidate = `C${String(i).padStart(4, "0")}`;
+      if (!existingCodes.includes(candidate)) return candidate;
+    }
+    throw new Error("Cannot generate a unique supplier code \u2014 code space exhausted");
+  }
   const candidates = [];
   if (words.length === 1) {
     const word = words[0];
@@ -133316,12 +133324,22 @@ function generateBranchCodeFromName(name, existingCodes) {
   for (const c of candidates) {
     if (c.length >= 2 && !existingCodes.includes(c)) return c;
   }
-  const base = candidates[0] || cleanName.substring(0, 2);
+  const base = (candidates[0] || allChars.substring(0, 2)).substring(0, 3);
   for (let i = 1; i <= 99; i++) {
     const candidate = `${base}${i}`;
     if (candidate.length <= 5 && !existingCodes.includes(candidate)) return candidate;
   }
-  return `${base}${Date.now() % 100}`;
+  const base2 = base.substring(0, 2);
+  for (let i = 100; i <= 999; i++) {
+    const candidate = `${base2}${i}`;
+    if (candidate.length <= 5 && !existingCodes.includes(candidate)) return candidate;
+  }
+  throw new Error("Cannot generate a unique supplier code \u2014 code space exhausted");
+}
+async function generateUniqueSupplierCode(name) {
+  const allSuppliers = await db.select({ supplierCode: suppliers.supplierCode }).from(suppliers);
+  const existingCodes = allSuppliers.map((s) => s.supplierCode).filter((c) => !!c);
+  return generateBranchCodeFromName(name, existingCodes);
 }
 function validateBranchCode(code) {
   if (!code) return { valid: false, error: "Branch code is required" };
@@ -136598,9 +136616,12 @@ async function pullFromNotion() {
       if (!local) {
         const newId = generateSupplierId(bySupplierIdMax);
         bySupplierIdMax.push(newId);
+        const contactName = mapped.name || "Unnamed Contact";
+        const newSupplierCode = await generateUniqueSupplierCode(contactName);
         await db.insert(suppliers).values({
           supplierId: newId,
-          name: mapped.name || "Unnamed Contact",
+          name: contactName,
+          supplierCode: newSupplierCode,
           contactName: mapped.contactName,
           leadPosition: mapped.leadPosition,
           contactEmail: mapped.contactEmail,
@@ -137239,21 +137260,52 @@ function registerRoutes(app2) {
   });
   app2.post("/api/suppliers", async (req, res) => {
     try {
-      const supplier = await storage.createSupplier(req.body);
+      const body = { ...req.body };
+      if (!body.supplierCode && body.name) {
+        body.supplierCode = await generateUniqueSupplierCode(body.name);
+      } else if (body.supplierCode) {
+        body.supplierCode = String(body.supplierCode).toUpperCase();
+        const validation = validateBranchCode(body.supplierCode);
+        if (!validation.valid) {
+          return res.status(400).json({ error: `Invalid supplier code: ${validation.error}` });
+        }
+        const existing = await db.select({ supplierCode: suppliers.supplierCode }).from(suppliers).where(eq(suppliers.supplierCode, body.supplierCode));
+        if (existing.length > 0) {
+          return res.status(409).json({ error: `Supplier code "${body.supplierCode}" is already in use` });
+        }
+      }
+      const supplier = await storage.createSupplier(body);
       refreshState.trigger();
       res.status(201).json(supplier);
     } catch (error) {
       console.error("Error creating supplier:", error);
+      const pgErr = error?.code === "23505" ? error : error?.cause?.code === "23505" ? error.cause : null;
+      if (pgErr && String(pgErr.constraint || "").includes("supplier_code")) {
+        return res.status(409).json({ error: "Supplier code conflict \u2014 please try again" });
+      }
       res.status(500).json({ error: "Failed to create supplier" });
     }
   });
   app2.patch("/api/suppliers/:supplierId", async (req, res) => {
     try {
-      const supplier = await storage.updateSupplier(req.params.supplierId, req.body);
+      const body = { ...req.body };
+      if (body.supplierCode !== void 0 && body.supplierCode !== null) {
+        body.supplierCode = String(body.supplierCode).toUpperCase();
+        const validation = validateBranchCode(body.supplierCode);
+        if (!validation.valid) {
+          return res.status(400).json({ error: `Invalid supplier code: ${validation.error}` });
+        }
+        const conflict = await db.select({ supplierId: suppliers.supplierId }).from(suppliers).where(eq(suppliers.supplierCode, body.supplierCode));
+        const otherConflict = conflict.find((r) => r.supplierId !== req.params.supplierId);
+        if (otherConflict) {
+          return res.status(409).json({ error: `Supplier code "${body.supplierCode}" is already in use` });
+        }
+      }
+      const supplier = await storage.updateSupplier(req.params.supplierId, body);
       if (!supplier) {
         return res.status(404).json({ error: "Supplier not found" });
       }
-      if (req.body.supplierCode !== void 0) {
+      if (body.supplierCode !== void 0) {
         try {
           const supplierProducts2 = await db.select().from(products).where(eq(products.supplierId, req.params.supplierId));
           for (const product of supplierProducts2) {
@@ -137267,6 +137319,10 @@ function registerRoutes(app2) {
       res.json(supplier);
     } catch (error) {
       console.error("Error updating supplier:", error);
+      const pgErr = error?.code === "23505" ? error : error?.cause?.code === "23505" ? error.cause : null;
+      if (pgErr && String(pgErr.constraint || "").includes("supplier_code")) {
+        return res.status(409).json({ error: "Supplier code conflict \u2014 please try again" });
+      }
       res.status(500).json({ error: "Failed to update supplier" });
     }
   });

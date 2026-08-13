@@ -270,7 +270,11 @@ export const api = {
       method: 'POST',
       body: JSON.stringify(supplier),
     });
-    if (!res.ok) throw new Error('Failed to create supplier');
+    if (!res.ok) {
+      let msg = 'Failed to create supplier';
+      try { msg = (await res.json()).error || msg; } catch {}
+      throw new Error(msg);
+    }
     return res.json();
   },
 
@@ -279,7 +283,11 @@ export const api = {
       method: 'PATCH',
       body: JSON.stringify(updates),
     });
-    if (!res.ok) throw new Error('Failed to update supplier');
+    if (!res.ok) {
+      let msg = 'Failed to update supplier';
+      try { msg = (await res.json()).error || msg; } catch {}
+      throw new Error(msg);
+    }
     return res.json();
   },
 

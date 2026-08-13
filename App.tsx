@@ -590,59 +590,60 @@ const App: React.FC = () => {
   };
 
   const addSupplier = async (supplier: Omit<Supplier, 'id' | 'createdAt' | 'updatedAt'> & { id: string }) => {
-    const newSupplier: Supplier = {
-      ...supplier,
-      createdAt: new Date().toISOString(),
-      updatedAt: new Date().toISOString(),
+    const payload = {
+      supplierId: supplier.id,
+      name: supplier.name,
+      // Only send supplierCode if the user explicitly provided one.
+      // If omitted, the server auto-generates a unique code.
+      supplierCode: supplier.supplierCode || undefined,
+      country: supplier.country,
+      contactName: supplier.contactName,
+      contactEmail: supplier.contactEmail,
+      contactPhone: supplier.contactPhone,
+      address: supplier.address,
+      website: supplier.website,
+      notes: supplier.notes,
+      isActive: supplier.isActive,
+      leadPosition: supplier.leadPosition,
+      leadSource: supplier.leadSource,
+      sourceQuality: supplier.sourceQuality,
+      industryMainActivities: supplier.industryMainActivities,
     };
     try {
-      await api.createSupplier({
-        supplierId: newSupplier.id,
-        name: newSupplier.name,
-        supplierCode: newSupplier.supplierCode,
-        country: newSupplier.country,
-        contactName: newSupplier.contactName,
-        contactEmail: newSupplier.contactEmail,
-        contactPhone: newSupplier.contactPhone,
-        address: newSupplier.address,
-        website: newSupplier.website,
-        notes: newSupplier.notes,
-        isActive: newSupplier.isActive,
-        leadPosition: newSupplier.leadPosition,
-        leadSource: newSupplier.leadSource,
-        sourceQuality: newSupplier.sourceQuality,
-        industryMainActivities: newSupplier.industryMainActivities,
-      });
+      const created = await api.createSupplier(payload);
+      // Use the server-returned record so the auto-generated supplierCode is reflected in state
+      const newSupplier: Supplier = {
+        ...supplier,
+        supplierCode: created.supplierCode,
+        createdAt: created.createdAt || new Date().toISOString(),
+        updatedAt: created.updatedAt || new Date().toISOString(),
+      };
       setSuppliers(prev => [...prev, newSupplier]);
-    } catch (err) {
+    } catch (err: any) {
       console.error('Failed to add supplier:', err);
-      setSuppliers(prev => [...prev, newSupplier]);
+      // Do not silently add to local state — surface the error so the user can retry.
+      throw err;
     }
   };
 
   const updateSupplier = async (id: string, updates: Partial<Supplier>) => {
-    try {
-      await api.updateSupplier(id, {
-        name: updates.name,
-        supplierCode: updates.supplierCode,
-        country: updates.country,
-        contactName: updates.contactName,
-        contactEmail: updates.contactEmail,
-        contactPhone: updates.contactPhone,
-        address: updates.address,
-        website: updates.website,
-        notes: updates.notes,
-        isActive: updates.isActive,
-        leadPosition: updates.leadPosition,
-        leadSource: updates.leadSource,
-        sourceQuality: updates.sourceQuality,
-        industryMainActivities: updates.industryMainActivities,
-      });
-      setSuppliers(prev => prev.map(s => s.id === id ? { ...s, ...updates, updatedAt: new Date().toISOString() } : s));
-    } catch (err) {
-      console.error('Failed to update supplier:', err);
-      setSuppliers(prev => prev.map(s => s.id === id ? { ...s, ...updates, updatedAt: new Date().toISOString() } : s));
-    }
+    const updated = await api.updateSupplier(id, {
+      name: updates.name,
+      supplierCode: updates.supplierCode,
+      country: updates.country,
+      contactName: updates.contactName,
+      contactEmail: updates.contactEmail,
+      contactPhone: updates.contactPhone,
+      address: updates.address,
+      website: updates.website,
+      notes: updates.notes,
+      isActive: updates.isActive,
+      leadPosition: updates.leadPosition,
+      leadSource: updates.leadSource,
+      sourceQuality: updates.sourceQuality,
+      industryMainActivities: updates.industryMainActivities,
+    });
+    setSuppliers(prev => prev.map(s => s.id === id ? { ...s, ...updates, supplierCode: updated.supplierCode, updatedAt: new Date().toISOString() } : s));
   };
 
   const deleteSupplier = async (id: string) => {

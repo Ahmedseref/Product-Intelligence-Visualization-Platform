@@ -252,8 +252,8 @@ const MIN_COLUMN_WIDTH = 80;
 
 interface SupplierManagerProps {
   suppliers: Supplier[];
-  onAddSupplier: (supplier: Omit<Supplier, 'id' | 'createdAt' | 'updatedAt'>) => void;
-  onUpdateSupplier: (id: string, updates: Partial<Supplier>) => void;
+  onAddSupplier: (supplier: Omit<Supplier, 'id' | 'createdAt' | 'updatedAt'> & { id: string }) => Promise<void>;
+  onUpdateSupplier: (id: string, updates: Partial<Supplier>) => Promise<void>;
   onDeleteSupplier: (id: string) => void;
   onRefresh?: () => void | Promise<void>;
   initialIndustryTag?: string;
@@ -504,75 +504,88 @@ const SupplierManager: React.FC<SupplierManagerProps> = ({
     return `S-${String(maxNum + 1).padStart(4, '0')}`;
   };
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const [submitError, setSubmitError] = useState<string | null>(null);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!formData.name.trim()) return;
+    setSubmitError(null);
+    setIsSubmitting(true);
 
-    if (editingSupplier) {
-      onUpdateSupplier(editingSupplier.id, {
-        name: formData.name,
-        supplierCode: formData.supplierCode.toUpperCase() || undefined,
-        country: formData.country || undefined,
-        contactName: formData.contactName || undefined,
-        contactEmail: formData.contactEmail || undefined,
-        contactPhone: formData.contactPhone || undefined,
-        address: formData.address || undefined,
-        website: formData.website || undefined,
-        notes: formData.notes || undefined,
-        leadPosition: formData.leadPosition || undefined,
-        leadSource: formData.leadSource || undefined,
-        sourceQuality: formData.sourceQuality || undefined,
-        industryMainActivities: formData.industryMainActivities || undefined,
-        mobile2: formData.mobile2 || undefined,
-        action: formData.action || undefined,
-        priority: formData.priority || undefined,
-        paymentTerms: formData.paymentTerms || undefined,
+    try {
+      if (editingSupplier) {
+        await onUpdateSupplier(editingSupplier.id, {
+          name: formData.name,
+          supplierCode: formData.supplierCode.toUpperCase() || undefined,
+          country: formData.country || undefined,
+          contactName: formData.contactName || undefined,
+          contactEmail: formData.contactEmail || undefined,
+          contactPhone: formData.contactPhone || undefined,
+          address: formData.address || undefined,
+          website: formData.website || undefined,
+          notes: formData.notes || undefined,
+          leadPosition: formData.leadPosition || undefined,
+          leadSource: formData.leadSource || undefined,
+          sourceQuality: formData.sourceQuality || undefined,
+          industryMainActivities: formData.industryMainActivities || undefined,
+          mobile2: formData.mobile2 || undefined,
+          action: formData.action || undefined,
+          priority: formData.priority || undefined,
+          paymentTerms: formData.paymentTerms || undefined,
+        });
+        setEditingSupplier(null);
+      } else {
+        await onAddSupplier({
+          id: generateSupplierId(),
+          name: formData.name,
+          // Empty string means "auto-generate on the server"
+          supplierCode: formData.supplierCode.toUpperCase() || undefined,
+          country: formData.country || undefined,
+          contactName: formData.contactName || undefined,
+          contactEmail: formData.contactEmail || undefined,
+          contactPhone: formData.contactPhone || undefined,
+          address: formData.address || undefined,
+          website: formData.website || undefined,
+          notes: formData.notes || undefined,
+          leadPosition: formData.leadPosition || undefined,
+          leadSource: formData.leadSource || undefined,
+          sourceQuality: formData.sourceQuality || undefined,
+          industryMainActivities: formData.industryMainActivities || undefined,
+          mobile2: formData.mobile2 || undefined,
+          action: formData.action || undefined,
+          priority: formData.priority || undefined,
+          paymentTerms: formData.paymentTerms || undefined,
+          isActive: true,
+        });
+      }
+
+      setFormData({
+        name: '',
+        supplierCode: '',
+        country: '',
+        contactName: '',
+        contactEmail: '',
+        contactPhone: '',
+        address: '',
+        website: '',
+        notes: '',
+        leadPosition: '',
+        leadSource: '',
+        sourceQuality: '',
+        industryMainActivities: '',
+        mobile2: '',
+        action: '',
+        priority: '',
+        paymentTerms: '',
       });
-      setEditingSupplier(null);
-    } else {
-      onAddSupplier({
-        id: generateSupplierId(),
-        name: formData.name,
-        supplierCode: formData.supplierCode.toUpperCase() || undefined,
-        country: formData.country || undefined,
-        contactName: formData.contactName || undefined,
-        contactEmail: formData.contactEmail || undefined,
-        contactPhone: formData.contactPhone || undefined,
-        address: formData.address || undefined,
-        website: formData.website || undefined,
-        notes: formData.notes || undefined,
-        leadPosition: formData.leadPosition || undefined,
-        leadSource: formData.leadSource || undefined,
-        sourceQuality: formData.sourceQuality || undefined,
-        industryMainActivities: formData.industryMainActivities || undefined,
-        mobile2: formData.mobile2 || undefined,
-        action: formData.action || undefined,
-        priority: formData.priority || undefined,
-        paymentTerms: formData.paymentTerms || undefined,
-        isActive: true,
-      });
+      setShowAddModal(false);
+    } catch (err: any) {
+      const msg = err?.message || 'Failed to save contact. Please try again.';
+      setSubmitError(msg);
+    } finally {
+      setIsSubmitting(false);
     }
-
-    setFormData({
-      name: '',
-      supplierCode: '',
-      country: '',
-      contactName: '',
-      contactEmail: '',
-      contactPhone: '',
-      address: '',
-      website: '',
-      notes: '',
-      leadPosition: '',
-      leadSource: '',
-      sourceQuality: '',
-      industryMainActivities: '',
-      mobile2: '',
-      action: '',
-      priority: '',
-      paymentTerms: '',
-    });
-    setShowAddModal(false);
   };
 
   const handleEdit = (supplier: Supplier) => {
@@ -960,7 +973,12 @@ const SupplierManager: React.FC<SupplierManagerProps> = ({
                 />
               </div>
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Company Code</label>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Company Code
+                  {!editingSupplier && (
+                    <span className="ml-2 text-xs font-normal text-blue-500">auto-generated</span>
+                  )}
+                </label>
                 <div className="flex gap-2">
                   <input
                     type="text"
@@ -970,7 +988,7 @@ const SupplierManager: React.FC<SupplierManagerProps> = ({
                       setFormData({ ...formData, supplierCode: val });
                     }}
                     className="flex-1 px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent font-mono uppercase"
-                    placeholder="e.g. SUP, BAS, SIK"
+                    placeholder={editingSupplier ? 'e.g. SUP, BAS, SIK' : 'Leave blank to auto-generate'}
                     maxLength={5}
                   />
                   <button
@@ -983,7 +1001,11 @@ const SupplierManager: React.FC<SupplierManagerProps> = ({
                     Suggest
                   </button>
                 </div>
-                <p className="text-xs text-gray-400 mt-1">2-5 uppercase characters. Used in product stock codes (P.SUP.BRANCH.COLOR.0001)</p>
+                <p className="text-xs text-gray-400 mt-1">
+                  {editingSupplier
+                    ? '2-5 uppercase characters. Leave unchanged to keep the existing code.'
+                    : 'Leave blank to auto-generate from name, or type a custom code. Used in product stock codes.'}
+                </p>
               </div>
               <div className="grid grid-cols-2 gap-4">
                 <div>
@@ -1158,13 +1180,25 @@ const SupplierManager: React.FC<SupplierManagerProps> = ({
                 </p>
               </div>
 
+              {submitError && (
+                <div className="rounded-lg bg-red-50 border border-red-200 px-3 py-2 text-sm text-red-700">
+                  {submitError}
+                </div>
+              )}
+
               <div className="flex justify-end gap-3 pt-4 border-t">
                 <button type="button" onClick={closeModal} className="px-4 py-2 text-gray-700 bg-gray-100 rounded-lg hover:bg-gray-200">
                   Cancel
                 </button>
-                <button type="submit" className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 flex items-center gap-2">
+                <button
+                  type="submit"
+                  disabled={isSubmitting}
+                  className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 flex items-center gap-2 disabled:opacity-60 disabled:cursor-not-allowed"
+                >
                   <Check size={16} />
-                  {editingSupplier ? 'Update Contact' : 'Add Contact'}
+                  {isSubmitting
+                    ? (editingSupplier ? 'Saving…' : 'Adding…')
+                    : (editingSupplier ? 'Update Contact' : 'Add Contact')}
                 </button>
               </div>
             </form>

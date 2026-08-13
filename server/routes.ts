@@ -527,22 +527,73 @@ export function registerRoutes(app: Express): void {
 
   app.post("/api/suppliers", async (req, res) => {
     try {
-      const supplier = await storage.createSupplier(req.body);
+      const body = { ...req.body };
+
+      // Auto-generate a unique supplier code if the caller didn't supply one.
+      // The code is derived from the company name and guaranteed to be unique
+      // against all codes currently in the database.
+      if (!body.supplierCode && body.name) {
+        body.supplierCode = await stockCodeService.generateUniqueSupplierCode(body.name);
+      } else if (body.supplierCode) {
+        // Normalize any caller-supplied code to uppercase
+        body.supplierCode = String(body.supplierCode).toUpperCase();
+        // Validate format
+        const validation = stockCodeService.validateBranchCode(body.supplierCode);
+        if (!validation.valid) {
+          return res.status(400).json({ error: `Invalid supplier code: ${validation.error}` });
+        }
+        // Check for duplicate
+        const existing = await db
+          .select({ supplierCode: suppliersTable.supplierCode })
+          .from(suppliersTable)
+          .where(eq(suppliersTable.supplierCode, body.supplierCode));
+        if (existing.length > 0) {
+          return res.status(409).json({ error: `Supplier code "${body.supplierCode}" is already in use` });
+        }
+      }
+
+      const supplier = await storage.createSupplier(body);
       refreshState.trigger();
       res.status(201).json(supplier);
-    } catch (error) {
+    } catch (error: any) {
       console.error("Error creating supplier:", error);
+      // Catch DB-level unique violation (concurrent request race).
+      // Drizzle may wrap the pg error in `cause`.
+      const pgErr = error?.code === '23505' ? error : (error?.cause?.code === '23505' ? error.cause : null);
+      if (pgErr && String(pgErr.constraint || '').includes('supplier_code')) {
+        return res.status(409).json({ error: "Supplier code conflict — please try again" });
+      }
       res.status(500).json({ error: "Failed to create supplier" });
     }
   });
 
   app.patch("/api/suppliers/:supplierId", async (req, res) => {
     try {
-      const supplier = await storage.updateSupplier(req.params.supplierId, req.body);
+      const body = { ...req.body };
+
+      // If the caller is explicitly changing the supplier code, validate and
+      // check uniqueness (excluding the current record).
+      if (body.supplierCode !== undefined && body.supplierCode !== null) {
+        body.supplierCode = String(body.supplierCode).toUpperCase();
+        const validation = stockCodeService.validateBranchCode(body.supplierCode);
+        if (!validation.valid) {
+          return res.status(400).json({ error: `Invalid supplier code: ${validation.error}` });
+        }
+        const conflict = await db
+          .select({ supplierId: suppliersTable.supplierId })
+          .from(suppliersTable)
+          .where(eq(suppliersTable.supplierCode, body.supplierCode));
+        const otherConflict = conflict.find(r => r.supplierId !== req.params.supplierId);
+        if (otherConflict) {
+          return res.status(409).json({ error: `Supplier code "${body.supplierCode}" is already in use` });
+        }
+      }
+
+      const supplier = await storage.updateSupplier(req.params.supplierId, body);
       if (!supplier) {
         return res.status(404).json({ error: "Supplier not found" });
       }
-      if (req.body.supplierCode !== undefined) {
+      if (body.supplierCode !== undefined) {
         try {
           const supplierProducts = await db.select().from(productsTable).where(eq(productsTable.supplierId, req.params.supplierId));
           for (const product of supplierProducts) {
@@ -554,8 +605,12 @@ export function registerRoutes(app: Express): void {
       }
       refreshState.trigger();
       res.json(supplier);
-    } catch (error) {
+    } catch (error: any) {
       console.error("Error updating supplier:", error);
+      const pgErr = error?.code === '23505' ? error : (error?.cause?.code === '23505' ? error.cause : null);
+      if (pgErr && String(pgErr.constraint || '').includes('supplier_code')) {
+        return res.status(409).json({ error: "Supplier code conflict — please try again" });
+      }
       res.status(500).json({ error: "Failed to update supplier" });
     }
   });

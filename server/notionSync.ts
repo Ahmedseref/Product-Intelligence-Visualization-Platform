@@ -9,6 +9,7 @@ import { db } from "./db";
 import { suppliers, type InsertSupplier, type Supplier } from "@shared/schema";
 import { eq, isNull } from "drizzle-orm";
 import { refreshState } from "./refreshState";
+import { generateUniqueSupplierCode } from "./stockCodeService";
 
 // Fixed database ID for the user's "Contact Connector" Notion database.
 // Resolved once via /v1/search and hardcoded here per the task's
@@ -327,9 +328,13 @@ export async function pullFromNotion(): Promise<{ count: number }> {
       if (!local) {
         const newId = generateSupplierId(bySupplierIdMax);
         bySupplierIdMax.push(newId);
+        // Generate a unique supplier code for every new contact pulled from Notion.
+        const contactName = mapped.name || "Unnamed Contact";
+        const newSupplierCode = await generateUniqueSupplierCode(contactName);
         await db.insert(suppliers).values({
           supplierId: newId,
-          name: mapped.name || "Unnamed Contact",
+          name: contactName,
+          supplierCode: newSupplierCode,
           contactName: mapped.contactName,
           leadPosition: mapped.leadPosition,
           contactEmail: mapped.contactEmail,
