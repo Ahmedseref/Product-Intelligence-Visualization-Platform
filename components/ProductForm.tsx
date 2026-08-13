@@ -72,6 +72,12 @@ const ProductForm: React.FC<ProductFormProps> = ({ onSubmit, onCancel, currentUs
   const isEditMode = mode === 'edit' && initialProduct;
   const USAGE_AREAS = usageAreas;
   const dynamicUnits = unitsProp && unitsProp.length > 0 ? unitsProp : UNITS;
+  const supplierContacts = useMemo(
+    () => suppliers.filter((supplier) =>
+      supplier.isActive && supplier.contactType?.trim().toLowerCase() === 'supplier'
+    ),
+    [suppliers],
+  );
   
   const [showNewFieldModal, setShowNewFieldModal] = useState(false);
   const [newFieldDef, setNewFieldDef] = useState<Partial<CustomField>>({ label: '', type: 'text' });
@@ -564,7 +570,7 @@ const ProductForm: React.FC<ProductFormProps> = ({ onSubmit, onCancel, currentUs
                     }}
                   >
                     <option value="">Select Supplier...</option>
-                    {suppliers.filter(s => s.isActive).map(s => (
+                    {supplierContacts.map(s => (
                       <option key={s.id} value={s.name}>{s.name} ({s.id})</option>
                     ))}
                   </select>
