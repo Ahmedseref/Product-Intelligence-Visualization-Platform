@@ -3,6 +3,7 @@ import {
   Plus, Pencil, Trash2, Building2, Globe, Mail, Phone, X, Check, Search, Tag, Sparkles,
   RefreshCw, UploadCloud, Filter, ArrowUp, ArrowDown, ArrowUpDown, Maximize2, FileText,
   Columns3, Eye, EyeOff, UsersRound, UserRound, GripVertical, Bookmark, BookmarkCheck,
+  Copy, AlertTriangle,
 } from 'lucide-react';
 import { Supplier } from '../types';
 import { api, NotionSyncStatus } from '../client/api';
@@ -24,6 +25,15 @@ const formatDate = (value?: string | null): string => {
   if (isNaN(d.getTime())) return '';
   return d.toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' });
 };
+
+const normalizeCompanyName = (name?: string | null): string =>
+  (name || '').normalize('NFKC').trim().replace(/\s+/g, ' ').toLocaleLowerCase();
+
+interface DuplicateGroup {
+  normalizedName: string;
+  displayName: string;
+  suppliers: Supplier[];
+}
 
 const openIndustryAnalysisTab = (tag: string) => {
   const analysisUrl = `${window.location.origin}${window.location.pathname}#industry-analysis?industry=${encodeURIComponent(tag)}`;
@@ -305,6 +315,7 @@ const SupplierManager: React.FC<SupplierManagerProps> = ({
 }) => {
   const [showAddModal, setShowAddModal] = useState(false);
   const [editingSupplier, setEditingSupplier] = useState<Supplier | null>(null);
+  const [showDuplicateReview, setShowDuplicateReview] = useState(false);
   const [syncStatus, setSyncStatus] = useState<NotionSyncStatus | null>(null);
   const [isPushing, setIsPushing] = useState(false);
   const [isPulling, setIsPulling] = useState(false);
@@ -342,6 +353,26 @@ const SupplierManager: React.FC<SupplierManagerProps> = ({
   const [contactTypeView, setContactTypeView] = useState<'supplier' | 'customer' | 'both'>(
     () => _saved?.contactTypeView ?? 'both'
   );
+
+  const duplicateGroups = useMemo<DuplicateGroup[]>(() => {
+    const grouped = new Map<string, Supplier[]>();
+    suppliers.forEach((supplier) => {
+      const normalizedName = normalizeCompanyName(supplier.name);
+      if (!normalizedName) return;
+      const group = grouped.get(normalizedName) || [];
+      group.push(supplier);
+      grouped.set(normalizedName, group);
+    });
+
+    return Array.from(grouped.entries())
+      .filter(([, group]) => group.length > 1)
+      .map(([normalizedName, group]) => ({
+        normalizedName,
+        displayName: group[0].name.trim(),
+        suppliers: group,
+      }))
+      .sort((a, b) => a.displayName.localeCompare(b.displayName));
+  }, [suppliers]);
 
   const [showColumnsPanel, setShowColumnsPanel] = useState(false);
   const [hiddenColumns, setHiddenColumns] = useState<Set<string>>(
@@ -421,7 +452,9 @@ const SupplierManager: React.FC<SupplierManagerProps> = ({
     setShowAddModal(false);
     setEditingSupplier(null);
   }, []);
+  const closeDuplicateReview = useCallback(() => setShowDuplicateReview(false), []);
   useEscapeKey(showAddModal || editingSupplier ? escCloseModal : null);
+  useEscapeKey(showDuplicateReview ? closeDuplicateReview : null);
   const [formData, setFormData] = useState({
     name: '',
     supplierCode: '',
@@ -769,6 +802,30 @@ const SupplierManager: React.FC<SupplierManagerProps> = ({
             {isPulling ? 'Syncing...' : 'Sync Now'}
           </button>
           <button
+            type="button"
+            onClick={() => setShowDuplicateReview(true)}
+            aria-haspopup="dialog"
+            aria-controls="duplicate-contact-review"
+            className={`flex items-center gap-2 px-4 py-2 border rounded-lg transition-colors ${
+              duplicateGroups.length > 0
+                ? 'border-amber-300 bg-amber-50 text-amber-700 hover:bg-amber-100'
+                : 'border-slate-300 bg-white text-slate-600 hover:bg-slate-50'
+            }`}
+            title={
+              duplicateGroups.length > 0
+                ? `Review ${duplicateGroups.length} duplicate company name group${duplicateGroups.length === 1 ? '' : 's'}`
+                : 'Check for duplicate company names'
+            }
+          >
+            <Copy size={17} />
+            Duplicates
+            {duplicateGroups.length > 0 && (
+              <span className="inline-flex items-center justify-center min-w-5 h-5 px-1 text-xs font-semibold rounded-full bg-amber-500 text-white">
+                {duplicateGroups.length}
+              </span>
+            )}
+          </button>
+          <button
             onClick={handlePushToNotion}
             disabled={isPushing}
             className="flex items-center gap-2 px-4 py-2 bg-slate-700 text-white rounded-lg hover:bg-slate-800 transition-colors disabled:opacity-60"
@@ -1075,6 +1132,177 @@ const SupplierManager: React.FC<SupplierManagerProps> = ({
       <div className="mt-4 text-sm text-gray-500">
         Total: {filteredSuppliers.length} contact{filteredSuppliers.length !== 1 ? 's' : ''}
       </div>
+
+      {showDuplicateReview && (
+        <div
+          id="duplicate-contact-review"
+          className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="duplicate-contact-review-title"
+          onClick={closeDuplicateReview}
+        >
+          <div
+            className="bg-white rounded-xl shadow-2xl w-full max-w-5xl max-h-[88vh] flex flex-col"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-start justify-between gap-4 p-5 border-b">
+              <div className="flex items-start gap-3 min-w-0">
+                <div className="w-10 h-10 rounded-lg bg-amber-100 text-amber-700 flex items-center justify-center flex-shrink-0">
+                  <Copy size={20} />
+                </div>
+                <div className="min-w-0">
+                  <h2 id="duplicate-contact-review-title" className="text-lg font-semibold text-gray-900">
+                    Review duplicate company names
+                  </h2>
+                  <p className="mt-1 text-sm text-gray-500">
+                    {duplicateGroups.length > 0
+                      ? `${duplicateGroups.length} group${duplicateGroups.length === 1 ? '' : 's'} found. Review each contact and decide what to keep.`
+                      : 'No duplicate company names were found.'}
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={closeDuplicateReview}
+                className="p-2 text-gray-500 hover:text-gray-700 hover:bg-gray-100 rounded-lg flex-shrink-0"
+                title="Close duplicate review"
+                aria-label="Close duplicate review"
+              >
+                <X size={20} />
+              </button>
+            </div>
+
+            <div className="overflow-y-auto p-5">
+              <div className="mb-4 flex items-start gap-2 rounded-lg border border-blue-100 bg-blue-50 px-3 py-2.5 text-sm text-blue-800">
+                <AlertTriangle size={16} className="mt-0.5 flex-shrink-0 text-blue-600" />
+                <p>
+                  Matching is based on company name after trimming spaces, normalizing whitespace, and ignoring letter case.
+                  Nothing is changed automatically.
+                </p>
+              </div>
+
+              {duplicateGroups.length === 0 ? (
+                <div className="py-14 text-center text-gray-500">
+                  <Building2 size={48} className="mx-auto mb-4 text-gray-300" />
+                  <p className="text-lg font-medium text-gray-700">No duplicates to review</p>
+                  <p className="mt-1 text-sm">Contacts with blank company names are not included.</p>
+                </div>
+              ) : (
+                <div className="space-y-5">
+                  {duplicateGroups.map((group) => (
+                    <section key={group.normalizedName} className="rounded-lg border border-gray-200 overflow-hidden">
+                      <div className="flex items-center justify-between gap-3 bg-gray-50 px-4 py-3 border-b border-gray-200">
+                        <div className="min-w-0">
+                          <h3 className="font-semibold text-gray-900 truncate">{group.displayName}</h3>
+                          <p className="text-xs text-gray-500 mt-0.5">
+                            {group.suppliers.length} contacts share this company name
+                          </p>
+                        </div>
+                        <span className="inline-flex items-center gap-1 rounded-full bg-amber-100 px-2.5 py-1 text-xs font-semibold text-amber-800 flex-shrink-0">
+                          <Copy size={12} />
+                          Possible duplicate
+                        </span>
+                      </div>
+
+                      <div className="divide-y divide-gray-100">
+                        {group.suppliers.map((supplier) => (
+                          <div key={supplier.id} className="p-4">
+                            <div className="flex flex-col lg:flex-row lg:items-start lg:justify-between gap-4">
+                              <div className="min-w-0 flex-1">
+                                <div className="flex items-center gap-2 flex-wrap">
+                                  <span className="font-medium text-gray-900">{supplier.name || 'Unnamed company'}</span>
+                                  {supplier.supplierCode && (
+                                    <span className="inline-flex items-center gap-1 rounded bg-emerald-50 px-2 py-0.5 font-mono text-xs font-bold text-emerald-700">
+                                      <Tag size={11} />
+                                      {supplier.supplierCode}
+                                    </span>
+                                  )}
+                                  <span className="rounded bg-gray-100 px-2 py-0.5 font-mono text-xs text-gray-500">
+                                    {supplier.id}
+                                  </span>
+                                </div>
+                                <div className="mt-2 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-x-4 gap-y-1 text-sm">
+                                  <div className="truncate">
+                                    <span className="text-xs text-gray-400">Contact: </span>
+                                    <span className="text-gray-700">{supplier.contactName || '—'}</span>
+                                  </div>
+                                  <div className="truncate">
+                                    <span className="text-xs text-gray-400">Email: </span>
+                                    <span className="text-gray-700">{supplier.contactEmail || '—'}</span>
+                                  </div>
+                                  <div className="truncate">
+                                    <span className="text-xs text-gray-400">Phone: </span>
+                                    <span className="text-gray-700">{supplier.contactPhone || '—'}</span>
+                                  </div>
+                                  <div className="truncate">
+                                    <span className="text-xs text-gray-400">Country: </span>
+                                    <span className="text-gray-700">{supplier.country || '—'}</span>
+                                  </div>
+                                  <div className="truncate">
+                                    <span className="text-xs text-gray-400">Type: </span>
+                                    <span className="text-gray-700">{supplier.contactType || '—'}</span>
+                                  </div>
+                                </div>
+                              </div>
+
+                              <div className="flex items-center gap-1 flex-shrink-0">
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    setShowDuplicateReview(false);
+                                    setPeekSupplier(supplier);
+                                  }}
+                                  className="inline-flex items-center gap-1.5 rounded-md px-2.5 py-1.5 text-xs font-medium text-gray-600 hover:bg-gray-100 hover:text-gray-800"
+                                  title={`Open details for ${supplier.name}`}
+                                >
+                                  <Maximize2 size={14} />
+                                  Open
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    setShowDuplicateReview(false);
+                                    handleEdit(supplier);
+                                  }}
+                                  className="inline-flex items-center gap-1.5 rounded-md px-2.5 py-1.5 text-xs font-medium text-blue-600 hover:bg-blue-50 hover:text-blue-800"
+                                  title={`Edit ${supplier.name}`}
+                                >
+                                  <Pencil size={14} />
+                                  Edit
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => handleDelete(supplier.id)}
+                                  className="inline-flex items-center gap-1.5 rounded-md px-2.5 py-1.5 text-xs font-medium text-red-600 hover:bg-red-50 hover:text-red-800"
+                                  title={`Delete ${supplier.name}`}
+                                >
+                                  <Trash2 size={14} />
+                                  Delete
+                                </button>
+                              </div>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </section>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            <div className="flex justify-end border-t bg-gray-50 px-5 py-3">
+              <button
+                type="button"
+                onClick={closeDuplicateReview}
+                className="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-100"
+              >
+                Done
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {showAddModal && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
