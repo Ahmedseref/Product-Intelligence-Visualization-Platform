@@ -8,6 +8,7 @@ import { ReplitConnectors } from "@replit/connectors-sdk";
 import { db } from "./db";
 import { suppliers, type InsertSupplier, type Supplier } from "@shared/schema";
 import { eq, isNull } from "drizzle-orm";
+import { refreshState } from "./refreshState";
 
 // Fixed database ID for the user's "Contact Connector" Notion database.
 // Resolved once via /v1/search and hardcoded here per the task's
@@ -518,13 +519,32 @@ export async function pushToNotion(): Promise<{ count: number }> {
 
 const PULL_INTERVAL_MS = 5 * 60 * 1000; // 5 minutes
 
+/**
+ * Pull from Notion and, when at least one row was created or updated, signal
+ * clients to reload.  The scheduler calls this wrapper so that an unchanged
+ * pull (count === 0) does not cause a redundant full-app reload.
+ */
+async function scheduledPull(): Promise<void> {
+  if (notionSyncStatus.pullInProgress) {
+    console.log("[NotionSync] Skipping scheduled pull — previous pull still in progress");
+    return;
+  }
+  try {
+    const { count } = await pullFromNotion();
+    if (count > 0) {
+      refreshState.trigger();
+      console.log(`[NotionSync] Scheduled pull applied ${count} change(s); clients notified.`);
+    } else {
+      console.log("[NotionSync] Scheduled pull: no changes.");
+    }
+  } catch (err: any) {
+    console.error("[NotionSync] Scheduled pull failed:", err.message || err);
+  }
+}
+
 export function startNotionSyncScheduler(): void {
   // Fire an initial pull shortly after startup, then repeat on interval.
-  setTimeout(() => {
-    pullFromNotion().catch((err) => console.error("[NotionSync] Initial pull failed:", err.message || err));
-  }, 5000);
+  setTimeout(() => scheduledPull(), 5000);
 
-  setInterval(() => {
-    pullFromNotion().catch((err) => console.error("[NotionSync] Scheduled pull failed:", err.message || err));
-  }, PULL_INTERVAL_MS);
+  setInterval(() => scheduledPull(), PULL_INTERVAL_MS);
 }

@@ -578,7 +578,11 @@ export function registerRoutes(app: Express): void {
   app.post("/api/notion/sync/pull", async (req, res) => {
     try {
       const result = await pullFromNotion();
-      refreshState.trigger();
+      // Only signal clients when data actually changed; an unchanged pull
+      // should not cause a redundant full-app reload.
+      if (result.count > 0) {
+        refreshState.trigger();
+      }
       res.json({ success: true, count: result.count });
     } catch (error: any) {
       console.error("Error pulling from Notion:", error);

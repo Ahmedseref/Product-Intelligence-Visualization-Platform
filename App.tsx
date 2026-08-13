@@ -24,6 +24,7 @@ import { LogOut, PanelLeftClose, PanelLeftOpen } from 'lucide-react';
 import { useGlobalRefresh } from './client/hooks/useGlobalRefresh';
 import { RefreshProvider } from './client/contexts/RefreshContext';
 import { HASH_TO_VIEW, VIEW_TO_HASH, parseHashState } from './routingUtils';
+import { loadWithSeedReconciliation } from './client/lib/initialLoad';
 
 const App: React.FC = () => {
   const [authUser, setAuthUser] = useState<AuthUser | null>(null);
@@ -234,25 +235,8 @@ const App: React.FC = () => {
 
   const seededRef = useRef(false);
 
-  const syncWithDatabase = useCallback(async () => {
-    const retryFetch = async <T,>(fn: () => Promise<T>, attempts: number, delay: number): Promise<T> => {
-      for (let i = 0; i < attempts; i++) {
-        try {
-          return await fn();
-        } catch (err) {
-          if (i === attempts - 1) throw err;
-          await new Promise(resolve => setTimeout(resolve, delay));
-        }
-      }
-      throw new Error('Retry failed');
-    };
-
+  const fetchAllFromDatabase = useCallback(async () => {
     try {
-      if (!seededRef.current) {
-        await retryFetch(() => api.seedDatabase(), 10, 1000);
-        seededRef.current = true;
-      }
-      
       const [nodesData, productsData, fieldsData, suppliersData, supplierProductsData] = await Promise.all([
         api.getTreeNodes(),
         api.getProducts(),
@@ -397,14 +381,24 @@ const App: React.FC = () => {
     }
   }, []);
 
+  const syncWithDatabase = useCallback(async () => {
+    // Local database reads start immediately and are never blocked by the
+    // idempotent background seed. If the seed reports it actually inserted
+    // rows (fresh/empty database), the datasets are re-fetched afterwards so
+    // the first load reconciles without waiting for an unrelated refresh.
+    await loadWithSeedReconciliation({
+      seededRef,
+      seed: () => api.seedDatabase(),
+      fetchAll: fetchAllFromDatabase,
+      onSeedError: () => console.log('Background seed failed (will retry on next load)'),
+    });
+  }, [fetchAllFromDatabase]);
+
   const { lockEditing, unlockEditing, lastSynced, markSynced } = useGlobalRefresh(syncWithDatabase);
 
   useEffect(() => {
     if (!authUser) return;
-    const timer = setTimeout(() => {
-      syncWithDatabase().then(() => markSynced());
-    }, 2000);
-    return () => clearTimeout(timer);
+    syncWithDatabase().then(() => markSynced());
   }, [authUser, syncWithDatabase, markSynced]);
 
   const lastSyncedLabel = lastSynced

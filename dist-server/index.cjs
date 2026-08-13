@@ -136752,13 +136752,26 @@ async function pushToNotion() {
   }
 }
 var PULL_INTERVAL_MS = 5 * 60 * 1e3;
+async function scheduledPull() {
+  if (notionSyncStatus.pullInProgress) {
+    console.log("[NotionSync] Skipping scheduled pull \u2014 previous pull still in progress");
+    return;
+  }
+  try {
+    const { count } = await pullFromNotion();
+    if (count > 0) {
+      refreshState.trigger();
+      console.log(`[NotionSync] Scheduled pull applied ${count} change(s); clients notified.`);
+    } else {
+      console.log("[NotionSync] Scheduled pull: no changes.");
+    }
+  } catch (err) {
+    console.error("[NotionSync] Scheduled pull failed:", err.message || err);
+  }
+}
 function startNotionSyncScheduler() {
-  setTimeout(() => {
-    pullFromNotion().catch((err) => console.error("[NotionSync] Initial pull failed:", err.message || err));
-  }, 5e3);
-  setInterval(() => {
-    pullFromNotion().catch((err) => console.error("[NotionSync] Scheduled pull failed:", err.message || err));
-  }, PULL_INTERVAL_MS);
+  setTimeout(() => scheduledPull(), 5e3);
+  setInterval(() => scheduledPull(), PULL_INTERVAL_MS);
 }
 
 // server/routes.ts
@@ -137273,7 +137286,9 @@ function registerRoutes(app2) {
   app2.post("/api/notion/sync/pull", async (req, res) => {
     try {
       const result = await pullFromNotion();
-      refreshState.trigger();
+      if (result.count > 0) {
+        refreshState.trigger();
+      }
       res.json({ success: true, count: result.count });
     } catch (error) {
       console.error("Error pulling from Notion:", error);
