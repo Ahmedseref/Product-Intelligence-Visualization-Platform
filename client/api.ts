@@ -1,4 +1,5 @@
 const API_BASE = '/api';
+import type { BrowserBackupState } from '../shared/browserBackup';
 
 export interface TreeNodeData {
   id?: number;
@@ -522,6 +523,9 @@ export const api = {
   },
 
   async createBackup(description?: string): Promise<BackupSummary> {
+    // Flush notes/views before the server takes the manual snapshot.
+    const { syncBrowserBackup } = await import('./lib/browserBackup');
+    await syncBrowserBackup();
     const res = await authFetch(`${API_BASE}/backups/create`, {
       method: 'POST',
       body: JSON.stringify({ description }),
@@ -537,6 +541,8 @@ export const api = {
   },
 
   async restoreBackup(id: number): Promise<{ success: boolean; message: string }> {
+    const { syncBrowserBackup } = await import('./lib/browserBackup');
+    await syncBrowserBackup();
     const res = await authFetch(`${API_BASE}/backups/restore/${id}`, {
       method: 'POST',
     });
@@ -544,7 +550,25 @@ export const api = {
       const error = await res.json();
       throw new Error(error.message || 'Failed to restore backup');
     }
+    const result = await res.json();
+    if (result.success) {
+      await syncBrowserBackup();
+      window.dispatchEvent(new Event('backup-restored'));
+    }
+    return result;
+  },
+
+  async getBrowserBackup(): Promise<{ state: BrowserBackupState | null; epoch: string }> {
+    const res = await authFetch(`${API_BASE}/backups/browser-state`);
+    if (!res.ok) throw new Error('Could not load notes and saved-view backup');
     return res.json();
+  },
+
+  async saveBrowserBackup(state: BrowserBackupState, epoch: string): Promise<void> {
+    const res = await authFetch(`${API_BASE}/backups/browser-state`, {
+      method: 'PUT', body: JSON.stringify({ state, epoch }),
+    });
+    if (!res.ok) throw new Error('Notes and saved views could not be synchronized for backup. Please retry.');
   },
 
   async exportBackup(id: number): Promise<Blob> {
@@ -837,11 +861,10 @@ export interface BackupSummary {
 }
 
 export interface RestorePreview {
-  products: number;
-  suppliers: number;
-  treeNodes: number;
-  customFieldDefinitions: number;
-  appSettings: number;
+  entityCounts: Record<string, number>;
+  formatVersion: string;
+  preservedCollections: string[];
+  limitations: string[];
 }
 
 export interface BackupSettingsData {

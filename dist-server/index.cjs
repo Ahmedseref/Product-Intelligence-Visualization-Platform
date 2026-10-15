@@ -132958,10 +132958,101 @@ function inferQualificationTags(product, taxonomyPath) {
   };
 }
 
+// server/backupData.ts
+var backupTables = {
+  treeNodes,
+  suppliers,
+  masterProducts,
+  products,
+  supplierProducts,
+  customFieldDefinitions,
+  colors,
+  sectors,
+  systems,
+  systemLayers,
+  primerLibrary,
+  systemProductOptions,
+  systemHistory,
+  attachments,
+  stockCodeHistory,
+  documents,
+  customers,
+  customerFields,
+  proformaSettings,
+  proformas,
+  proformaItems,
+  proformaFinancials,
+  qualificationVocabularies,
+  productQualificationTags,
+  appSettings
+};
+var legacyKeys = ["products", "suppliers", "treeNodes", "customFieldDefinitions", "appSettings"];
+var BACKUP_VERSION = "2.0.0";
+function validateBackupData(value) {
+  const payload = value;
+  if (!payload || !["1.0.0", BACKUP_VERSION].includes(payload.version) || !payload.data || typeof payload.data !== "object" || Array.isArray(payload.data) || !Number.isFinite(Date.parse(payload.createdAt))) {
+    throw new Error("Unsupported or invalid backup format");
+  }
+  const required = payload.version === BACKUP_VERSION ? Object.keys(backupTables) : legacyKeys;
+  for (const key of required) {
+    if (!Array.isArray(payload.data[key])) throw new Error(`Missing backup collection: ${key}`);
+  }
+  for (const [key, rows] of Object.entries(payload.data)) {
+    if (!Object.hasOwn(backupTables, key) || !Array.isArray(rows)) throw new Error(`Invalid backup collection: ${key}`);
+    const columns = getTableColumns(backupTables[key]);
+    for (const row of rows) {
+      if (!row || typeof row !== "object" || Array.isArray(row)) throw new Error(`Invalid row in ${key}`);
+      for (const [field, item] of Object.entries(row)) {
+        const column = columns[field];
+        if (!column) throw new Error(`Unknown field ${key}.${field}`);
+        if (column.dataType === "date" && item != null && !Number.isFinite(new Date(item).getTime())) {
+          throw new Error(`Invalid date ${key}.${field}`);
+        }
+      }
+    }
+  }
+}
+function backupCounts(payload) {
+  return Object.fromEntries(Object.entries(payload.data).map(([key, rows]) => [key, rows.length]));
+}
+async function collectBackupData(tx) {
+  const data = {};
+  for (const [key, table] of Object.entries(backupTables)) {
+    const rows = await tx.select().from(table);
+    data[key] = key === "appSettings" ? rows.filter((row) => row.key !== "browser_backup_restore_epoch") : rows;
+  }
+  return { version: BACKUP_VERSION, createdAt: (/* @__PURE__ */ new Date()).toISOString(), data };
+}
+async function restoreBackupData(tx, payload) {
+  validateBackupData(payload);
+  const entries = Object.entries(backupTables).filter(([key]) => Object.hasOwn(payload.data, key));
+  for (const [, table] of entries) await tx.execute(sql`LOCK TABLE ${table} IN EXCLUSIVE MODE`);
+  for (const [, table] of [...entries].reverse()) await tx.delete(table);
+  for (const [key, table] of entries) {
+    const columns = getTableColumns(table);
+    const rows = payload.data[key];
+    const batchSize = Math.max(1, Math.floor(3e4 / Object.keys(columns).length));
+    for (let offset = 0; offset < rows.length; offset += batchSize) {
+      const batch = rows.slice(offset, offset + batchSize).map((row) => Object.fromEntries(Object.entries(row).map(([field, value]) => [
+        field,
+        columns[field].dataType === "date" && value != null ? new Date(value) : value
+      ])));
+      await tx.insert(table).values(batch);
+    }
+    const name = getTableName(table);
+    await tx.execute(sql`
+      SELECT setval(pg_get_serial_sequence(${name}, 'id'),
+        GREATEST(COALESCE((SELECT MAX(id) FROM ${table}), 0),
+          COALESCE(pg_sequence_last_value(pg_get_serial_sequence(${name}, 'id')::regclass), 0), 1),
+        true)
+      WHERE pg_get_serial_sequence(${name}, 'id') IS NOT NULL
+    `);
+  }
+}
+
 // server/backupService.ts
 var import_crypto = require("crypto");
 var import_zlib = require("zlib");
-var BACKUP_VERSION = "1.0.0";
 var BACKUP_SETTINGS_KEY = "backup_settings";
 var maxBackups = 50;
 var autoBackupIntervalHours = 6;
@@ -133037,7 +133128,7 @@ function compressData(jsonString) {
 }
 function decompressData(base64Data) {
   const buffer2 = Buffer.from(base64Data, "base64");
-  const decompressed = (0, import_zlib.gunzipSync)(buffer2);
+  const decompressed = (0, import_zlib.gunzipSync)(buffer2, { maxOutputLength: 100 * 1024 * 1024 });
   return decompressed.toString("utf-8");
 }
 async function getNextVersionNumber() {
@@ -133054,37 +133145,18 @@ async function cleanupOldBackups() {
   }
 }
 async function createBackup(triggerType, description) {
-  const [allProducts, allSuppliers, allTreeNodes, allCustomFields, allSettings] = await Promise.all([
-    db.select().from(products),
-    db.select().from(suppliers),
-    db.select().from(treeNodes),
-    db.select().from(customFieldDefinitions),
-    db.select().from(appSettings)
-  ]);
-  const backupData = {
-    version: BACKUP_VERSION,
-    createdAt: (/* @__PURE__ */ new Date()).toISOString(),
-    data: {
-      products: allProducts,
-      suppliers: allSuppliers,
-      treeNodes: allTreeNodes,
-      customFieldDefinitions: allCustomFields,
-      appSettings: allSettings
-    }
-  };
+  const backupData = await db.transaction(async (tx) => {
+    await tx.execute(sql`SET TRANSACTION ISOLATION LEVEL REPEATABLE READ READ ONLY`);
+    return collectBackupData(tx);
+  });
   const jsonString = JSON.stringify(backupData);
   const originalSize = Buffer.byteLength(jsonString, "utf-8");
+  if (originalSize > 100 * 1024 * 1024) throw new Error("Backup exceeds the 100 MB uncompressed limit");
   const compressedData = compressData(jsonString);
   const compressedSize = Buffer.byteLength(compressedData, "utf-8");
   const checksum = computeChecksum(jsonString);
   const versionNumber = await getNextVersionNumber();
-  const entityCounts = {
-    products: allProducts.length,
-    suppliers: allSuppliers.length,
-    treeNodes: allTreeNodes.length,
-    customFieldDefinitions: allCustomFields.length,
-    appSettings: allSettings.length
-  };
+  const entityCounts = backupCounts(backupData);
   const [inserted] = await db.insert(backups).values({
     versionNumber,
     triggerType,
@@ -133134,7 +133206,9 @@ async function getBackupById(id) {
   if (storedChecksum !== computedChecksum) {
     throw new Error("Backup integrity check failed: checksum mismatch");
   }
-  return JSON.parse(jsonString);
+  const data = JSON.parse(jsonString);
+  validateBackupData(data);
+  return data;
 }
 async function exportBackup(id) {
   const [backup] = await db.select().from(backups).where(eq(backups.id, id));
@@ -133162,11 +133236,14 @@ async function getRestorePreview(id) {
   const backupData = await getBackupById(id);
   if (!backupData) throw new Error("Backup not found");
   return {
-    products: backupData.data.products.length,
-    suppliers: backupData.data.suppliers.length,
-    treeNodes: backupData.data.treeNodes.length,
-    customFieldDefinitions: backupData.data.customFieldDefinitions.length,
-    appSettings: backupData.data.appSettings.length
+    entityCounts: backupCounts(backupData),
+    formatVersion: backupData.version,
+    preservedCollections: Object.keys(backupTables).filter((key) => !Object.hasOwn(backupData.data, key)),
+    limitations: [
+      "Uploaded files and external URLs are referenced, not copied; keep their storage available.",
+      "Login accounts, sessions, credentials, database schema, and backup history are not replaced.",
+      "Notes and saved contact views are included once synchronized from a signed-in browser."
+    ]
   };
 }
 async function restoreBackup(id) {
@@ -133175,85 +133252,44 @@ async function restoreBackup(id) {
   await createBackup("SYSTEM", `Pre-restore safety backup (restoring from v${id})`);
   try {
     await db.transaction(async (tx) => {
-      await tx.delete(products);
-      await tx.delete(suppliers);
-      await tx.delete(treeNodes);
-      await tx.delete(customFieldDefinitions);
-      await tx.delete(appSettings);
-      if (backupData.data.treeNodes.length > 0) {
-        await tx.insert(treeNodes).values(
-          backupData.data.treeNodes.map((n) => ({
-            ...n,
-            createdAt: n.createdAt ? new Date(n.createdAt) : /* @__PURE__ */ new Date(),
-            updatedAt: n.updatedAt ? new Date(n.updatedAt) : /* @__PURE__ */ new Date()
-          }))
-        );
-      }
-      if (backupData.data.suppliers.length > 0) {
-        await tx.insert(suppliers).values(
-          backupData.data.suppliers.map((s) => ({
-            ...s,
-            createdAt: s.createdAt ? new Date(s.createdAt) : /* @__PURE__ */ new Date(),
-            updatedAt: s.updatedAt ? new Date(s.updatedAt) : /* @__PURE__ */ new Date()
-          }))
-        );
-      }
-      if (backupData.data.products.length > 0) {
-        await tx.insert(products).values(
-          backupData.data.products.map((p) => ({
-            ...p,
-            dateAdded: p.dateAdded ? new Date(p.dateAdded) : /* @__PURE__ */ new Date(),
-            lastUpdated: p.lastUpdated ? new Date(p.lastUpdated) : /* @__PURE__ */ new Date()
-          }))
-        );
-      }
-      if (backupData.data.customFieldDefinitions.length > 0) {
-        await tx.insert(customFieldDefinitions).values(
-          backupData.data.customFieldDefinitions.map((c) => ({
-            ...c,
-            createdAt: c.createdAt ? new Date(c.createdAt) : /* @__PURE__ */ new Date()
-          }))
-        );
-      }
-      if (backupData.data.appSettings.length > 0) {
-        await tx.insert(appSettings).values(
-          backupData.data.appSettings.map((a) => ({
-            ...a,
-            updatedAt: a.updatedAt ? new Date(a.updatedAt) : /* @__PURE__ */ new Date()
-          }))
-        );
-      }
+      await restoreBackupData(tx, backupData);
+      await tx.insert(appSettings).values({
+        key: "browser_backup_restore_epoch",
+        value: (/* @__PURE__ */ new Date()).toISOString()
+      }).onConflictDoUpdate({
+        target: appSettings.key,
+        set: { value: (/* @__PURE__ */ new Date()).toISOString(), updatedAt: /* @__PURE__ */ new Date() }
+      });
     });
+    await loadSettingsFromDb();
+    if (scheduledBackupTimer) restartScheduledBackups();
     return { success: true, message: "Restore completed successfully" };
   } catch (error) {
     const message = error instanceof Error ? error.message : "Unknown error during restore";
     return { success: false, message: `Restore failed: ${message}` };
   }
 }
+function decodeBackupExport(fileBuffer) {
+  const decoded = JSON.parse((0, import_zlib.gunzipSync)(fileBuffer, { maxOutputLength: 100 * 1024 * 1024 }).toString("utf-8"));
+  if (!decoded.metadata || !decoded.data) throw new Error("Invalid backup file format");
+  validateBackupData(decoded.data);
+  const checksum = computeChecksum(JSON.stringify(decoded.data));
+  if (typeof decoded.metadata.checksum !== "string" || decoded.metadata.checksum !== checksum) {
+    throw new Error("Imported backup checksum mismatch");
+  }
+  return decoded;
+}
 async function importBackup(fileBuffer) {
   try {
-    const decompressed = (0, import_zlib.gunzipSync)(fileBuffer);
-    const importData = JSON.parse(decompressed.toString("utf-8"));
-    if (!importData.metadata || !importData.data) {
-      throw new Error("Invalid backup file format");
-    }
+    const importData = decodeBackupExport(fileBuffer);
     const backupData = importData.data;
     const jsonString = JSON.stringify(backupData);
     const computedChecksum = computeChecksum(jsonString);
-    if (importData.metadata.checksum && importData.metadata.checksum !== computedChecksum) {
-      throw new Error("Imported backup checksum mismatch");
-    }
     const originalSize = Buffer.byteLength(jsonString, "utf-8");
     const compressedData = compressData(jsonString);
     const compressedSize = Buffer.byteLength(compressedData, "utf-8");
     const versionNumber = await getNextVersionNumber();
-    const entityCounts = {
-      products: backupData.data.products.length,
-      suppliers: backupData.data.suppliers.length,
-      treeNodes: backupData.data.treeNodes.length,
-      customFieldDefinitions: backupData.data.customFieldDefinitions.length,
-      appSettings: backupData.data.appSettings.length
-    };
+    const entityCounts = backupCounts(backupData);
     const [inserted] = await db.insert(backups).values({
       versionNumber,
       triggerType: "MANUAL",
@@ -133296,6 +133332,39 @@ function startScheduledBackups() {
   const intervalMs = autoBackupIntervalHours * 60 * 60 * 1e3;
   scheduledBackupTimer = setInterval(runScheduledBackup, intervalMs);
   console.log(`[Backup] Scheduled backups enabled (every ${autoBackupIntervalHours} hours)`);
+}
+
+// shared/browserBackup.ts
+var BROWSER_BACKUP_KEYS = ["floating-notes-widget", "supplierManager_savedView"];
+function validateBrowserBackup(value) {
+  if (!value || typeof value !== "object" || Array.isArray(value) || JSON.stringify(value).length > 64e3) throw new Error("Invalid browser backup (maximum 64 KB)");
+  for (const [key, data] of Object.entries(value)) {
+    if (!BROWSER_BACKUP_KEYS.includes(key) || data !== null && typeof data !== "string") {
+      throw new Error("Unsupported browser backup entry");
+    }
+    if (data !== null) JSON.parse(data);
+  }
+}
+
+// server/browserBackupService.ts
+var keyFor = (userId) => `browser_backup:${userId}`;
+var EPOCH_KEY = "browser_backup_restore_epoch";
+async function getBrowserBackup(userId) {
+  const rows = await db.select().from(appSettings).where(inArray(appSettings.key, [keyFor(userId), EPOCH_KEY]));
+  return {
+    state: rows.find((r) => r.key === keyFor(userId))?.value ?? null,
+    epoch: rows.find((r) => r.key === EPOCH_KEY)?.value ?? ""
+  };
+}
+async function saveBrowserBackup(userId, value, epoch) {
+  validateBrowserBackup(value);
+  return db.transaction(async (tx) => {
+    await tx.execute(sql`LOCK TABLE app_settings IN SHARE ROW EXCLUSIVE MODE`);
+    const [marker] = await tx.select().from(appSettings).where(eq(appSettings.key, EPOCH_KEY));
+    if ((marker?.value ?? "") !== epoch) return false;
+    await tx.insert(appSettings).values({ key: keyFor(userId), value }).onConflictDoUpdate({ target: appSettings.key, set: { value, updatedAt: /* @__PURE__ */ new Date() } });
+    return true;
+  });
 }
 
 // server/stockCodeService.ts
@@ -137735,6 +137804,23 @@ function registerRoutes(app2) {
     } catch (error) {
       console.error("Error updating inventory columns:", error);
       res.status(500).json({ error: "Failed to update inventory columns" });
+    }
+  });
+  app2.get("/api/backups/browser-state", async (req, res) => {
+    try {
+      res.json(await getBrowserBackup(req.user.id));
+    } catch {
+      res.status(500).json({ error: "Could not load browser backup" });
+    }
+  });
+  app2.put("/api/backups/browser-state", async (req, res) => {
+    try {
+      const saved = await saveBrowserBackup(req.user.id, req.body.state, req.body.epoch);
+      if (!saved) return res.status(409).json({ error: "A backup was restored. Reload your browser data before saving." });
+      res.json({ success: true });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Could not save browser backup";
+      res.status(message.startsWith("Invalid") || message.startsWith("Unsupported") || error instanceof SyntaxError ? 400 : 500).json({ error: message });
     }
   });
   app2.post("/api/backups/create", async (req, res) => {

@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { api, BackupSummary, RestorePreview, BackupSettingsData } from '../../client/api';
 import { useEscapeKey } from '../../hooks/useEscapeKey';
+import { backupLabel } from '../../shared/backupLabels';
 import { 
   Archive, 
   Download, 
@@ -301,6 +302,15 @@ export default function BackupManager() {
 
   return (
     <div className="space-y-6">
+      <div className="rounded-xl border border-blue-200 bg-blue-50 p-4 text-sm text-slate-700">
+        <p className="font-semibold text-slate-900">Expanded backup coverage</p>
+        <p className="mt-1">Protects all 25 business-data collections: products and stock codes, contacts, customers,
+          invoices and financials, system builder, primers, documents, attachments, qualification data, and settings.
+          Notes with record links and saved contact views are synchronized from signed-in browsers automatically.</p>
+        <p className="mt-2 text-xs text-slate-600">File records and URLs are included; uploaded file contents remain in their storage.
+          Login accounts, sessions, credentials, database schema, and backup history are not restored.
+          Older backups keep their original coverage and leave missing collections untouched.</p>
+      </div>
       <div className="flex items-center justify-end gap-3">
         <input
           type="file"
@@ -412,7 +422,7 @@ export default function BackupManager() {
                       <span className="text-sm text-gray-500">{formatRelativeTime(backup.createdAt)}</span>
                     </div>
                     <p className="text-sm text-gray-700 mb-2">{backup.description || 'No description'}</p>
-                    <div className="flex items-center gap-4 text-xs text-gray-500">
+                    <div className="flex flex-wrap items-center gap-4 text-xs text-gray-500">
                       <span className="flex items-center gap-1">
                         <Database className="h-3 w-3" />
                         {backup.entityCounts.products || 0} products
@@ -425,6 +435,12 @@ export default function BackupManager() {
                         <FolderTree className="h-3 w-3" />
                         {backup.entityCounts.treeNodes || 0} nodes
                       </span>
+                      <details className="mt-1 text-xs text-slate-500">
+                        <summary className="cursor-pointer hover:text-blue-700">{Object.keys(backup.entityCounts).length} collections — view all</summary>
+                        <ul className="mt-1 max-h-40 overflow-y-auto">
+                          {Object.entries(backup.entityCounts).map(([key, count]) => <li key={key}>{backupLabel(key)}: {count}</li>)}
+                        </ul>
+                      </details>
                       <span className="flex items-center gap-1">
                         <HardDrive className="h-3 w-3" />
                         {formatBytes(backup.compressedSize)}
@@ -496,33 +512,21 @@ export default function BackupManager() {
           <div className="space-y-4">
             <div className="flex items-center gap-2 text-amber-600 bg-amber-50 p-3 rounded-lg">
               <AlertTriangle className="h-5 w-5 flex-shrink-0" />
-              <p className="text-sm">This will replace all current data with the backup. A safety backup will be created automatically.</p>
+              <p className="text-sm">This replaces the collections listed below, including synchronized notes and views in settings.
+                Collections absent from an older backup are preserved. A safety backup is created first.</p>
             </div>
             {restorePreview && (
               <div className="bg-gray-50 rounded-lg p-4 space-y-2">
                 <h4 className="font-medium text-gray-900 mb-2">Backup Contents:</h4>
-                <div className="grid grid-cols-2 gap-2 text-sm">
-                  <div className="flex items-center gap-2">
-                    <Database className="h-4 w-4 text-gray-500" />
-                    <span>{restorePreview.products} products</span>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <Users className="h-4 w-4 text-gray-500" />
-                    <span>{restorePreview.suppliers} suppliers</span>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <FolderTree className="h-4 w-4 text-gray-500" />
-                    <span>{restorePreview.treeNodes} tree nodes</span>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <Layers className="h-4 w-4 text-gray-500" />
-                    <span>{restorePreview.customFieldDefinitions} custom fields</span>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <Settings2 className="h-4 w-4 text-gray-500" />
-                    <span>{restorePreview.appSettings} settings</span>
-                  </div>
+                <p className="mb-2 text-xs text-slate-500">Format {restorePreview.formatVersion}</p>
+                <div className="grid max-h-52 grid-cols-2 gap-2 overflow-y-auto text-sm">
+                  {Object.entries(restorePreview.entityCounts).map(([key, count]) => (
+                    <div key={key}><span className="font-semibold">{count}</span> {backupLabel(key)}</div>
+                  ))}
                 </div>
+                {restorePreview.preservedCollections.length > 0 && (
+                  <p className="mt-3 text-xs text-amber-800">Not in this older backup; preserved: {restorePreview.preservedCollections.map(backupLabel).join(', ')}.</p>
+                )}
               </div>
             )}
           </div>

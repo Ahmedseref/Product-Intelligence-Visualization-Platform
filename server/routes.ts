@@ -6,6 +6,7 @@ import { eq, and, asc, inArray } from "drizzle-orm";
 import { normalizeCompanyName } from "@shared/companyNormalization";
 import { inferQualificationTags, type InferenceResult } from "./qualificationEngine";
 import * as backupService from "./backupService";
+import { getBrowserBackup, saveBrowserBackup } from "./browserBackupService";
 import * as stockCodeService from "./stockCodeService";
 import { authMiddleware, requirePasswordChange } from "./authRoutes";
 import { refreshState } from "./refreshState";
@@ -1048,6 +1049,26 @@ export function registerRoutes(app: Express): void {
     } catch (error) {
       console.error("Error updating inventory columns:", error);
       res.status(500).json({ error: "Failed to update inventory columns" });
+    }
+  });
+
+  app.get("/api/backups/browser-state", async (req, res) => {
+    try {
+      res.json(await getBrowserBackup(req.user!.id));
+    } catch {
+      res.status(500).json({ error: "Could not load browser backup" });
+    }
+  });
+
+  app.put("/api/backups/browser-state", async (req, res) => {
+    try {
+      const saved = await saveBrowserBackup(req.user!.id, req.body.state, req.body.epoch);
+      if (!saved) return res.status(409).json({ error: "A backup was restored. Reload your browser data before saving." });
+      res.json({ success: true });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Could not save browser backup";
+      res.status(message.startsWith('Invalid') || message.startsWith('Unsupported') || error instanceof SyntaxError ? 400 : 500)
+        .json({ error: message });
     }
   });
 

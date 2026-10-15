@@ -64,6 +64,7 @@ const FloatingNotesWidget: React.FC<FloatingNotesWidgetProps> = ({ products = []
     setState(next);
     try {
       localStorage.setItem(NOTES_STORAGE_KEY, JSON.stringify(next));
+      window.dispatchEvent(new Event('browser-backup-changed'));
       setStorageError('');
     } catch {
       setStorageError('Your browser could not save this change. Free up storage space and try again.');
@@ -107,9 +108,12 @@ const FloatingNotesWidget: React.FC<FloatingNotesWidgetProps> = ({ products = []
       }
     };
     window.addEventListener('storage', syncStorage);
+    const restored = () => setState(initialState());
+    window.addEventListener('backup-restored', restored);
     return () => {
       window.removeEventListener('open-notes', open);
       window.removeEventListener('storage', syncStorage);
+      window.removeEventListener('backup-restored', restored);
     };
   }, []);
 

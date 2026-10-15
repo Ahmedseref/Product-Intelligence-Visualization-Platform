@@ -1,22 +1,12 @@
 import { db } from "./db";
-import { backups, products, suppliers, treeNodes, customFieldDefinitions, appSettings } from "@shared/schema";
+import { backups, appSettings } from "@shared/schema";
+import { backupCounts, backupTables, collectBackupData, restoreBackupData, validateBackupData, type BackupData } from "./backupData";
+export type { BackupData } from "./backupData";
 import { eq, desc, sql } from "drizzle-orm";
 import { createHash } from "crypto";
 import { gzipSync, gunzipSync } from "zlib";
 
 export type TriggerType = "AUTO" | "MANUAL" | "SYSTEM";
-
-export interface BackupData {
-  version: string;
-  createdAt: string;
-  data: {
-    products: any[];
-    suppliers: any[];
-    treeNodes: any[];
-    customFieldDefinitions: any[];
-    appSettings: any[];
-  };
-}
 
 export interface BackupSummary {
   id: number;
@@ -31,14 +21,11 @@ export interface BackupSummary {
 }
 
 export interface RestorePreview {
-  products: number;
-  suppliers: number;
-  treeNodes: number;
-  customFieldDefinitions: number;
-  appSettings: number;
+  entityCounts: Record<string, number>;
+  formatVersion: string;
+  preservedCollections: string[];
+  limitations: string[];
 }
-
-const BACKUP_VERSION = "1.0.0";
 const BACKUP_SETTINGS_KEY = "backup_settings";
 
 let maxBackups = 50;
@@ -142,7 +129,7 @@ function compressData(jsonString: string): string {
 
 function decompressData(base64Data: string): string {
   const buffer = Buffer.from(base64Data, "base64");
-  const decompressed = gunzipSync(buffer);
+  const decompressed = gunzipSync(buffer, { maxOutputLength: 100 * 1024 * 1024 });
   return decompressed.toString("utf-8");
 }
 
@@ -171,42 +158,21 @@ export async function createBackup(
   triggerType: TriggerType,
   description?: string
 ): Promise<BackupSummary> {
-  const [allProducts, allSuppliers, allTreeNodes, allCustomFields, allSettings] =
-    await Promise.all([
-      db.select().from(products),
-      db.select().from(suppliers),
-      db.select().from(treeNodes),
-      db.select().from(customFieldDefinitions),
-      db.select().from(appSettings),
-    ]);
-
-  const backupData: BackupData = {
-    version: BACKUP_VERSION,
-    createdAt: new Date().toISOString(),
-    data: {
-      products: allProducts,
-      suppliers: allSuppliers,
-      treeNodes: allTreeNodes,
-      customFieldDefinitions: allCustomFields,
-      appSettings: allSettings,
-    },
-  };
+  const backupData = await db.transaction(async tx => {
+    await tx.execute(sql`SET TRANSACTION ISOLATION LEVEL REPEATABLE READ READ ONLY`);
+    return collectBackupData(tx);
+  });
 
   const jsonString = JSON.stringify(backupData);
   const originalSize = Buffer.byteLength(jsonString, "utf-8");
+  if (originalSize > 100 * 1024 * 1024) throw new Error("Backup exceeds the 100 MB uncompressed limit");
   const compressedData = compressData(jsonString);
   const compressedSize = Buffer.byteLength(compressedData, "utf-8");
   const checksum = computeChecksum(jsonString);
 
   const versionNumber = await getNextVersionNumber();
 
-  const entityCounts: Record<string, number> = {
-    products: allProducts.length,
-    suppliers: allSuppliers.length,
-    treeNodes: allTreeNodes.length,
-    customFieldDefinitions: allCustomFields.length,
-    appSettings: allSettings.length,
-  };
+  const entityCounts = backupCounts(backupData);
 
   const [inserted] = await db
     .insert(backups)
@@ -271,7 +237,9 @@ export async function getBackupById(id: number): Promise<BackupData | null> {
     throw new Error("Backup integrity check failed: checksum mismatch");
   }
 
-  return JSON.parse(jsonString) as BackupData;
+  const data = JSON.parse(jsonString);
+  validateBackupData(data);
+  return data;
 }
 
 export async function exportBackup(id: number): Promise<{ filename: string; data: Buffer }> {
@@ -307,11 +275,14 @@ export async function getRestorePreview(id: number): Promise<RestorePreview> {
   if (!backupData) throw new Error("Backup not found");
 
   return {
-    products: backupData.data.products.length,
-    suppliers: backupData.data.suppliers.length,
-    treeNodes: backupData.data.treeNodes.length,
-    customFieldDefinitions: backupData.data.customFieldDefinitions.length,
-    appSettings: backupData.data.appSettings.length,
+    entityCounts: backupCounts(backupData),
+    formatVersion: backupData.version,
+    preservedCollections: Object.keys(backupTables).filter(key => !Object.hasOwn(backupData.data, key)),
+    limitations: [
+      "Uploaded files and external URLs are referenced, not copied; keep their storage available.",
+      "Login accounts, sessions, credentials, database schema, and backup history are not replaced.",
+      "Notes and saved contact views are included once synchronized from a signed-in browser.",
+    ],
   };
 }
 
@@ -323,61 +294,17 @@ export async function restoreBackup(id: number): Promise<{ success: boolean; mes
 
   try {
     await db.transaction(async (tx) => {
-      await tx.delete(products);
-      await tx.delete(suppliers);
-      await tx.delete(treeNodes);
-      await tx.delete(customFieldDefinitions);
-      await tx.delete(appSettings);
-
-      if (backupData.data.treeNodes.length > 0) {
-        await tx.insert(treeNodes).values(
-          backupData.data.treeNodes.map((n: any) => ({
-            ...n,
-            createdAt: n.createdAt ? new Date(n.createdAt) : new Date(),
-            updatedAt: n.updatedAt ? new Date(n.updatedAt) : new Date(),
-          }))
-        );
-      }
-
-      if (backupData.data.suppliers.length > 0) {
-        await tx.insert(suppliers).values(
-          backupData.data.suppliers.map((s: any) => ({
-            ...s,
-            createdAt: s.createdAt ? new Date(s.createdAt) : new Date(),
-            updatedAt: s.updatedAt ? new Date(s.updatedAt) : new Date(),
-          }))
-        );
-      }
-
-      if (backupData.data.products.length > 0) {
-        await tx.insert(products).values(
-          backupData.data.products.map((p: any) => ({
-            ...p,
-            dateAdded: p.dateAdded ? new Date(p.dateAdded) : new Date(),
-            lastUpdated: p.lastUpdated ? new Date(p.lastUpdated) : new Date(),
-          }))
-        );
-      }
-
-      if (backupData.data.customFieldDefinitions.length > 0) {
-        await tx.insert(customFieldDefinitions).values(
-          backupData.data.customFieldDefinitions.map((c: any) => ({
-            ...c,
-            createdAt: c.createdAt ? new Date(c.createdAt) : new Date(),
-          }))
-        );
-      }
-
-      if (backupData.data.appSettings.length > 0) {
-        await tx.insert(appSettings).values(
-          backupData.data.appSettings.map((a: any) => ({
-            ...a,
-            updatedAt: a.updatedAt ? new Date(a.updatedAt) : new Date(),
-          }))
-        );
-      }
+      await restoreBackupData(tx, backupData);
+      // Not included in snapshots: it marks a restore operation, not user data.
+      await tx.insert(appSettings).values({
+        key: "browser_backup_restore_epoch", value: new Date().toISOString(),
+      }).onConflictDoUpdate({
+        target: appSettings.key, set: { value: new Date().toISOString(), updatedAt: new Date() },
+      });
     });
 
+    await loadSettingsFromDb();
+    if (scheduledBackupTimer) restartScheduledBackups();
     return { success: true, message: "Restore completed successfully" };
   } catch (error) {
     const message = error instanceof Error ? error.message : "Unknown error during restore";
@@ -385,24 +312,25 @@ export async function restoreBackup(id: number): Promise<{ success: boolean; mes
   }
 }
 
+export function decodeBackupExport(fileBuffer: Buffer): { metadata: Record<string, any>; data: BackupData } {
+  const decoded = JSON.parse(gunzipSync(fileBuffer, { maxOutputLength: 100 * 1024 * 1024 }).toString('utf-8'));
+  if (!decoded.metadata || !decoded.data) throw new Error('Invalid backup file format');
+  validateBackupData(decoded.data);
+  const checksum = computeChecksum(JSON.stringify(decoded.data));
+  if (typeof decoded.metadata.checksum !== 'string' || decoded.metadata.checksum !== checksum) {
+    throw new Error('Imported backup checksum mismatch');
+  }
+  return decoded;
+}
+
 export async function importBackup(
   fileBuffer: Buffer
 ): Promise<{ success: boolean; backupId?: number; message: string }> {
   try {
-    const decompressed = gunzipSync(fileBuffer);
-    const importData = JSON.parse(decompressed.toString("utf-8"));
-
-    if (!importData.metadata || !importData.data) {
-      throw new Error("Invalid backup file format");
-    }
-
-    const backupData = importData.data as BackupData;
+    const importData = decodeBackupExport(fileBuffer);
+    const backupData = importData.data;
     const jsonString = JSON.stringify(backupData);
     const computedChecksum = computeChecksum(jsonString);
-
-    if (importData.metadata.checksum && importData.metadata.checksum !== computedChecksum) {
-      throw new Error("Imported backup checksum mismatch");
-    }
 
     const originalSize = Buffer.byteLength(jsonString, "utf-8");
     const compressedData = compressData(jsonString);
@@ -410,13 +338,7 @@ export async function importBackup(
 
     const versionNumber = await getNextVersionNumber();
 
-    const entityCounts: Record<string, number> = {
-      products: backupData.data.products.length,
-      suppliers: backupData.data.suppliers.length,
-      treeNodes: backupData.data.treeNodes.length,
-      customFieldDefinitions: backupData.data.customFieldDefinitions.length,
-      appSettings: backupData.data.appSettings.length,
-    };
+    const entityCounts = backupCounts(backupData);
 
     const [inserted] = await db
       .insert(backups)

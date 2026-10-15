@@ -11,6 +11,7 @@ import SupplierManager from './components/SupplierManager';
 import MassImportWizard from './components/MassImportWizard';
 
 import FloatingNotesWidget from './components/FloatingNotesWidget';
+import BrowserBackupSync from './components/settings/BrowserBackupSync';
 import Settings, { InventoryColumnConfig } from './components/Settings';
 import Login from './components/Login';
 import ChangePassword from './components/ChangePassword';
@@ -1250,6 +1251,7 @@ const App: React.FC = () => {
         </div>
       </div>
       <FloatingNotesWidget products={products} suppliers={suppliers} />
+      <BrowserBackupSync />
     </div>
     </RefreshProvider>
   );

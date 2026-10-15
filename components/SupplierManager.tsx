@@ -285,6 +285,7 @@ function loadSavedView(): SavedView | null {
 function persistView(view: SavedView) {
   try {
     localStorage.setItem(SAVED_VIEW_KEY, JSON.stringify(view));
+    window.dispatchEvent(new Event('browser-backup-changed'));
   } catch {
     // storage unavailable — fail silently
   }
@@ -293,6 +294,7 @@ function persistView(view: SavedView) {
 function clearPersistedView() {
   try {
     localStorage.removeItem(SAVED_VIEW_KEY);
+    window.dispatchEvent(new Event('browser-backup-changed'));
   } catch {}
 }
 
