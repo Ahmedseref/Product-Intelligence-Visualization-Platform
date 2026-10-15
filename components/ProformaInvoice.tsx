@@ -16,6 +16,7 @@ import { api } from '../client/api';
 import { Product, ProformaData } from '../types';
 import ProformaInvoiceEditor from './proforma/ProformaInvoiceEditor';
 import CustomerManager from './proforma/CustomerManager';
+import { useNoteTarget } from '../hooks/useNoteTarget';
 
 interface ProformaInvoiceProps {
   products: Product[];
@@ -47,6 +48,16 @@ const ProformaInvoice: React.FC<ProformaInvoiceProps> = ({ products }) => {
   const [busyAction, setBusyAction] = useState<string | null>(null);
   // Tracks which groups have their version sub-rows expanded.
   const [expandedGroups, setExpandedGroups] = useState<Set<string>>(new Set());
+  const noteInvoice = useNoteTarget('noteInvoice');
+  const noteCustomer = useNoteTarget('noteCustomer');
+  useEffect(() => {
+    if (noteInvoice) {
+      setActiveProformaId(noteInvoice);
+      setSubView('editor');
+    } else if (noteCustomer) {
+      setSubView('customers');
+    }
+  }, [noteInvoice, noteCustomer]);
 
   const loadList = useCallback(async () => {
     setLoading(true);

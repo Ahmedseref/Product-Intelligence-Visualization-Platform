@@ -39,7 +39,8 @@ const App: React.FC = () => {
 
   const [viewMode, setViewModeState] = useState<ViewMode>(() => getHashState().view);
   const [initialIndustryTag, setInitialIndustryTag] = useState<string | undefined>(() => getHashState().industry);
-  const [pendingEditProductId, setPendingEditProductId] = useState<string | null>(null);
+  const [pendingEditProductId, setPendingEditProductId] = useState<string | null>(() =>
+    new URLSearchParams(window.location.hash.split('?')[1] || '').get('noteProduct'));
   // Remembers which view the user was on when they triggered an external
   // "edit product" action, so we can return them there once the editor closes.
   const [editReturnView, setEditReturnView] = useState<ViewMode | null>(null);
@@ -75,6 +76,8 @@ const App: React.FC = () => {
       const { view, industry } = getHashState();
       setViewModeState(view);
       setInitialIndustryTag(industry);
+      const target = new URLSearchParams(window.location.hash.split('?')[1] || '').get('noteProduct');
+      if (target) setPendingEditProductId(target);
     };
     window.addEventListener('hashchange', onHashChange);
     if (!window.location.hash) {
@@ -1246,7 +1249,7 @@ const App: React.FC = () => {
           </main>
         </div>
       </div>
-      <FloatingNotesWidget />
+      <FloatingNotesWidget products={products} suppliers={suppliers} />
     </div>
     </RefreshProvider>
   );

@@ -9,6 +9,7 @@ import { Supplier } from '../types';
 import { api, NotionSyncStatus } from '../client/api';
 import { useEscapeKey } from '../hooks/useEscapeKey';
 import { getIndustryTagStyle, getIndustryTags } from './industryUtils';
+import { useNoteTarget } from '../hooks/useNoteTarget';
 
 type SortDirection = 'asc' | 'desc';
 interface SortConfig {
@@ -415,6 +416,12 @@ const SupplierManager: React.FC<SupplierManagerProps> = ({
   };
 
   const [peekSupplier, setPeekSupplier] = useState<Supplier | null>(null);
+  const noteSupplier = useNoteTarget('noteSupplier');
+  useEffect(() => {
+    if (!noteSupplier) return;
+    const target = suppliers.find(s => s.id === noteSupplier);
+    if (target) setPeekSupplier(target);
+  }, [noteSupplier, suppliers]);
 
   const refreshSyncStatus = useCallback(async () => {
     try {

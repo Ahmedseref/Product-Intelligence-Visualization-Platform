@@ -2,6 +2,7 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { Plus, Trash2, Edit2, X, Check, ChevronDown, ChevronUp, User, Users } from 'lucide-react';
 import { api } from '../../client/api';
 import { CustomerData, CustomerFieldData } from '../../types';
+import { useNoteTarget } from '../../hooks/useNoteTarget';
 
 const CustomerManager: React.FC = () => {
   const [customers, setCustomers] = useState<CustomerData[]>([]);
@@ -15,6 +16,14 @@ const CustomerManager: React.FC = () => {
   const [newName, setNewName] = useState('');
   const [newFields, setNewFields] = useState<Array<{ fieldName: string; fieldValue: string }>>([{ fieldName: '', fieldValue: '' }]);
   const [creating, setCreating] = useState(false);
+  const noteCustomer = useNoteTarget('noteCustomer');
+  useEffect(() => {
+    if (!noteCustomer || !customers.some(c => String(c.id) === noteCustomer)) return;
+    setExpandedId(Number(noteCustomer));
+    requestAnimationFrame(() => {
+      document.getElementById(`note-customer-${noteCustomer}`)?.scrollIntoView({ block: 'center', behavior: 'smooth' });
+    });
+  }, [noteCustomer, customers]);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -191,7 +200,7 @@ const CustomerManager: React.FC = () => {
             const fields: CustomerFieldData[] = customer.fields || [];
 
             return (
-              <div key={customer.id} className={`bg-white rounded-xl border transition-colors ${isEditing ? 'border-blue-300' : 'border-slate-200 hover:border-slate-300'} shadow-sm overflow-hidden`}>
+              <div id={`note-customer-${customer.id}`} key={customer.id} className={`bg-white rounded-xl border transition-colors ${isEditing ? 'border-blue-300' : 'border-slate-200 hover:border-slate-300'} shadow-sm overflow-hidden`}>
                 {isEditing ? (
                   <div className="p-5 space-y-4">
                     <div>

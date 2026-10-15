@@ -197,6 +197,7 @@ const ProductList: React.FC<ProductListProps> = ({
   useEffect(() => {
     if (!pendingEditProductId) return;
     const target = products.find(p => p.id === pendingEditProductId);
+    if (!target) return; // A linked product may still be loading on initial navigation.
     if (target) {
       setSelectedProduct(null);
       setEditingProduct(target);

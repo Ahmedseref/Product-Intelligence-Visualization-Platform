@@ -17,7 +17,7 @@
     "db:migrate": "tsx scripts/run-migrations.ts",
     "db:backfill-supplier-codes": "tsx scripts/backfill-supplier-codes.ts",
     "server": "tsx server/index.ts",
-    "test": "node --import tsx --test server/qualificationEngine.test.ts components/industryAnalysis.test.ts client/lib/initialLoad.test.ts server/supplierCode.test.ts"
+    "test": "node --import tsx --test server/qualificationEngine.test.ts components/industryAnalysis.test.ts client/lib/initialLoad.test.ts server/supplierCode.test.ts components/notes/notes.test.tsx"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.97.1",

@@ -1,5 +1,6 @@
 
 import React from 'react';
+import { StickyNote } from 'lucide-react';
 import { ViewMode, User } from '../types';
 import { ICONS } from '../constants';
 
@@ -88,13 +89,21 @@ const Sidebar: React.FC<SidebarProps> = ({ currentView, setView, user }) => {
             {ICONS.Settings}
             Settings
           </a>
+          <button
+            type="button"
+            onClick={() => window.dispatchEvent(new CustomEvent('open-notes'))}
+            className="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium text-slate-300 hover:bg-amber-500/15 hover:text-amber-200 transition-all text-left focus-visible:outline focus-visible:outline-2 focus-visible:outline-amber-400"
+          >
+            <StickyNote className="h-4 w-4" />
+            Notes
+          </button>
         </div>
       </nav>
 
       <div className="p-4 border-t border-slate-800 bg-slate-900/50">
         <div className="flex items-center gap-3 px-2 py-2">
-          <div className="w-10 h-10 rounded-full bg-slate-700 overflow-hidden flex items-center justify-center border border-slate-600">
-            <img src={`https://picsum.photos/seed/${user.name}/40`} alt="Avatar" />
+          <div className="w-10 h-10 rounded-full bg-slate-700 overflow-hidden flex items-center justify-center border border-slate-600 text-sm font-semibold text-slate-200" aria-label={`${user.name} avatar`}>
+            {user.name.split(/\s+/).map(part => part[0]).slice(0, 2).join('').toUpperCase()}
           </div>
           <div className="flex-1 overflow-hidden">
             <p className="text-sm font-semibold text-white truncate">{user.name}</p>
