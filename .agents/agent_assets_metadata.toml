@@ -1,0 +1,44 @@
+uploads = []
+generated = []
+
+[[outputs]]
+id = "v_dFEHUwBYbw1aMFjf0Jm"
+uri = "file://generated-artifacts/product-intelligence-app-source.rar"
+type = "unspecified"
+title = "App source code — RAR archive"
+description = "137 files, approximately 608 KB. Includes updated README.md and replit.md, app source, tests, schema, migrations, scripts and configuration. Genuine RAR5 archive with verified integrity; excludes secrets, installed dependencies, database contents and uploaded files."
+logical_id = "9dff59c8-3e8a-461d-a809-8ba227d6f0ae"
+content_hash = "sha256:8b0b8c3b9a6343af8888c370958488023f04b518c16eb6db16c060733f191a3e"
+size = 622695
+mtime_ms = 1794210918194
+storage_uri = "gcs://replit-rams-assets-pike/rams/assets/repl:975185b8-6f69-4f2f-ab09-1edcb74a2448/9dff59c8-3e8a-461d-a809-8ba227d6f0ae/939b86dc-fc57-4435-bcd0-15f893825035"
+storage_version_token = "1794210928096329"
+content_type = "application/octet-stream"
+
+[[outputs]]
+id = "ELFb2bINowxNvY3UZYKuw"
+uri = "file://generated-artifacts/published-database-export.rar"
+type = "unspecified"
+title = "Published database export — RAR"
+description = "Verified export of 25 production business-data collections. Includes an app-importable .backup, PostgreSQL data-only SQL (.sql.gz), counts, checksums and restore instructions. Contains private business/contact information. Excludes login credentials, sessions, backup history and uploaded file contents."
+logical_id = "fecedd4d-e564-416c-bfbc-3b89f811ebca"
+content_hash = "sha256:a522fc7230452a4ba68b4c3aac29f37eb082af0a0c7f8fbd874dc5764b94d234"
+size = 671884
+mtime_ms = 1794211642114
+storage_uri = "gcs://replit-rams-assets-pike/rams/assets/repl:975185b8-6f69-4f2f-ab09-1edcb74a2448/fecedd4d-e564-416c-bfbc-3b89f811ebca/beb3938d-bd51-471e-867c-dc226058bc80"
+storage_version_token = "1794211651891080"
+content_type = "application/octet-stream"
+
+[[outputs]]
+id = "PG7gvLRW4CBezrCXkO73S"
+uri = "file://generated-artifacts/production-database/production-database.backup"
+type = "unspecified"
+title = "Published app — importable database backup"
+description = "Import this format-2 file through Settings → Backups in the updated app. Includes 248 products, 691 contacts, 18 systems, 4 customers and 5 invoices. Restoring replaces destination business data; the published source was not modified."
+logical_id = "149ca66a-0d4a-4517-bdf6-adf061d35ddc"
+content_hash = "sha256:bd9d88a9597c9b93d40e1e5f67a445ef2a33c312d44bd9b641681b06b9617f35"
+size = 332558
+mtime_ms = 1794211581418
+storage_uri = "gcs://replit-rams-assets-pike/rams/assets/repl:975185b8-6f69-4f2f-ab09-1edcb74a2448/149ca66a-0d4a-4517-bdf6-adf061d35ddc/44de7ff7-7e5c-46c3-896d-6e62c4ce87fe"
+storage_version_token = "1794211653212081"
+content_type = "application/octet-stream"

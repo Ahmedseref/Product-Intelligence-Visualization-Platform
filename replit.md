@@ -21,11 +21,11 @@ I prefer detailed explanations and thorough code comments. I value iterative dev
 - **Database**: PostgreSQL for data persistence, managed with Drizzle ORM.
 - **Key Features**:
     - Unlimited-level product taxonomy tree with CRUD operations.
-    - Supplier management.
+    - **Contact Network**: Supplier/contact management with search, filters, sorting, customizable columns, saved views, and expandable duplicate-company groups. New same-name contacts reuse an existing company code after NFC/trim/whitespace/lowercase normalization, including Notion imports; unrelated companies cannot share a code. Existing duplicate codes are not retroactively consolidated, and company renames do not automatically reassign codes.
     - Product management with detailed forms, including custom fields and technical specifications.
     - Interactive product usage density heatmap and a dashboard with analytics.
     - Mass product import wizard (CSV, XLS, XLSX).
-    - Global floating notes widget.
+    - **Linked Notes**: Fixed sidebar entry directly below Settings opens a draggable, minimizable, closable in-app window. Supports multiline Markdown-style bold/italic/lists, safe HTTP(S) hyperlinks, and searchable links to exact products/stock codes, suppliers, customers, and proforma invoices. Preserves legacy notes, supports completion/edit/delete/filter, and synchronizes browser changes across tabs.
     - Advanced product inventory table with dynamic taxonomy path, inline taxonomy editing, descendant-aware filtering, and column visibility controls.
     - Real-time database synchronization.
     - **Dynamic Settings Management**: Database-backed management for Usage Areas, Units, and Inventory Columns, configurable via a dedicated Settings page.
@@ -43,6 +43,7 @@ I prefer detailed explanations and thorough code comments. I value iterative dev
 - API endpoints for all CRUD operations.
 - Production build targets a single port deployment where the Express server serves both API and static frontend files.
 - CORS is configured to accept requests from any origin.
+- **Source handoff**: README.md documents setup, current feature coverage, recovery limits, and source-archive installation. Source archives exclude secrets, databases, dependency/build directories, workspace internals, and uploaded reference materials; database backup exports are separate deliverables.
 
 ## External Dependencies
 - **React**: Frontend library.

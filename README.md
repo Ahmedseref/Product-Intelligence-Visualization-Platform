@@ -13,6 +13,8 @@ A comprehensive product intelligence platform for managing product taxonomies, i
 - [API Reference](#api-reference)
 - [Deployment](#deployment)
 - [Usage Guide](#usage-guide)
+- [Backups and Recovery](#backups-and-recovery)
+- [Source Archive](#source-archive)
 
 ## Overview
 
@@ -77,15 +79,39 @@ The Product Intelligence & Visualization Platform is designed to help businesses
 - **Auto-Generated IDs**: Suppliers use S-0001 format IDs
 - **Contact Details**: Store name, country, email, phone, address, website
 - **Status Tracking**: Track active/inactive supplier status
+- **Contact Network tools**: Search, sort, filter, reorder/hide/resize columns, and save a preferred view.
+- **Duplicate review**: Duplicate company names are grouped into expandable company rows with Open, Edit, and Delete actions.
+- **Shared company codes**: New contacts reuse a stored company code when the company name matches after Unicode NFC normalization, trimming, whitespace collapsing, and lowercasing. New companies receive generated uppercase codes. Codes cannot be shared by unrelated companies, including during concurrent creation.
+- **Existing records**: This does not consolidate previously assigned codes across existing duplicate contacts, and renaming a company does not automatically reassign its code.
+- **Notion synchronization**: Imported new contacts use the same company-code resolver. Notion properties use explicit field mappings, not automatic schema discovery.
 
-### 9. Global Floating Notes Widget
-- **Always Accessible**: Floating note panel visible on all pages
+### 9. Linked Notes
+- **Fixed entry point**: Notes is directly below Settings in the sidebar; clicking it opens a separate window-style panel inside the app, not a browser popup.
 - **Draggable**: Move anywhere on screen with position memory
-- **Minimize/Expand**: Collapse to icon or expand to full panel
+- **Window controls**: Minimize, expand, or close the panel
 - **Note Management**: Add, edit, delete notes with checklist toggles
 - **Completion Tracking**: Mark notes complete with strikethrough display
-- **Persistence**: Notes saved to localStorage, survives page refresh
+- **Formatting**: Multiline notes, bold, italic, bullet lists, numbered lists, and safe HTTP(S) hyperlinks.
+- **Record links**: Search products by name or stock code, suppliers, customers, and proforma invoices; attach links that open the exact record.
+- **Persistence**: Existing browser notes are preserved. Notes and saved contact views synchronize into per-user database settings while signed in, so synchronized data is available to scheduled backups.
 - **Multi-Tab Sync**: Changes sync automatically across browser tabs
+
+### 10. Backup and Recovery
+- Format 2.0 protects all 25 business-data collections with consistent PostgreSQL snapshots.
+- Covers product and supplier data, stock-code history, taxonomy, customers and fields, invoices and financials, systems and layers, primers, document/attachment records, qualification data, and settings.
+- Manual and scheduled backups, retention settings, compressed export/import, SHA-256 integrity checks, and full collection-count previews.
+- Restores run transactionally with a pre-restore safety backup and date/ID preservation. Generated IDs advance safely after restoration.
+- Legacy format 1.0 backups remain supported; collections absent from them are preserved rather than erased.
+- See [Backups and Recovery](#backups-and-recovery) for important coverage limits.
+
+### 11. Systems, Invoices, and Documents
+- **System Builder**: Systems, sectors, layers, alternative products, primer library, and version history.
+- **Proforma invoices**: Customer management, line items, financial calculations, custom columns and formulas, editable units, quantity formulas, PDF/Excel export, duplication, and version grouping.
+- **Document Memory**: Linked document records with product, supplier, and system associations, search, and filtering.
+
+### 12. Product Qualification
+- Closed-list qualification vocabularies and product tags for substrate, humidity, duty, finish, and layer position.
+- Deterministic auto-inference, review and batch-save tools, and qualification-aware system product selection.
 
 ## Technology Stack
 
@@ -157,7 +183,7 @@ product-intelligence-platform/
 
 2. **Install dependencies**
    ```bash
-   npm install
+   npm ci
    ```
 
 3. **Set up environment variables**
@@ -170,7 +196,9 @@ product-intelligence-platform/
 4. **Initialize the database**
    ```bash
    npm run db:push
+   npm run db:migrate
    ```
+   On a fresh database, `db:push` creates the tables. The committed SQL migrations then apply shared-company-code constraints and indexes. PostgreSQL must support the `btree_gist` extension and NFC normalization. Apply schema changes deliberately when connecting to an existing database; do not overwrite a populated database without a recovery copy.
 
 5. **Start the development server**
    ```bash
@@ -357,8 +385,44 @@ npm run start
 | `npm run build` | Build for production |
 | `npm run start` | Start production server |
 | `npm run db:push` | Push schema changes to database |
+| `npm run db:migrate` | Apply pending committed SQL migrations |
+| `npm run db:backfill-supplier-codes` | Assign codes only to legacy contacts with blank codes |
+| `npm test` | Run the automated test suite; integration tests require PostgreSQL |
+
+## Backups and Recovery
+
+Open **Settings → Backups** to create, preview, download, import, or restore an application backup. Manual backup creation first synchronizes this browser's saved notes and contact view. Signed-in browsers also synchronize periodically for scheduled backups; offline or unsynchronized browser changes are not yet protected.
+
+Before restoring, review the collection counts and replacement warning. Restore replaces the listed collections and creates a safety backup first. Older backups do not gain the newer collections retroactively.
+
+**Coverage limits**
+- Uploaded files and externally hosted documents are represented by metadata and URLs, not copied binary contents. Keep their original storage available.
+- Login accounts, sessions, credentials, database schema, and backup history are not replaced.
+- Backups are stored in the application database. Download a recovery copy; a backup in the same database is not independent disaster recovery.
+- Notes and saved views enter database backups only after successful browser synchronization. Browser backup synchronization accepts up to 64 KB of serialized notes/view data and reports failures visibly.
+- The app connects to the PostgreSQL database configured by `DATABASE_URL`; the backup does not export unrelated external databases or the Notion workspace.
+
+## Source Archive
+
+The downloadable `.rar` package is a **source-code archive**, not a live database backup. It includes frontend/backend source, shared schema and logic, tests, SQL migrations, scripts, lockfile, project configuration, and this documentation.
+
+It excludes installed dependencies, compiled builds, Git history, workspace/agent internals, uploaded reference materials, generated files, live database contents, object-storage files, and real environment/secret files. `.env.example` contains placeholders only.
+
+To use the archive:
+1. Extract it and open the `product-intelligence-app` directory.
+2. Run `npm ci`.
+3. Configure your own environment values securely; use `.env.example` as a starting point. Optional integrations need their own configuration.
+4. Initialize a fresh database with `npm run db:push`, then `npm run db:migrate`.
+5. Run `npm run dev`, or `npm run build` followed by `npm start`.
+6. If transferring business data, export an application `.backup` separately and import it through **Settings → Backups** after configuring the destination database.
 
 ## Recent Updates
+
+### Latest functionality
+- Shared supplier codes for newly created duplicate-company contacts, including Notion imports.
+- Contact Network duplicate grouping, customizable columns, filters, and saved views.
+- Notes below Settings, rich formatting, and direct record links.
+- Expanded format-2 backups, legacy compatibility, synchronized browser data, and transactional restore coverage.
 
 ### January 2026
 - **Global Floating Notes Widget**: Added a draggable, persistent notes panel accessible on all pages with checklist functionality and multi-tab sync

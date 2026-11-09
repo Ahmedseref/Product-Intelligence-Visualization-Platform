@@ -22,3 +22,6 @@ dist-ssr
 *.njsproj
 *.sln
 *.sw?
+
+# Downloadable packages and generated output
+/generated-artifacts/
