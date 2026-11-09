@@ -42,3 +42,17 @@ mtime_ms = 1794211581418
 storage_uri = "gcs://replit-rams-assets-pike/rams/assets/repl:975185b8-6f69-4f2f-ab09-1edcb74a2448/149ca66a-0d4a-4517-bdf6-adf061d35ddc/44de7ff7-7e5c-46c3-896d-6e62c4ce87fe"
 storage_version_token = "1794211653212081"
 content_type = "application/octet-stream"
+
+[[outputs]]
+id = "vfHLwy8bx9abv9cNBZR7R"
+uri = "file://generated-artifacts/app-and-published-database-recovery-copy.rar"
+type = "unspecified"
+title = "App + published database — local recovery copy"
+description = "Verified RAR archive, approximately 1.25 MB, containing 148 files: app source, the previously verified production database export, package manifests and dependency inventory, secret names with a blank configuration template, checksums, and recovery instructions. Actual secret values, login accounts, uploaded file contents and node_modules are NOT included. Contains private business data; archive is not encrypted."
+logical_id = "133c7834-32aa-4dca-b004-6f9466b04e34"
+content_hash = "sha256:889b35fb43987ce70766c363072747f66569dc4662a95aee3c57b74987298a96"
+size = 1312238
+mtime_ms = 1794212211006
+storage_uri = "gcs://replit-rams-assets-pike/rams/assets/repl:975185b8-6f69-4f2f-ab09-1edcb74a2448/133c7834-32aa-4dca-b004-6f9466b04e34/4b113d20-a384-4fdd-b0e2-864982412342"
+storage_version_token = "1794212220850610"
+content_type = "application/octet-stream"
