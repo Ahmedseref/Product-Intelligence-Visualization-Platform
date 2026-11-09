@@ -1,3 +1,4 @@
 - [Notion connector integration pattern](notion-connector-pattern.md) — always construct a fresh ReplitConnectors() client per call; use connectors.proxy("notion", path, ...) for raw Notion REST calls.
 - [Notion sync is a fixed field mapping](notion-fixed-field-mapping.md) — new Notion properties never auto-appear in the app; a developer must add a mapping for each one.
 - [Large production exports](production-export-limits.md) — chunk read-only exports, verify one dataset digest, and write chunks immediately instead of retaining payloads in the notebook.
+- [Local data preference](local-data-preference.md) — the user keeps this app's data local for security; use that destination for setup guidance.
